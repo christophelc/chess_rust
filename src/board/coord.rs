@@ -2,7 +2,7 @@
 use std::fmt;
 use std::error::Error;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
     pub col: char,
     pub row: u8,

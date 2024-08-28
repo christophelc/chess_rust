@@ -1,5 +1,6 @@
 pub mod coord;
 pub mod square;
+pub mod fen;
 
 pub trait Board {
     fn set_initial_position(&mut self);
