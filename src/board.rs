@@ -1,6 +1,7 @@
 pub mod coord;
 pub mod square;
 pub mod fen;
+pub mod bitboard;
 
 pub trait Board {
     fn set_initial_position(&mut self);
@@ -74,7 +75,7 @@ use std::fmt;
 impl fmt::Display for ChessBoard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "  A B C D E F G H")?;        
-        for (i, row) in self.squares.iter().enumerate() {
+        for (i, row) in self.squares.iter().enumerate().rev() {
             write!(f, "{} ", 8 - i)?;
             for (j, square) in row.iter().enumerate() {
                 let color = if (i + j) % 2 == 0 {

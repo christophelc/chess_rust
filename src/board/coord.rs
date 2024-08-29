@@ -19,7 +19,7 @@ impl Coord {
         (self.col as u8 - 'A' as u8) as usize
     }
     pub fn get_y(&self) -> usize {
-        (8 - self.row) as usize
+        (self.row - 1) as usize
     }
     pub fn from(col: char, row: u8) -> Result<Self, Box<dyn Error>> {
         if Self::is_valid_chess_square(col, row) {

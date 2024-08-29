@@ -3,18 +3,103 @@ use crate::board::coord;
 
 pub struct Position {
     squares: [square::Square; 64],
+    status: PositionStatus,
+}
+
+pub struct PositionStatus {
     castling_white_queen_side: bool,
     castling_white_king_side: bool,    
     castling_black_queen_side: bool,
     castling_black_king_side: bool,
     player_turn: square::Color,
     pawn_en_passant: Option<coord::Coord>,
-    half_moves: u16, // 50 moves rule without capturing a piece or moving a pawn
-    moves: u16,
+    n_half_moves: u16, // 50 moves rule without capturing a piece or moving a pawn
+    n_moves: u16,
+}
+impl PositionStatus {
+    pub fn new() -> Self {
+        PositionStatus {
+            castling_white_queen_side: false,
+            castling_white_king_side: false,    
+            castling_black_queen_side: false,
+            castling_black_king_side: false,
+            player_turn: square::Color::White,
+            pawn_en_passant: None,
+            n_half_moves: 0, 
+            n_moves: 0,
+        }        
+    }
+    // getters
+    ////////////////////////
+    pub fn castling_white_queen_side(&self) -> bool {
+        self.castling_white_queen_side
+    }
+
+    pub fn castling_white_king_side(&self) -> bool {
+        self.castling_white_king_side
+    }
+
+    pub fn castling_black_queen_side(&self) -> bool {
+        self.castling_black_queen_side
+    }
+
+    pub fn castling_black_king_side(&self) -> bool {
+        self.castling_black_king_side
+    }
+
+    pub fn player_turn(&self) -> square::Color {
+        self.player_turn
+    }
+
+    pub fn pawn_en_passant(&self) -> Option<coord::Coord> {
+        self.pawn_en_passant
+    }
+
+    pub fn n_half_moves(&self) -> u16 {
+        self.n_half_moves
+    }
+
+    pub fn n_moves(&self) -> u16 {
+        self.n_moves
+    }    
+
+    // setters
+    ////////////////////////    
+    pub fn set_castling_white_queen_side(&mut self, value: bool) {
+        self.castling_white_queen_side = value;
+    }
+
+    pub fn set_castling_white_king_side(&mut self, value: bool) {
+        self.castling_white_king_side = value;
+    }
+
+    pub fn set_castling_black_queen_side(&mut self, value: bool) {
+        self.castling_black_queen_side = value;
+    }
+
+    pub fn set_castling_black_king_side(&mut self, value: bool) {
+        self.castling_black_king_side = value;
+    }
+
+    pub fn set_player_turn(&mut self, value: square::Color) {
+        self.player_turn = value;
+    }
+
+    pub fn set_pawn_en_passant(&mut self, value: Option<coord::Coord>) {
+        self.pawn_en_passant = value;
+    }
+
+    pub fn set_n_half_moves(&mut self, value: u16) {
+        self.n_half_moves = value;
+    }
+
+    pub fn set_n_moves(&mut self, value: u16) {
+        self.n_moves = value;
+    }
 }
 
 impl Position {
-    pub fn new() -> Position {
+    pub fn new() -> Self {
         let fen_str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         return FEN::decode(fen_str).expect("Failed to decode FEN");
     }
@@ -27,6 +112,17 @@ impl Position {
         }
         bd
     }
+
+    // getters
+    ////////////////////////
+    pub fn squares(&self) -> &[square::Square; 64] {
+        &self.squares
+    }
+
+    pub fn status(&self) -> &PositionStatus {
+        &self.status
+    }
+
 }
 
 use std::error::Error;
@@ -119,21 +215,23 @@ impl EncodeUserInput for FEN {
             None
         };
 
-        let half_moves = parts[4].parse::<u16>()
+        let n_half_moves = parts[4].parse::<u16>()
             .map_err(|_| FenError::ParseError("Failed to parse half-moves".to_string()))?;
-        let moves = parts[5].parse::<u16>()
+        let n_moves = parts[5].parse::<u16>()
             .map_err(|_| FenError::ParseError("Failed to parse full move number".to_string()))?;
 
         Ok(Position {
             squares,
-            castling_white_king_side: parts[2].contains('K'),
-            castling_white_queen_side: parts[2].contains('Q'),
-            castling_black_king_side: parts[2].contains('k'),
-            castling_black_queen_side: parts[2].contains('q'),
-            player_turn,
-            pawn_en_passant,
-            half_moves,
-            moves,
+            status: PositionStatus {
+                castling_white_king_side: parts[2].contains('K'),
+                castling_white_queen_side: parts[2].contains('Q'),
+                castling_black_king_side: parts[2].contains('k'),
+                castling_black_queen_side: parts[2].contains('q'),
+                player_turn,
+                pawn_en_passant,
+                n_half_moves,
+                n_moves,
+            }
         })
     }
 
@@ -172,7 +270,7 @@ impl EncodeUserInput for FEN {
 
         result.push(' ');
 
-        result.push_str(match position.player_turn {
+        result.push_str(match position.status().player_turn() {
             square::Color::White => "w",
             square::Color::Black => "b",
         });
@@ -180,24 +278,24 @@ impl EncodeUserInput for FEN {
         result.push(' ');
 
         let mut castling = String::new();
-        if position.castling_white_king_side { castling.push('K'); }
-        if position.castling_white_queen_side { castling.push('Q'); }        
-        if position.castling_black_king_side { castling.push('k'); }
-        if position.castling_black_queen_side { castling.push('q'); }        
+        if position.status().castling_white_king_side() { castling.push('K'); }
+        if position.status().castling_white_queen_side() { castling.push('Q'); }        
+        if position.status().castling_black_king_side() { castling.push('k'); }
+        if position.status().castling_black_queen_side() { castling.push('q'); }        
         if castling.is_empty() { castling.push('-'); }
         result.push_str(&castling);
 
         result.push(' ');
 
-        match position.pawn_en_passant {
+        match position.status().pawn_en_passant() {
             Some(coord) => result.push_str(&format!("{}{}", coord.col, coord.row)),
             None => result.push('-'),
         }
 
         result.push(' ');
-        result.push_str(&position.half_moves.to_string());
+        result.push_str(&position.status().n_half_moves().to_string());
         result.push(' ');
-        result.push_str(&position.moves.to_string());
+        result.push_str(&position.status().n_moves().to_string());
 
         Ok(result)
     }
@@ -260,20 +358,20 @@ mod tests {
         assert_eq!(position.squares[63], square::Square::build_piece(Piece::Rook, Color::White));
 
         // Check player turn
-        assert_eq!(position.player_turn, square::Color::White);
+        assert_eq!(position.status().player_turn(), square::Color::White);
 
         // Check castling rights
-        assert!(position.castling_white_king_side);
-        assert!(position.castling_white_queen_side);        
-        assert!(position.castling_black_king_side);
-        assert!(position.castling_black_queen_side);        
+        assert!(position.status().castling_white_king_side());
+        assert!(position.status().castling_white_queen_side());        
+        assert!(position.status().castling_black_king_side());
+        assert!(position.status().castling_black_queen_side());        
 
         // Check en passant
-        assert_eq!(position.pawn_en_passant, None);
+        assert_eq!(position.status().pawn_en_passant(), None);
 
         // Check move counters
-        assert_eq!(position.half_moves, 0);
-        assert_eq!(position.moves, 1);
+        assert_eq!(position.status().n_half_moves(), 0);
+        assert_eq!(position.status().n_moves(), 1);
     }
 
     use square::Piece;
@@ -305,14 +403,16 @@ mod tests {
                 Square::build_piece(Piece::King, Color::White), Square::build_piece(Piece::Bishop, Color::White),
                 Square::build_piece(Piece::Knight, Color::White), Square::build_piece(Piece::Rook, Color::White),
             ],
-            castling_white_king_side: true,
-            castling_white_queen_side: true,            
-            castling_black_king_side: true,
-            castling_black_queen_side: true,            
-            player_turn: Color::White,
-            pawn_en_passant: None,
-            half_moves: 0,
-            moves: 1,
+            status: PositionStatus {
+                castling_white_king_side: true,
+                castling_white_queen_side: true,            
+                castling_black_king_side: true,
+                castling_black_queen_side: true,            
+                player_turn: Color::White,
+                pawn_en_passant: None,
+                n_half_moves: 0,
+                n_moves: 1,
+            }
         };
 
         let fen = FEN::encode(&position).expect("Failed to encode position");
@@ -340,14 +440,16 @@ mod tests {
     fn test_encode_empty_position() {
         let empty_position = Position {
             squares: [Square::Empty; 64],
-            castling_white_king_side: false,
-            castling_white_queen_side: false,            
-            castling_black_king_side: false,
-            castling_black_queen_side: false,            
-            player_turn: Color::White,
-            pawn_en_passant: None,
-            half_moves: 0,
-            moves: 1,
+            status: PositionStatus {
+                castling_white_king_side: false,
+                castling_white_queen_side: false,            
+                castling_black_king_side: false,
+                castling_black_queen_side: false,            
+                player_turn: Color::White,
+                pawn_en_passant: None,
+                n_half_moves: 0,
+                n_moves: 1,
+            }
         };
 
         let fen = FEN::encode(&empty_position).expect("Failed to encode position");
@@ -365,7 +467,7 @@ fn test_decode_en_passant() {
 
     // Check if en passant is set correctly
     let expected_coord = Coord::from('e', 6).expect("Failed to create Coord");
-    assert_eq!(position.pawn_en_passant, Some(expected_coord));
+    assert_eq!(position.status().pawn_en_passant(), Some(expected_coord));
 }
   
 #[test]
@@ -374,14 +476,16 @@ fn test_encode_en_passant() {
         squares: [
             square::Square::Empty; 64 // Simplified: setting all squares to empty for this test
         ],
-        castling_white_king_side: false,
-        castling_white_queen_side: false,        
-        castling_black_king_side: false,
-        castling_black_queen_side: false,        
-        player_turn: square::Color::White,
-        pawn_en_passant: Some(Coord::from('e', 6).expect("Failed to create Coord")),
-        half_moves: 0,
-        moves: 1,
+        status: PositionStatus {
+            castling_white_king_side: false,
+            castling_white_queen_side: false,        
+            castling_black_king_side: false,
+            castling_black_queen_side: false,        
+            player_turn: square::Color::White,
+            pawn_en_passant: Some(Coord::from('e', 6).expect("Failed to create Coord")),
+            n_half_moves: 0,
+            n_moves: 1,
+        }
     };
 
     let fen = FEN::encode(&position).expect("Failed to encode position");
