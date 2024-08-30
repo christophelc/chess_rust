@@ -1,26 +1,102 @@
-use super::{coord, fen::{Position, PositionStatus}, square};
+use std::{fmt, ops::BitOrAssign};
+use super::{coord, fen::{Position, PositionStatus}, square, ChessBoard};
 
-pub struct BitPosition {
-    bit_board: BitBoard,
+pub struct BitPositionWithStatus {
+    bit_position: BitPosition,
     bit_position_status: BitPositionStatus,
 }
 
+#[derive(Debug)]
+pub struct BitPosition {
+    bit_board_white: BitBoards,
+    bit_board_black: BitBoards,
+}
+
 impl BitPosition {
-    pub fn new() -> Self {
+    pub fn from(board: ChessBoard) -> Self {
+        let mut bit_board_white = BitBoards::new();
+        let mut bit_board_black = BitBoards::new();        
+        for (idx, square) in board.iter().enumerate() {
+            match square {
+                square::Square::NonEmpty(piece) => {
+                    let bd: &mut BitBoards = match piece.color() {
+                        square::Color::White => &mut bit_board_white,
+                        square::Color::Black => &mut bit_board_black,
+                    };
+                    let byte = 1 << (idx as u8);
+                    match piece.piece_type() {
+                        square::TypePiece::Rook => bd.rooks |= byte,
+                        square::TypePiece::Bishop => bd.bishops |= byte,
+                        square::TypePiece::Knight => bd.knights |= byte,
+                        square::TypePiece::King => bd.king |= byte,
+                        square::TypePiece::Queen => bd.queens |= byte,
+                        square::TypePiece::Pawn => bd.pawns |= byte,
+                    }
+                }
+                square::Square::Empty => {}
+            }
+        }
         BitPosition {
-            bit_board: BitBoard::new(),
-            bit_position_status: BitPositionStatus::new(),
+            bit_board_white,
+            bit_board_black,
         }
     }
 }
-pub struct BitBoard {
-    // TODO
 
+#[derive(Debug, PartialEq)]
+pub struct BitBoard(u64);
+
+impl fmt::Display for BitBoard {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = String::new();
+        for rank in (0..8).rev() { // iterate over the ranks in reverse (from 7 to 0)
+            for file in 0..8 {
+                let index = rank * 8 + file;
+                let bit = (self.0 >> index) & 1;
+                output.push_str(&format!("{} ", bit));
+            }
+            output.pop(); // Remove the trailing space
+            output.push('\n');
+        }
+        write!(f, "{}", output)
+    }
+}
+impl BitOrAssign<u64> for BitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.0 |= rhs;
+    }
 }
 
-impl BitBoard {
+#[derive(Debug)]
+pub struct BitBoards {
+    rooks: BitBoard,
+    bishops: BitBoard,
+    knights: BitBoard,
+    king: BitBoard,
+    queens: BitBoard,
+    pawns: BitBoard,
+}
+impl fmt::Display for BitBoards {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "rooks:\n{}", self.rooks)?;
+        write!(f, "bishops:\n{}", self.bishops)?;
+        write!(f, "knights:\n{}", self.knights)?;
+        write!(f, "king:\n{}", self.king)?;
+        write!(f, "queen:\n{}", self.queens)?;
+        write!(f, "pawns:\n{}", self.pawns)
+    }    
+}
+
+impl BitBoards {
     pub fn new() -> Self {
-        BitBoard {}
+        BitBoards {
+            rooks: BitBoard(0),
+            bishops: BitBoard(0),
+            knights: BitBoard(0),
+            king: BitBoard(0),
+            queens: BitBoard(0),
+            pawns: BitBoard(0),
+        }
     }
 }
 pub struct BitPositionStatus {
@@ -180,6 +256,10 @@ fn decode_pawn_en_passant(maybe_index: Option<u8>) -> Option<coord::Coord> {
     })
 }
 
+use square::Square;
+use square::TypePiece;
+use square::Color;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,4 +317,52 @@ mod tests {
         assert_eq!(status.n_half_moves(), 25);
         assert_eq!(status.n_moves(), 50);
     }
+
+    #[test]
+    fn test_bit_position_from_empty_board() {
+        let empty_board = ChessBoard {
+            squares: [[Square::Empty; 8]; 8],
+        };
+        let bit_position = BitPosition::from(empty_board);
+
+        assert_eq!(bit_position.bit_board_white.rooks, BitBoard(0));
+        assert_eq!(bit_position.bit_board_white.bishops, BitBoard(0));
+        assert_eq!(bit_position.bit_board_white.knights, BitBoard(0));
+        assert_eq!(bit_position.bit_board_white.king, BitBoard(0));
+        assert_eq!(bit_position.bit_board_white.queens, BitBoard(0));
+        assert_eq!(bit_position.bit_board_white.pawns, BitBoard(0));
+
+        assert_eq!(bit_position.bit_board_black.rooks, BitBoard(0));
+        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(0));
+        assert_eq!(bit_position.bit_board_black.knights, BitBoard(0));
+        assert_eq!(bit_position.bit_board_black.king, BitBoard(0));
+        assert_eq!(bit_position.bit_board_black.queens, BitBoard(0));
+        assert_eq!(bit_position.bit_board_black.pawns, BitBoard(0));
+    }
+
+    use crate::board::Board;
+
+    #[test]
+    fn test_bit_position_from_mixed_board() {
+        let mut mixed_board: ChessBoard = ChessBoard::new();
+        mixed_board.add(coord::Coord::from('A', 1).unwrap(), square::TypePiece::Rook, square::Color::White);
+        mixed_board.add(coord::Coord::from('D', 4).unwrap(), square::TypePiece::Queen, square::Color::White);
+        mixed_board.add(coord::Coord::from('H', 8).unwrap(), square::TypePiece::King, square::Color::Black);
+        mixed_board.add(coord::Coord::from('E', 5).unwrap(), square::TypePiece::Bishop, square::Color::Black);        
+        mixed_board.add(coord::Coord::from('A', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);
+        mixed_board.add(coord::Coord::from('C', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);        
+        mixed_board.add(coord::Coord::from('H', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);                
+        let bit_position = BitPosition::from(mixed_board);
+
+        //println!("white: {}", bit_position.bit_board_white);
+        println!("{}", bit_position.bit_board_white.pawns);
+        //println!("black: {}", bit_position.bit_board_black);
+        assert_eq!(bit_position.bit_board_white.rooks, BitBoard(1));  // Index 0
+        assert_eq!(bit_position.bit_board_white.queens, BitBoard(1 << 27));  // Index 27 (3 * 8 + 3)
+        assert_eq!(bit_position.bit_board_black.king, BitBoard(1 << 63));  // Index 63 (7 * 8 + 7)
+        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(1 << 36));  // Index 36 (4 * 8 + 4)
+        assert_eq!(bit_position.bit_board_white.pawns, BitBoard(1 << 8 | 1 << 10 | 1 << 15));  
+    }
+
 }
+

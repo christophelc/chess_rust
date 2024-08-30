@@ -37,6 +37,12 @@ impl Square {
             color, piece_type
         })
     }
+    pub fn is_empty(&self) -> bool {
+        *self == Square::Empty
+    }
+    pub fn non_empty(&self) -> bool {
+        !self.is_empty()
+    }
 }
 
 use std::fmt;

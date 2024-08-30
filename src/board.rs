@@ -15,6 +15,30 @@ pub trait Board {
 pub struct ChessBoard {
     squares: [[square::Square; 8]; 8],
 }
+pub struct ChessBoardIterator<'a> {
+    board: &'a ChessBoard,
+    row: usize,
+    col: usize,
+}
+impl<'a> Iterator for ChessBoardIterator<'a> {
+    type Item = square::Square;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.row < 8 && self.col < 8 {
+            let square = self.board.squares[self.row][self.col];
+
+            self.col += 1;
+            if self.col == 8 {
+                self.col = 0;
+                self.row += 1;
+            }
+
+            Some(square)
+        } else {
+            None
+        }
+    }
+}
 
 impl ChessBoard {
     fn at(&self, coord: coord::Coord) -> square::Square {
@@ -31,6 +55,14 @@ impl ChessBoard {
             squares: [[square::Square::Empty; 8]; 8],
         }
     }
+
+    pub fn iter(&self) -> ChessBoardIterator {
+        ChessBoardIterator {
+            board: self,
+            row: 0,
+            col: 0,
+        }
+    }    
 }
 
 impl Board for ChessBoard {
