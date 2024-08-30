@@ -252,12 +252,12 @@ impl EncodeUserInput for FEN {
                 let index = row * 8 + col;
                 match position.squares[index] {
                     square::Square::Empty => empty_count += 1,
-                    square::Square::NonEmpty { piece, color } => {
+                    square::Square::NonEmpty(piece) => {
                         if empty_count > 0 {
                             result.push_str(&empty_count.to_string());
                             empty_count = 0;
                         }
-                        result.push(square_to_char(piece, color));
+                        result.push(square_to_char(piece));
                     }
                 }
             }
@@ -302,20 +302,20 @@ impl EncodeUserInput for FEN {
 }
 
 // Helper function for converting a Square to a FEN character
-fn square_to_char(piece: square::Piece, color: square::Color) -> char {
-    match (piece, color) {
-        (square::Piece::Rook, square::Color::White) => 'R',
-        (square::Piece::Knight, square::Color::White) => 'N',
-        (square::Piece::Bishop, square::Color::White) => 'B',
-        (square::Piece::Queen, square::Color::White) => 'Q',
-        (square::Piece::King, square::Color::White) => 'K',
-        (square::Piece::Pawn, square::Color::White) => 'P',
-        (square::Piece::Rook, square::Color::Black) => 'r',
-        (square::Piece::Knight, square::Color::Black) => 'n',
-        (square::Piece::Bishop, square::Color::Black) => 'b',
-        (square::Piece::Queen, square::Color::Black) => 'q',
-        (square::Piece::King, square::Color::Black) => 'k',
-        (square::Piece::Pawn, square::Color::Black) => 'p',
+fn square_to_char(piece: square::Piece) -> char {
+    match (piece.piece_type(), piece.color()) {
+        (square::TypePiece::Rook, square::Color::White) => 'R',
+        (square::TypePiece::Knight, square::Color::White) => 'N',
+        (square::TypePiece::Bishop, square::Color::White) => 'B',
+        (square::TypePiece::Queen, square::Color::White) => 'Q',
+        (square::TypePiece::King, square::Color::White) => 'K',
+        (square::TypePiece::Pawn, square::Color::White) => 'P',
+        (square::TypePiece::Rook, square::Color::Black) => 'r',
+        (square::TypePiece::Knight, square::Color::Black) => 'n',
+        (square::TypePiece::Bishop, square::Color::Black) => 'b',
+        (square::TypePiece::Queen, square::Color::Black) => 'q',
+        (square::TypePiece::King, square::Color::Black) => 'k',
+        (square::TypePiece::Pawn, square::Color::Black) => 'p',
     }
 }
 
@@ -324,18 +324,18 @@ fn char_to_square(c: char) -> Option<square::Square> {
     let black = square::Color::Black;
     let white = square::Color::White;
     match c {
-        'r' => Some(square::Square::build_piece(square::Piece::Rook, black)),
-        'n' => Some(square::Square::build_piece(square::Piece::Knight, black)),
-        'b' => Some(square::Square::build_piece(square::Piece::Bishop, black)),
-        'q' => Some(square::Square::build_piece(square::Piece::Queen, black)),
-        'k' => Some(square::Square::build_piece(square::Piece::King, black)),
-        'p' => Some(square::Square::build_piece(square::Piece::Pawn, black)),
-        'R' => Some(square::Square::build_piece(square::Piece::Rook, white)),
-        'N' => Some(square::Square::build_piece(square::Piece::Knight, white)),
-        'B' => Some(square::Square::build_piece(square::Piece::Bishop, white)),
-        'Q' => Some(square::Square::build_piece(square::Piece::Queen, white)),
-        'K' => Some(square::Square::build_piece(square::Piece::King, white)),
-        'P' => Some(square::Square::build_piece(square::Piece::Pawn, white)),
+        'r' => Some(square::Square::build_piece(square::TypePiece::Rook, black)),
+        'n' => Some(square::Square::build_piece(square::TypePiece::Knight, black)),
+        'b' => Some(square::Square::build_piece(square::TypePiece::Bishop, black)),
+        'q' => Some(square::Square::build_piece(square::TypePiece::Queen, black)),
+        'k' => Some(square::Square::build_piece(square::TypePiece::King, black)),
+        'p' => Some(square::Square::build_piece(square::TypePiece::Pawn, black)),
+        'R' => Some(square::Square::build_piece(square::TypePiece::Rook, white)),
+        'N' => Some(square::Square::build_piece(square::TypePiece::Knight, white)),
+        'B' => Some(square::Square::build_piece(square::TypePiece::Bishop, white)),
+        'Q' => Some(square::Square::build_piece(square::TypePiece::Queen, white)),
+        'K' => Some(square::Square::build_piece(square::TypePiece::King, white)),
+        'P' => Some(square::Square::build_piece(square::TypePiece::Pawn, white)),
         '1'..='8' => None, // Empty squares will be handled by the caller (decode function)
         _ => None, // Invalid character
     }
@@ -352,10 +352,10 @@ mod tests {
         let position = FEN::decode(fen).expect("Failed to decode FEN");
 
         // Check if the pieces are in the correct initial positions
-        assert_eq!(position.squares[0], square::Square::build_piece(Piece::Rook, Color::Black));
-        assert_eq!(position.squares[7], square::Square::build_piece(Piece::Rook, Color::Black));
-        assert_eq!(position.squares[56], square::Square::build_piece(Piece::Rook, Color::White));
-        assert_eq!(position.squares[63], square::Square::build_piece(Piece::Rook, Color::White));
+        assert_eq!(position.squares[0], square::Square::build_piece(TypePiece::Rook, Color::Black));
+        assert_eq!(position.squares[7], square::Square::build_piece(TypePiece::Rook, Color::Black));
+        assert_eq!(position.squares[56], square::Square::build_piece(TypePiece::Rook, Color::White));
+        assert_eq!(position.squares[63], square::Square::build_piece(TypePiece::Rook, Color::White));
 
         // Check player turn
         assert_eq!(position.status().player_turn(), square::Color::White);
@@ -374,7 +374,7 @@ mod tests {
         assert_eq!(position.status().n_moves(), 1);
     }
 
-    use square::Piece;
+    use square::TypePiece;
     use square::Color;
     use square::Square;
     
@@ -382,26 +382,26 @@ mod tests {
     fn test_encode_starting_position() {
         let position = Position {
             squares: [
-                Square::build_piece(Piece::Rook, Color::Black), Square::build_piece(Piece::Knight, Color::Black), 
-                Square::build_piece(Piece::Bishop, Color::Black), Square::build_piece(Piece::Queen, Color::Black),
-                Square::build_piece(Piece::King, Color::Black), Square::build_piece(Piece::Bishop, Color::Black),
-                Square::build_piece(Piece::Knight, Color::Black), Square::build_piece(Piece::Rook, Color::Black),
-                Square::build_piece(Piece::Pawn, Color::Black), Square::build_piece(Piece::Pawn, Color::Black),
-                Square::build_piece(Piece::Pawn, Color::Black), Square::build_piece(Piece::Pawn, Color::Black),
-                Square::build_piece(Piece::Pawn, Color::Black), Square::build_piece(Piece::Pawn, Color::Black),
-                Square::build_piece(Piece::Pawn, Color::Black), Square::build_piece(Piece::Pawn, Color::Black),
+                Square::build_piece(TypePiece::Rook, Color::Black), Square::build_piece(TypePiece::Knight, Color::Black), 
+                Square::build_piece(TypePiece::Bishop, Color::Black), Square::build_piece(TypePiece::Queen, Color::Black),
+                Square::build_piece(TypePiece::King, Color::Black), Square::build_piece(TypePiece::Bishop, Color::Black),
+                Square::build_piece(TypePiece::Knight, Color::Black), Square::build_piece(TypePiece::Rook, Color::Black),
+                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
+                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
+                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
+                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
                 Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty,
                 Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty,
                 Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty,
                 Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty,
-                Square::build_piece(Piece::Pawn, Color::White), Square::build_piece(Piece::Pawn, Color::White),
-                Square::build_piece(Piece::Pawn, Color::White), Square::build_piece(Piece::Pawn, Color::White),
-                Square::build_piece(Piece::Pawn, Color::White), Square::build_piece(Piece::Pawn, Color::White),
-                Square::build_piece(Piece::Pawn, Color::White), Square::build_piece(Piece::Pawn, Color::White),
-                Square::build_piece(Piece::Rook, Color::White), Square::build_piece(Piece::Knight, Color::White), 
-                Square::build_piece(Piece::Bishop, Color::White), Square::build_piece(Piece::Queen, Color::White),
-                Square::build_piece(Piece::King, Color::White), Square::build_piece(Piece::Bishop, Color::White),
-                Square::build_piece(Piece::Knight, Color::White), Square::build_piece(Piece::Rook, Color::White),
+                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
+                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
+                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
+                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
+                Square::build_piece(TypePiece::Rook, Color::White), Square::build_piece(TypePiece::Knight, Color::White), 
+                Square::build_piece(TypePiece::Bishop, Color::White), Square::build_piece(TypePiece::Queen, Color::White),
+                Square::build_piece(TypePiece::King, Color::White), Square::build_piece(TypePiece::Bishop, Color::White),
+                Square::build_piece(TypePiece::Knight, Color::White), Square::build_piece(TypePiece::Rook, Color::White),
             ],
             status: PositionStatus {
                 castling_white_king_side: true,
