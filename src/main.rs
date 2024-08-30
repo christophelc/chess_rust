@@ -13,7 +13,7 @@ fn main() {
     println!();
 
     println!("chessboard generated from initial position encoded with FEN");
-    let position: fen::Position = fen::Position::new();
+    let position: fen::Position = fen::Position::build_initial_position();
     println!("{}", position.chessboard());
     let fen_str = fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");
     println!("Encode initial position to FEN position:");

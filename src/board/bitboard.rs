@@ -1,5 +1,5 @@
 use std::{fmt, ops::BitOrAssign};
-use super::{coord, fen::{Position, PositionStatus}, square, ChessBoard};
+use super::{coord, fen::{Position, PositionStatus, EncodeUserInput}, square, Board, ChessBoard};
 
 pub struct BitPositionWithStatus {
     bit_position: BitPosition,
@@ -24,7 +24,7 @@ impl BitPosition {
                         square::Color::Black => &mut bit_board_black,
                     };
                     let byte = 1 << (idx as u8);
-                    match piece.piece_type() {
+                    match piece.type_piece() {
                         square::TypePiece::Rook => bd.rooks |= byte,
                         square::TypePiece::Bishop => bd.bishops |= byte,
                         square::TypePiece::Knight => bd.knights |= byte,
@@ -41,11 +41,46 @@ impl BitPosition {
             bit_board_black,
         }
     }
+    pub fn to(&self, chessboard: &mut ChessBoard) {
+        for (type_piece, bitboard) in self.bit_board_white.list_boards() {
+            for coord in bitboard.list_non_empty_squares() {
+                chessboard.add(
+                    coord, 
+                    type_piece,
+                    Color::White
+                );
+            }
+            for (type_piece, bitboard) in self.bit_board_black.list_boards() {
+                for coord in bitboard.list_non_empty_squares() {
+                    chessboard.add(
+                        coord, 
+                        type_piece,
+                        Color::Black
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct BitBoard(u64);
 
+impl BitBoard {
+    fn list_non_empty_squares(&self) -> Vec<coord::Coord> {
+        let mut coords = Vec::new();
+        for i in (0..8).rev() { // iterate over the ranks in reverse (from 7 to 0)
+            for j in 0..8 {
+                let index = i * 8 + j;
+                let bit = (self.0 >> index) & 1;
+                if bit == 1 {
+                    coords.push(coord::Coord::from((j + ('A' as u8)) as char, i + 1).unwrap())
+                }
+            }        
+        }
+        coords
+    }
+}
 impl fmt::Display for BitBoard {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = String::new();
@@ -75,6 +110,18 @@ pub struct BitBoards {
     king: BitBoard,
     queens: BitBoard,
     pawns: BitBoard,
+}
+impl BitBoards {
+    pub fn list_boards(&self) -> Vec<(square::TypePiece, &BitBoard)> {
+        let mut boards = Vec::new();
+        boards.push((square::TypePiece::Rook, &self.rooks));
+        boards.push((square::TypePiece::Bishop, &self.bishops));
+        boards.push((square::TypePiece::Knight, &self.knights));
+        boards.push((square::TypePiece::King, &self.king));
+        boards.push((square::TypePiece::Queen, &self.queens));
+        boards.push((square::TypePiece::Pawn, &self.pawns));
+        boards
+    }
 }
 impl fmt::Display for BitBoards {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -340,7 +387,7 @@ mod tests {
         assert_eq!(bit_position.bit_board_black.pawns, BitBoard(0));
     }
 
-    use crate::board::Board;
+    use crate::board::{fen, Board};
 
     #[test]
     fn test_bit_position_from_mixed_board() {
@@ -364,5 +411,58 @@ mod tests {
         assert_eq!(bit_position.bit_board_white.pawns, BitBoard(1 << 8 | 1 << 10 | 1 << 15));  
     }
 
+    #[test]
+    fn test_bitboard_list_non_empty_squares() {
+        let bitboard = BitBoard(0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001);
+        let coords = bitboard.list_non_empty_squares();
+        assert_eq!(coords.len(), 2);
+        assert_eq!(coords[0], coord::Coord::from('A', 1).unwrap());
+        assert_eq!(coords[1], coord::Coord::from('H', 1).unwrap());
+
+        let bitboard = BitBoard(0b00000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+        let coords = bitboard.list_non_empty_squares();
+        assert_eq!(coords.len(), 1);
+        assert_eq!(coords[0], coord::Coord::from('A', 8).unwrap());
+    }
+
+    #[test]
+    fn test_bitboard_empty() {
+        let bitboard = BitBoard(0);
+        let coords = bitboard.list_non_empty_squares();
+        assert_eq!(coords.len(), 0);
+    }
+
+    #[test]
+    fn test_bit_position_to_mixed_board() {
+        let bit_board_white = BitBoards {
+            rooks: BitBoard(1),
+            knights: BitBoard(0),            
+            bishops: BitBoard(0),            
+            queens: BitBoard(1 << 27),
+            king: BitBoard(0),
+            pawns: BitBoard(1 << 8 | 1 << 10 | 1 << 15),
+        };
+        let bit_board_black = BitBoards {
+            rooks: BitBoard(0),
+            knights: BitBoard(0),
+            bishops: BitBoard(1 << 36),            
+            queens: BitBoard(0),
+            king: BitBoard(1 << 63),
+            pawns: BitBoard(1 << 40),
+        };
+        let bit_position = BitPosition {
+            bit_board_white,
+            bit_board_black,
+        };
+        let mut chessboard = ChessBoard::new();
+        bit_position.to(&mut chessboard);
+        let position = Position::build(
+            chessboard.squares().clone(),
+            PositionStatus::new(),
+        );
+        let fen_str = fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");        
+        let expected_fen = "7k/8/p7/4b3/3Q4/8/P1P4P/R7 w - - 0 0";
+        assert_eq!(fen_str ,expected_fen);
+    }
 }
 
