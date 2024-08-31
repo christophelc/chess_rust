@@ -38,16 +38,27 @@ fn main() {
         coord::Coord::from('E', 2).unwrap(),
         coord::Coord::from('E', 4).unwrap(),
     );
-    let position = Position::build(
-        bd, 
-        status);
+    let position = Position::build(bd, status);
     let bit_position = BitPosition::from(position);
     // white to play
-    let bit_board_white = bit_position.bit_position().bit_board_white().concat_bit_boards();
-    let bit_board_black = bit_position.bit_position().bit_board_black().concat_bit_boards();
+    let bit_board_white = bit_position
+        .bit_boards_white_and_black()
+        .bit_board_white()
+        .concat_bit_boards();
+    let bit_board_black = bit_position
+        .bit_boards_white_and_black()
+        .bit_board_black()
+        .concat_bit_boards();
     let white_king_type = square::TypePiece::King;
-    let white_king_bit_board = bitboard::BitBoard::new(1 << 4);
-    let moves = white_king_type.gen_moves(&white_king_bit_board, &bit_board_white, &bit_board_black);
+    let white_king_bit_board = bit_position
+        .bit_boards_white_and_black()
+        .bit_board_white()
+        .king();
+    let moves = bit_position.bit_boards_white_and_black().gen_moves(
+        &white_king_type,
+        &white_king_bit_board,
+        &bit_board_white,
+        &bit_board_black,
+    );
     println!("{}", moves[0].moves());
-    
 }

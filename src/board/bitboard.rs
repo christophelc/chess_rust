@@ -8,12 +8,12 @@ use super::{
 use std::{fmt, ops::BitOrAssign};
 
 pub struct BitPosition {
-    bit_position: BitBoardsWhiteAndBlack,
+    bit_boards_white_and_black: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,
 }
 impl BitPosition {
-    pub fn bit_position(&self) -> &BitBoardsWhiteAndBlack {
-        &self.bit_position
+    pub fn bit_boards_white_and_black(&self) -> &BitBoardsWhiteAndBlack {
+        &self.bit_boards_white_and_black
     }
     pub fn bit_position_status(&self) -> &BitPositionStatus {
         &self.bit_position_status
@@ -22,12 +22,12 @@ impl BitPosition {
         let bit_position_status = BitPositionStatus::from(position.status());
         let bit_position = BitBoardsWhiteAndBlack::from(position.into_chessboard());
         BitPosition {
-            bit_position,
+            bit_boards_white_and_black: bit_position,
             bit_position_status,
         }
     }
     pub fn to(&self) -> Position {
-        let chessboard = self.bit_position.to();
+        let chessboard = self.bit_boards_white_and_black.to();
         let status = self.bit_position_status.to();
         Position::build(chessboard, status)
     }
@@ -94,6 +94,9 @@ impl BitBoardsWhiteAndBlack {
 pub struct BitBoard(u64);
 
 impl BitBoard {
+    pub fn value(&self) -> u64 {
+        self.0
+    }
     pub fn new(value: u64) -> Self {
         BitBoard(value)
     }
@@ -147,6 +150,24 @@ pub struct BitBoards {
     pawns: BitBoard,
 }
 impl BitBoards {
+    pub fn rooks(&self) -> &BitBoard {
+        &self.rooks
+    }
+    pub fn knights(&self) -> &BitBoard {
+        &self.knights
+    }
+    pub fn bishops(&self) -> &BitBoard {
+        &self.bishops
+    }
+    pub fn queens(&self) -> &BitBoard {
+        &self.queens
+    }
+    pub fn king(&self) -> &BitBoard {
+        &self.king
+    }
+    pub fn pawns(&self) -> &BitBoard {
+        &self.pawns
+    }
     pub fn concat_bit_boards(&self) -> BitBoard {
         BitBoard(
             self.rooks.0

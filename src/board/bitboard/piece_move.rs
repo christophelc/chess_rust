@@ -1,40 +1,24 @@
-use crate::board::{bitboard, coord, square};
+use crate::board::{
+    bitboard, coord,
+    square::{self, TypePiece},
+};
 
 pub trait GenMoves {
     fn gen_moves(
         &self,
+        type_piece: &TypePiece,
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
     ) -> Vec<PieceMoves>;
-    fn gen_moves_for_piece(
-        &self,
-        index: u8,
-        bit_board: &bitboard::BitBoard,
-        bit_board_opponent: &bitboard::BitBoard,
-    ) -> Option<PieceMoves>;
 }
 
-impl GenMoves for square::TypePiece {
+impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
     /// gen moves for one piece at index
-    fn gen_moves_for_piece(
-        &self,
-        index: u8,
-        bit_board: &bitboard::BitBoard,
-        bit_board_opponent: &bitboard::BitBoard,
-    ) -> Option<PieceMoves> {
-        match self {
-            &square::TypePiece::Rook => None,
-            &square::TypePiece::Bishop => None,
-            &square::TypePiece::Knight => None,
-            &square::TypePiece::King => gen_moves_for_king(index, bit_board, bit_board_opponent),
-            &square::TypePiece::Queen => None,
-            &square::TypePiece::Pawn => None,
-        }
-    }
     // gen moves for all piece of one type
     fn gen_moves(
         &self,
+        type_piece: &TypePiece,
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
@@ -43,7 +27,9 @@ impl GenMoves for square::TypePiece {
         let mut bb = bit_board_type_piece.0;
         while bb != 0 {
             let lsb = bb.trailing_zeros();
-            if let(Some(moves_for_piece)) = self.gen_moves_for_piece(lsb as u8, bit_board, bit_board_opponent) {
+            if let Some(moves_for_piece) =
+                gen_moves_for_piece(type_piece, lsb as u8, bit_board, bit_board_opponent)
+            {
                 moves.push(moves_for_piece);
             }
             bb &= bb - 1; // Remove lsb
@@ -52,12 +38,24 @@ impl GenMoves for square::TypePiece {
     }
 }
 
-// moves generation are not optimized (as a first implementation)
-fn gen_moves_for_king(
+fn gen_moves_for_piece(
+    type_piece: &TypePiece,
     index: u8,
-    bit_board: &bitboard::BitBoard,
-    bit_board_opponent: &bitboard::BitBoard,
+    bit_board: &bitboard::BitBoard, // color for piece at index
+    bit_board_opponent: &bitboard::BitBoard, // opponent color
 ) -> Option<PieceMoves> {
+    match type_piece {
+        &square::TypePiece::Rook => None,
+        &square::TypePiece::Bishop => None,
+        &square::TypePiece::Knight => None,
+        &square::TypePiece::King => gen_moves_for_king(index, bit_board_opponent),
+        &square::TypePiece::Queen => None,
+        &square::TypePiece::Pawn => None,
+    }
+}
+
+// moves generation are not optimized (as a first implementation)
+fn gen_moves_for_king(index: u8, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
     let is_row_1 = index < 8;
     let is_col_A = index % 8 == 0;
     let is_row_8 = index >= 56;
@@ -84,14 +82,14 @@ fn gen_moves_for_king(
         if new_pos >= 0 && new_pos < 64 {
             // Ensure within board bounds
             let pos = new_pos as u8;
-            if (bit_board.0 & (1 << pos) == 0) || (bit_board_opponent.0 & (1 << pos) != 0) {
-                moves_bitboard |= 1 << pos; // Set the bit for a valid move
-            }
+            moves_bitboard |= 1 << pos;
         } else {
             panic!("This code should never be reached.")
         }
     }
 
+    // remove invalid moves
+    let moves_bitboard = moves_bitboard & !bit_board.value();
     if moves_bitboard == 0 {
         None
     } else {
@@ -219,8 +217,7 @@ mod tests {
     fn test_king_center_moves() {
         let king_position = 27; // Somewhere in the center of the board
         let bit_board = BitBoard(0); // No friendly pieces blocking
-        let bit_board_opponent = BitBoard(0); // No opponent pieces
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         assert_eq!(result.index, king_position);
         assert_eq!(result.moves.0, 0x1C141C0000); // Expected moves bitboard for center position
     }
@@ -229,8 +226,7 @@ mod tests {
     fn test_king_edge_moves() {
         let king_position = 8; // On the edge (A file)
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         assert_eq!(result.index, king_position);
         let expected_moves = (1 << 0) | (1 << 1) | (1 << 9) | (1 << 16) | (1 << 17);
         assert_eq!(result.moves.0, expected_moves); // Expected moves bitboard for an edge position
@@ -240,8 +236,7 @@ mod tests {
     fn test_king_corner_moves() {
         let king_position = 0; // Top left corner (A1)
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         assert_eq!(result.index, king_position);
         let expected_moves = (1 << 1) | (1 << 8) | (1 << 9);
         assert_eq!(result.moves.0, expected_moves); // Expected moves bitboard for corner position
@@ -260,8 +255,7 @@ mod tests {
                 | (1 << 35)
                 | (1 << 36),
         );
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent);
+        let result = gen_moves_for_king(king_position, &bit_board);
         assert!(result.is_none()); // Expect no moves available
     }
 
@@ -270,15 +264,13 @@ mod tests {
     fn test_invalid_king_position() {
         let king_position = 64; // Invalid position
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let _ = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent);
+        let _ = gen_moves_for_king(king_position, &bit_board);
     }
     #[test]
     fn test_king_corner_h1_moves() {
         let king_position = 7; // Top right corner (H1)
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 6) | (1 << 14) | (1 << 15); // Moves: G1, H2, G2
         assert_eq!(result.moves.0, expected_moves);
     }
@@ -288,8 +280,7 @@ mod tests {
     fn test_king_corner_a8_moves() {
         let king_position = 56; // Bottom left corner (A8)
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 48) | (1 << 49) | (1 << 57); // Moves: A7, B7, B8
         assert_eq!(result.moves.0, expected_moves);
     }
@@ -299,8 +290,7 @@ mod tests {
     fn test_king_corner_h8_moves() {
         let king_position = 63; // Bottom right corner (H8)
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 62) | (1 << 54) | (1 << 55); // Moves: G8, H7, G7
         assert_eq!(result.moves.0, expected_moves);
     }
@@ -310,8 +300,7 @@ mod tests {
     fn test_king_row1_b1_moves() {
         let king_position = 1; // B1
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 0) | (1 << 2) | (1 << 8) | (1 << 9) | (1 << 10); // Moves: A1, C1, A2, B2, C2
         assert_eq!(result.moves.0, expected_moves);
     }
@@ -321,8 +310,7 @@ mod tests {
     fn test_king_row8_g8_moves() {
         let king_position = 62; // G8
         let bit_board = BitBoard(0);
-        let bit_board_opponent = BitBoard(0);
-        let result = gen_moves_for_king(king_position, &bit_board, &bit_board_opponent).unwrap();
+        let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 61) | (1 << 63) | (1 << 53) | (1 << 54) | (1 << 55); // Moves: F8, H8, F7, G7, H7
         assert_eq!(result.moves.0, expected_moves);
     }
