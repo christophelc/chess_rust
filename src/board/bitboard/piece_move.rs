@@ -54,13 +54,28 @@ fn gen_moves_for_piece(
     }
 }
 
+fn moves_non_empty(
+    index: u8,
+    moves_bitboard: u64,
+    bit_board: &bitboard::BitBoard        
+) -> Option<PieceMoves> {
+    let moves_bitboard = moves_bitboard & !bit_board.value();
+    if moves_bitboard == 0 {
+        None
+    } else {
+        Some(PieceMoves {
+            index,
+            moves: bitboard::BitBoard(moves_bitboard),
+        })
+    }
+}
 // moves generation are not optimized (as a first implementation)
 fn gen_moves_for_king(index: u8, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
     let is_row_1 = index < 8;
-    let is_col_A = index % 8 == 0;
+    let is_col_a = index % 8 == 0;
     let is_row_8 = index >= 56;
-    let is_col_H = index % 8 == 7;
-    let deltas: Vec<i8> = match (is_row_1, is_col_A, is_row_8, is_col_H) {
+    let is_col_h = index % 8 == 7;
+    let deltas: Vec<i8> = match (is_row_1, is_col_a, is_row_8, is_col_h) {
         // No edges or corners
         (false, false, false, false) => vec![-9, -8, -7, -1, 1, 7, 8, 9],
         // Single edges
@@ -87,17 +102,35 @@ fn gen_moves_for_king(index: u8, bit_board: &bitboard::BitBoard) -> Option<Piece
             panic!("This code should never be reached.")
         }
     }
+    moves_non_empty(index, moves_bitboard, bit_board)
+}
 
-    // remove invalid moves
-    let moves_bitboard = moves_bitboard & !bit_board.value();
-    if moves_bitboard == 0 {
-        None
-    } else {
-        Some(PieceMoves {
-            index,
-            moves: bitboard::BitBoard(moves_bitboard),
-        })
+fn gen_moves_for_knight(
+    index: u8,
+    bit_board: &bitboard::BitBoard,
+    bit_board_opponent: &bitboard::BitBoard,
+) -> Option<PieceMoves> {
+    let deltas: [(i8, i8); 8] = [
+        (-1, -2),
+        (-1, 2),
+        (1, -2),
+        (1, 2),
+        (-2, -1),
+        (-2, 1),
+        (2, -1),
+        (2, 1),
+    ];
+    let row: i8 = (index / 8) as i8;
+    let col: i8 = (index % 8) as i8;
+    let mut moves_bitboard: u64 = 0;
+    for (dx, dy) in deltas {
+        let x = col + dx;
+        let y = row + dy;
+        if x >= 0 && x < 8 && y >= 0 && y < 8 {
+            moves_bitboard |= 1 << ((x + y * 8) as u8)
+        }
     }
+    moves_non_empty(index, moves_bitboard, bit_board)
 }
 
 #[derive(Debug)]
@@ -150,8 +183,6 @@ fn list_index(bit_board: &bitboard::BitBoard) -> Vec<u8> {
     while bb != 0 {
         let lsb = bb.trailing_zeros();
         v.push(lsb as u8);
-        //perform_action(lsb as usize);
-
         bb &= bb - 1; // Remove lsb
     }
     v
@@ -313,5 +344,69 @@ mod tests {
         let result = gen_moves_for_king(king_position, &bit_board).unwrap();
         let expected_moves = (1 << 61) | (1 << 63) | (1 << 53) | (1 << 54) | (1 << 55); // Moves: F8, H8, F7, G7, H7
         assert_eq!(result.moves.0, expected_moves);
+    }
+
+    #[test]
+    fn knight_center_moves() {
+        let knight_index = 27u8; // Position at center of the board (d4)
+        let empty_board = BitBoard::new(0);
+        let opponent_board = BitBoard::new(0);
+
+        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        // Moves from d4 are to e2, f3, f5, e6, c6, b5, b3, c2 (calculating their respective bit positions)
+        let expected_moves =
+            1 << 10 | 1 << 12 | 1 << 17 | 1 << 21 | 1 << 33 | 1 << 37 | 1 << 42 | 1 << 44;
+        assert_eq!(moves.moves().0, expected_moves);
+    }
+
+    #[test]
+    fn knight_corner_moves() {
+        let knight_index = 0u8; // Position at a1
+        let empty_board = BitBoard::new(0);
+        let opponent_board = BitBoard::new(0);
+
+        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        // Moves from a1 are to b3 and c2
+        let expected_moves = 1 << 10 | 1 << 17;
+        assert_eq!(moves.moves().0, expected_moves); // Moves from a1 should be limited to b3 and c2
+    }
+
+    #[test]
+    fn knight_edge_moves() {
+        let knight_index = 8u8; // Position at a2
+        let empty_board = BitBoard::new(0);
+        let opponent_board = BitBoard::new(0);
+
+        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        // Moves from a2 are to b4, c3, and c1
+        let expected_moves = 1 << 2 | 1 << 18 | 1 << 25;
+        assert_eq!(moves.moves().0, expected_moves); // Valid moves from a2
+    }
+
+    #[test]
+    fn knight_moves_with_blockages() {
+        let knight_index = 27u8; // d4 again for center moves
+                                 // Block e6 and c2 with own pieces
+        let own_pieces = BitBoard::new(1 << 17 | 1 << 44); // Block e6 and b3
+        let opponent_board = BitBoard::new(0);
+
+        let moves = gen_moves_for_knight(knight_index, &own_pieces, &opponent_board).unwrap();
+        // Adjusted for blockages, valid moves are to e2, f3, f5, c6, b5, b3, c2
+        let expected_moves = 1 << 10 | 1 << 12 | 1 << 21 | 1 << 33 | 1 << 37 | 1 << 42;
+        assert_eq!(moves.moves().value(), expected_moves);
+    }
+
+    #[test]
+    fn knight_capture_moves() {
+        let knight_index = 27u8; // d4
+        let empty_board = BitBoard::new(0);
+        // Block e6 and c2 with own pieces
+        let opponent_pieces = BitBoard::new(1 << 17 | 1 << 44); // Block e6 and b3
+
+        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_pieces).unwrap();
+        // Includes potential captures, valid moves are e2, f3, f5, e6, c6, b5, b3, c2
+        let expected_moves =
+            1 << 10 | 1 << 12 | 1 << 17 | 1 << 21 | 1 << 33 | 1 << 37 | 1 << 42 | 1 << 44;
+        assert_eq!(moves.moves().0, expected_moves); // Includes potential captures
     }
 }
