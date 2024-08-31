@@ -5,13 +5,13 @@ pub enum TypePiece {
     Bishop,
     Queen,
     King,
-    Pawn
+    Pawn,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Color {
     White,
-    Black
+    Black,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -20,22 +20,24 @@ pub struct Piece {
     color: Color,
 }
 impl Piece {
-    pub fn type_piece(&self) -> TypePiece { self.type_piece }
+    pub fn type_piece(&self) -> TypePiece {
+        self.type_piece
+    }
 
-    pub fn color(&self) -> Color { self.color }
+    pub fn color(&self) -> Color {
+        self.color
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Square {
     Empty,
-    NonEmpty(Piece)
+    NonEmpty(Piece),
 }
 
 impl Square {
     pub fn build_piece(type_piece: TypePiece, color: Color) -> Square {
-        Square::NonEmpty(Piece { 
-            color, type_piece
-        })
+        Square::NonEmpty(Piece { color, type_piece })
     }
     pub fn is_empty(&self) -> bool {
         *self == Square::Empty
@@ -53,30 +55,18 @@ impl fmt::Display for Square {
             Square::Empty => write!(f, " "),
             Square::NonEmpty(Piece { type_piece, color }) => {
                 let symbol = match (type_piece, color) {
-                    (TypePiece
-                    ::Rook, Color::Black) => "♖",
-                    (TypePiece
-                    ::Knight, Color::Black) => "♘",
-                    (TypePiece
-                    ::Bishop, Color::Black) => "♗",
-                    (TypePiece
-                    ::Queen, Color::Black) => "♕",
-                    (TypePiece
-                    ::King, Color::Black) => "♔",
-                    (TypePiece
-                    ::Pawn, Color::Black) => "♙",
-                    (TypePiece
-                    ::Rook, Color::White) => "♜",
-                    (TypePiece
-                    ::Knight, Color::White) => "♞",
-                    (TypePiece
-                    ::Bishop, Color::White) => "♝",
-                    (TypePiece
-                    ::Queen, Color::White) => "♛",
-                    (TypePiece
-                    ::King, Color::White) => "♚",
-                    (TypePiece
-                    ::Pawn, Color::White) => "♟︎",
+                    (TypePiece::Rook, Color::Black) => "♖",
+                    (TypePiece::Knight, Color::Black) => "♘",
+                    (TypePiece::Bishop, Color::Black) => "♗",
+                    (TypePiece::Queen, Color::Black) => "♕",
+                    (TypePiece::King, Color::Black) => "♔",
+                    (TypePiece::Pawn, Color::Black) => "♙",
+                    (TypePiece::Rook, Color::White) => "♜",
+                    (TypePiece::Knight, Color::White) => "♞",
+                    (TypePiece::Bishop, Color::White) => "♝",
+                    (TypePiece::Queen, Color::White) => "♛",
+                    (TypePiece::King, Color::White) => "♚",
+                    (TypePiece::Pawn, Color::White) => "♟︎",
                 };
                 write!(f, "{}", symbol)
             }

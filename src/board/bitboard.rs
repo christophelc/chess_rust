@@ -1,17 +1,29 @@
+pub mod piece_move;
+
+use super::{
+    coord,
+    fen::{EncodeUserInput, Position, PositionStatus},
+    square, Board, ChessBoard,
+};
 use std::{fmt, ops::BitOrAssign};
-use super::{coord, fen::{Position, PositionStatus, EncodeUserInput}, square, Board, ChessBoard};
 
 pub struct BitPosition {
     bit_position: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,
 }
 impl BitPosition {
+    pub fn bit_position(&self) -> &BitBoardsWhiteAndBlack {
+        &self.bit_position
+    }
+    pub fn bit_position_status(&self) -> &BitPositionStatus {
+        &self.bit_position_status
+    }
     pub fn from(position: Position) -> Self {
         let bit_position_status = BitPositionStatus::from(position.status());
         let bit_position = BitBoardsWhiteAndBlack::from(position.into_chessboard());
         BitPosition {
             bit_position,
-            bit_position_status
+            bit_position_status,
         }
     }
     pub fn to(&self) -> Position {
@@ -28,9 +40,15 @@ pub struct BitBoardsWhiteAndBlack {
 }
 
 impl BitBoardsWhiteAndBlack {
+    pub fn bit_board_white(&self) -> &BitBoards {
+        &self.bit_board_white
+    }
+    pub fn bit_board_black(&self) -> &BitBoards {
+        &self.bit_board_black
+    }
     pub fn from(board: ChessBoard) -> Self {
         let mut bit_board_white = BitBoards::new();
-        let mut bit_board_black = BitBoards::new();        
+        let mut bit_board_black = BitBoards::new();
         for (idx, square) in board.iter().enumerate() {
             match square {
                 square::Square::NonEmpty(piece) => {
@@ -60,19 +78,11 @@ impl BitBoardsWhiteAndBlack {
         let mut chessboard = ChessBoard::new();
         for (type_piece, bitboard) in self.bit_board_white.list_boards() {
             for coord in bitboard.list_non_empty_squares() {
-                chessboard.add(
-                    coord, 
-                    type_piece,
-                    Color::White
-                );
+                chessboard.add(coord, type_piece, Color::White);
             }
             for (type_piece, bitboard) in self.bit_board_black.list_boards() {
                 for coord in bitboard.list_non_empty_squares() {
-                    chessboard.add(
-                        coord, 
-                        type_piece,
-                        Color::Black
-                    );
+                    chessboard.add(coord, type_piece, Color::Black);
                 }
             }
         }
@@ -84,16 +94,23 @@ impl BitBoardsWhiteAndBlack {
 pub struct BitBoard(u64);
 
 impl BitBoard {
+    pub fn new(value: u64) -> Self {
+        BitBoard(value)
+    }
+    pub fn trailing_zeros(&self) -> u32 {
+        self.0.trailing_zeros()
+    }
     fn list_non_empty_squares(&self) -> Vec<coord::Coord> {
         let mut coords = Vec::new();
-        for i in (0..8).rev() { // iterate over the ranks in reverse (from 7 to 0)
+        for i in (0..8).rev() {
+            // iterate over the ranks in reverse (from 7 to 0)
             for j in 0..8 {
                 let index = i * 8 + j;
                 let bit = (self.0 >> index) & 1;
                 if bit == 1 {
                     coords.push(coord::Coord::from((j + ('A' as u8)) as char, i + 1).unwrap())
                 }
-            }        
+            }
         }
         coords
     }
@@ -101,7 +118,8 @@ impl BitBoard {
 impl fmt::Display for BitBoard {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = String::new();
-        for rank in (0..8).rev() { // iterate over the ranks in reverse (from 7 to 0)
+        for rank in (0..8).rev() {
+            // iterate over the ranks in reverse (from 7 to 0)
             for file in 0..8 {
                 let index = rank * 8 + file;
                 let bit = (self.0 >> index) & 1;
@@ -129,6 +147,16 @@ pub struct BitBoards {
     pawns: BitBoard,
 }
 impl BitBoards {
+    pub fn concat_bit_boards(&self) -> BitBoard {
+        BitBoard(
+            self.rooks.0
+                | self.bishops.0
+                | self.knights.0
+                | self.king.0
+                | self.queens.0
+                | self.pawns.0,
+        )
+    }
     pub fn list_boards(&self) -> Vec<(square::TypePiece, &BitBoard)> {
         let mut boards = Vec::new();
         boards.push((square::TypePiece::Rook, &self.rooks));
@@ -148,7 +176,7 @@ impl fmt::Display for BitBoards {
         write!(f, "king:\n{}", self.king)?;
         write!(f, "queen:\n{}", self.queens)?;
         write!(f, "pawns:\n{}", self.pawns)
-    }    
+    }
 }
 
 impl BitBoards {
@@ -166,7 +194,7 @@ impl BitBoards {
 pub struct BitPositionStatus {
     flags: u8,
     pawn_en_passant: i8, // 1 byte for the en passant square (-1 if None, 0-63 if Some)
-    n_half_moves: u16, 
+    n_half_moves: u16,
     n_moves: u16,
 }
 
@@ -180,9 +208,9 @@ impl BitPositionStatus {
     pub fn new() -> Self {
         BitPositionStatus {
             flags: 0,
-            pawn_en_passant: -1, 
-            n_half_moves: 0, 
-            n_moves: 0,   
+            pawn_en_passant: -1,
+            n_half_moves: 0,
+            n_moves: 0,
         }
     }
     pub fn castling_white_queen_side(&self) -> bool {
@@ -210,8 +238,8 @@ impl BitPositionStatus {
         } else {
             Some(self.pawn_en_passant as u8)
         }
-    }    
-    
+    }
+
     pub fn n_half_moves(&self) -> u16 {
         self.n_half_moves
     }
@@ -259,13 +287,13 @@ impl BitPositionStatus {
         } else {
             self.flags &= !Self::PLAYER_TURN_WHITE;
         }
-    }    
+    }
     pub fn set_pawn_en_passant(&mut self, value: Option<i8>) {
         self.pawn_en_passant = match value {
             Some(square) if square >= 0 && square <= 63 => square, // Only valid squares (0-63) are allowed
-            _ => -1, // If None or invalid square
+            _ => -1,                                               // If None or invalid square
         };
-    }    
+    }
 
     pub fn set_n_half_moves(&mut self, value: u16) {
         self.n_half_moves = value;
@@ -295,9 +323,8 @@ impl BitPositionStatus {
         bp.set_castling_black_queen_side(self.castling_black_queen_side());
         bp.set_castling_black_king_side(self.castling_black_king_side());
         let player_turn = if self.player_turn_white() {
-            square::Color::White 
-        } 
-        else {
+            square::Color::White
+        } else {
             square::Color::Black
         };
         bp.set_player_turn(player_turn);
@@ -306,12 +333,10 @@ impl BitPositionStatus {
         bp.set_n_moves(self.n_moves());
         bp
     }
-}   
+}
 
 fn encode_pawn_en_passant(maybe_coord: Option<coord::Coord>) -> Option<i8> {
-    maybe_coord.map(|coord| {
-        (coord.get_y() * 8) as i8 + (coord.get_x() as i8)
-    })
+    maybe_coord.map(|coord| (coord.get_y() * 8) as i8 + (coord.get_x() as i8))
 }
 
 fn decode_pawn_en_passant(maybe_index: Option<u8>) -> Option<coord::Coord> {
@@ -320,9 +345,9 @@ fn decode_pawn_en_passant(maybe_index: Option<u8>) -> Option<coord::Coord> {
     })
 }
 
+use square::Color;
 use square::Square;
 use square::TypePiece;
-use square::Color;
 
 #[cfg(test)]
 mod tests {
@@ -377,7 +402,10 @@ mod tests {
         assert_eq!(status.castling_black_queen_side(), true);
         assert_eq!(status.castling_black_king_side(), false);
         assert_eq!(status.player_turn(), square::Color::Black);
-        assert_eq!(status.pawn_en_passant(), Some(coord::Coord::from('e', 3).unwrap()));
+        assert_eq!(
+            status.pawn_en_passant(),
+            Some(coord::Coord::from('e', 3).unwrap())
+        );
         assert_eq!(status.n_half_moves(), 25);
         assert_eq!(status.n_moves(), 50);
     }
@@ -409,34 +437,67 @@ mod tests {
     #[test]
     fn test_bit_position_from_mixed_board() {
         let mut mixed_board: ChessBoard = ChessBoard::new();
-        mixed_board.add(coord::Coord::from('A', 1).unwrap(), square::TypePiece::Rook, square::Color::White);
-        mixed_board.add(coord::Coord::from('D', 4).unwrap(), square::TypePiece::Queen, square::Color::White);
-        mixed_board.add(coord::Coord::from('H', 8).unwrap(), square::TypePiece::King, square::Color::Black);
-        mixed_board.add(coord::Coord::from('E', 5).unwrap(), square::TypePiece::Bishop, square::Color::Black);        
-        mixed_board.add(coord::Coord::from('A', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);
-        mixed_board.add(coord::Coord::from('C', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);        
-        mixed_board.add(coord::Coord::from('H', 2).unwrap(), square::TypePiece::Pawn, square::Color::White);                
+        mixed_board.add(
+            coord::Coord::from('A', 1).unwrap(),
+            square::TypePiece::Rook,
+            square::Color::White,
+        );
+        mixed_board.add(
+            coord::Coord::from('D', 4).unwrap(),
+            square::TypePiece::Queen,
+            square::Color::White,
+        );
+        mixed_board.add(
+            coord::Coord::from('H', 8).unwrap(),
+            square::TypePiece::King,
+            square::Color::Black,
+        );
+        mixed_board.add(
+            coord::Coord::from('E', 5).unwrap(),
+            square::TypePiece::Bishop,
+            square::Color::Black,
+        );
+        mixed_board.add(
+            coord::Coord::from('A', 2).unwrap(),
+            square::TypePiece::Pawn,
+            square::Color::White,
+        );
+        mixed_board.add(
+            coord::Coord::from('C', 2).unwrap(),
+            square::TypePiece::Pawn,
+            square::Color::White,
+        );
+        mixed_board.add(
+            coord::Coord::from('H', 2).unwrap(),
+            square::TypePiece::Pawn,
+            square::Color::White,
+        );
         let bit_position = BitBoardsWhiteAndBlack::from(mixed_board);
 
         //println!("white: {}", bit_position.bit_board_white);
         println!("{}", bit_position.bit_board_white.pawns);
         //println!("black: {}", bit_position.bit_board_black);
-        assert_eq!(bit_position.bit_board_white.rooks, BitBoard(1));  // Index 0
-        assert_eq!(bit_position.bit_board_white.queens, BitBoard(1 << 27));  // Index 27 (3 * 8 + 3)
-        assert_eq!(bit_position.bit_board_black.king, BitBoard(1 << 63));  // Index 63 (7 * 8 + 7)
-        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(1 << 36));  // Index 36 (4 * 8 + 4)
-        assert_eq!(bit_position.bit_board_white.pawns, BitBoard(1 << 8 | 1 << 10 | 1 << 15));  
+        assert_eq!(bit_position.bit_board_white.rooks, BitBoard(1)); // Index 0
+        assert_eq!(bit_position.bit_board_white.queens, BitBoard(1 << 27)); // Index 27 (3 * 8 + 3)
+        assert_eq!(bit_position.bit_board_black.king, BitBoard(1 << 63)); // Index 63 (7 * 8 + 7)
+        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(1 << 36)); // Index 36 (4 * 8 + 4)
+        assert_eq!(
+            bit_position.bit_board_white.pawns,
+            BitBoard(1 << 8 | 1 << 10 | 1 << 15)
+        );
     }
 
     #[test]
     fn test_bitboard_list_non_empty_squares() {
-        let bitboard = BitBoard(0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001);
+        let bitboard =
+            BitBoard(0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001);
         let coords = bitboard.list_non_empty_squares();
         assert_eq!(coords.len(), 2);
         assert_eq!(coords[0], coord::Coord::from('A', 1).unwrap());
         assert_eq!(coords[1], coord::Coord::from('H', 1).unwrap());
 
-        let bitboard = BitBoard(0b00000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+        let bitboard =
+            BitBoard(0b00000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
         let coords = bitboard.list_non_empty_squares();
         assert_eq!(coords.len(), 1);
         assert_eq!(coords[0], coord::Coord::from('A', 8).unwrap());
@@ -453,8 +514,8 @@ mod tests {
     fn test_bit_position_to_mixed_board() {
         let bit_board_white = BitBoards {
             rooks: BitBoard(1),
-            knights: BitBoard(0),            
-            bishops: BitBoard(0),            
+            knights: BitBoard(0),
+            bishops: BitBoard(0),
             queens: BitBoard(1 << 27),
             king: BitBoard(0),
             pawns: BitBoard(1 << 8 | 1 << 10 | 1 << 15),
@@ -462,7 +523,7 @@ mod tests {
         let bit_board_black = BitBoards {
             rooks: BitBoard(0),
             knights: BitBoard(0),
-            bishops: BitBoard(1 << 36),            
+            bishops: BitBoard(1 << 36),
             queens: BitBoard(0),
             king: BitBoard(1 << 63),
             pawns: BitBoard(1 << 40),
@@ -472,13 +533,10 @@ mod tests {
             bit_board_black,
         };
         let chessboard = bit_position.to();
-        let position = Position::build(
-            chessboard,
-            PositionStatus::new(),
-        );
-        let fen_str = fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");        
+        let position = Position::build(chessboard, PositionStatus::new());
+        let fen_str =
+            fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");
         let expected_fen = "7k/8/p7/4b3/3Q4/8/P1P4P/R7 w - - 0 0";
-        assert_eq!(fen_str ,expected_fen);
+        assert_eq!(fen_str, expected_fen);
     }
 }
-

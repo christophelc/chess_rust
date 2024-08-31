@@ -1,14 +1,15 @@
-use crate::board::square;
 use crate::board::coord;
+use crate::board::square;
 
 pub struct Position {
-    chessboard: ChessBoard,    
+    chessboard: ChessBoard,
     status: PositionStatus,
 }
 
+#[derive(Clone, Copy)]
 pub struct PositionStatus {
     castling_white_queen_side: bool,
-    castling_white_king_side: bool,    
+    castling_white_king_side: bool,
     castling_black_queen_side: bool,
     castling_black_king_side: bool,
     player_turn: square::Color,
@@ -20,14 +21,14 @@ impl PositionStatus {
     pub fn new() -> Self {
         PositionStatus {
             castling_white_queen_side: false,
-            castling_white_king_side: false,    
+            castling_white_king_side: false,
             castling_black_queen_side: false,
             castling_black_king_side: false,
             player_turn: square::Color::White,
             pawn_en_passant: None,
-            n_half_moves: 0, 
+            n_half_moves: 0,
             n_moves: 0,
-        }        
+        }
     }
     // getters
     ////////////////////////
@@ -61,10 +62,10 @@ impl PositionStatus {
 
     pub fn n_moves(&self) -> u16 {
         self.n_moves
-    }    
+    }
 
     // setters
-    ////////////////////////    
+    ////////////////////////
     pub fn set_castling_white_queen_side(&mut self, value: bool) {
         self.castling_white_queen_side = value;
     }
@@ -106,10 +107,7 @@ impl Position {
         }
     }
     pub fn build(chessboard: ChessBoard, status: PositionStatus) -> Self {
-        Position {
-            chessboard,
-            status,
-        }
+        Position { chessboard, status }
     }
 
     pub fn build_initial_position() -> Self {
@@ -130,7 +128,6 @@ impl Position {
     pub fn status(&self) -> &PositionStatus {
         &self.status
     }
-
 }
 
 use std::error::Error;
@@ -153,7 +150,9 @@ impl fmt::Display for FenError {
             FenError::InvalidInput(ref desc) => write!(f, "Invalid input: {}", desc),
             FenError::InvalidPiece(piece) => write!(f, "Invalid piece character in FEN: {}", piece),
             FenError::InvalidPosition => write!(f, "Invalid position data in FEN"),
-            FenError::InvalidEnPassantCapture(ref str) => write!(f, "Invalid Capture en passant: {}", str),
+            FenError::InvalidEnPassantCapture(ref str) => {
+                write!(f, "Invalid Capture en passant: {}", str)
+            }
             FenError::ParseError(ref desc) => write!(f, "Parse error: {}", desc),
         }
     }
@@ -161,7 +160,7 @@ impl fmt::Display for FenError {
 
 pub trait EncodeUserInput {
     fn decode(input: &str) -> Result<Position, FenError>;
-    fn encode(position: &Position) -> Result<String, FenError>;    
+    fn encode(position: &Position) -> Result<String, FenError>;
 }
 
 pub(crate) struct FEN;
@@ -170,7 +169,9 @@ impl EncodeUserInput for FEN {
     fn decode(fen: &str) -> Result<Position, FenError> {
         let parts: Vec<&str> = fen.split_whitespace().collect();
         if parts.len() != 6 {
-            return Err(FenError::InvalidInput("FEN string must have six parts".to_string()));
+            return Err(FenError::InvalidInput(
+                "FEN string must have six parts".to_string(),
+            ));
         }
 
         let mut squares = [[square::Square::Empty; 8]; 8];
@@ -182,24 +183,26 @@ impl EncodeUserInput for FEN {
                 '1'..='8' => {
                     let empty_spaces = c.to_digit(10).unwrap() as usize;
                     col += empty_spaces;
-                },
+                }
                 '/' => {
                     if col != 8 {
                         return Err(FenError::InvalidPosition);
                     }
                     row += 1;
                     col = 0;
-                },
+                }
                 _ => {
                     if let Some(square) = char_to_square(c) {
-                        squares[7-row][col] = square;
+                        squares[7 - row][col] = square;
                         col += 1;
                     } else {
                         return Err(FenError::InvalidPiece(c));
                     }
                 }
             }
-            if col > 8 { return Err(FenError::InvalidPosition); }
+            if col > 8 {
+                return Err(FenError::InvalidPosition);
+            }
         }
 
         if row != 7 || col != 8 {
@@ -209,12 +212,18 @@ impl EncodeUserInput for FEN {
         let player_turn = match parts[1] {
             "w" => square::Color::White,
             "b" => square::Color::Black,
-            _ => return Err(FenError::ParseError("Invalid player turn symbol".to_string())),
+            _ => {
+                return Err(FenError::ParseError(
+                    "Invalid player turn symbol".to_string(),
+                ))
+            }
         };
 
         let pawn_en_passant = if parts[3] != "-" {
             let col = parts[3].chars().next().unwrap();
-            let row = parts[3][1..2].parse::<u8>().map_err(|_| FenError::ParseError("Invalid en passant square".to_string()))?;
+            let row = parts[3][1..2]
+                .parse::<u8>()
+                .map_err(|_| FenError::ParseError("Invalid en passant square".to_string()))?;
             match Coord::from(col, row) {
                 Ok(coord) => Some(coord),
                 Err(_) => return Err(FenError::InvalidEnPassantCapture(format!("{}{}", col, row))),
@@ -223,9 +232,11 @@ impl EncodeUserInput for FEN {
             None
         };
 
-        let n_half_moves = parts[4].parse::<u16>()
+        let n_half_moves = parts[4]
+            .parse::<u16>()
             .map_err(|_| FenError::ParseError("Failed to parse half-moves".to_string()))?;
-        let n_moves = parts[5].parse::<u16>()
+        let n_moves = parts[5]
+            .parse::<u16>()
             .map_err(|_| FenError::ParseError("Failed to parse full move number".to_string()))?;
 
         Ok(Position {
@@ -239,7 +250,7 @@ impl EncodeUserInput for FEN {
                 pawn_en_passant,
                 n_half_moves,
                 n_moves,
-            }
+            },
         })
     }
 
@@ -285,11 +296,21 @@ impl EncodeUserInput for FEN {
         result.push(' ');
 
         let mut castling = String::new();
-        if position.status().castling_white_king_side() { castling.push('K'); }
-        if position.status().castling_white_queen_side() { castling.push('Q'); }        
-        if position.status().castling_black_king_side() { castling.push('k'); }
-        if position.status().castling_black_queen_side() { castling.push('q'); }        
-        if castling.is_empty() { castling.push('-'); }
+        if position.status().castling_white_king_side() {
+            castling.push('K');
+        }
+        if position.status().castling_white_queen_side() {
+            castling.push('Q');
+        }
+        if position.status().castling_black_king_side() {
+            castling.push('k');
+        }
+        if position.status().castling_black_queen_side() {
+            castling.push('q');
+        }
+        if castling.is_empty() {
+            castling.push('-');
+        }
         result.push_str(&castling);
 
         result.push(' ');
@@ -332,22 +353,33 @@ fn char_to_square(c: char) -> Option<square::Square> {
     let white = square::Color::White;
     match c {
         'R' => Some(square::Square::build_piece(square::TypePiece::Rook, white)),
-        'N' => Some(square::Square::build_piece(square::TypePiece::Knight, white)),
-        'B' => Some(square::Square::build_piece(square::TypePiece::Bishop, white)),
+        'N' => Some(square::Square::build_piece(
+            square::TypePiece::Knight,
+            white,
+        )),
+        'B' => Some(square::Square::build_piece(
+            square::TypePiece::Bishop,
+            white,
+        )),
         'Q' => Some(square::Square::build_piece(square::TypePiece::Queen, white)),
         'K' => Some(square::Square::build_piece(square::TypePiece::King, white)),
-        'P' => Some(square::Square::build_piece(square::TypePiece::Pawn, white)),        
+        'P' => Some(square::Square::build_piece(square::TypePiece::Pawn, white)),
         'r' => Some(square::Square::build_piece(square::TypePiece::Rook, black)),
-        'n' => Some(square::Square::build_piece(square::TypePiece::Knight, black)),
-        'b' => Some(square::Square::build_piece(square::TypePiece::Bishop, black)),
+        'n' => Some(square::Square::build_piece(
+            square::TypePiece::Knight,
+            black,
+        )),
+        'b' => Some(square::Square::build_piece(
+            square::TypePiece::Bishop,
+            black,
+        )),
         'q' => Some(square::Square::build_piece(square::TypePiece::Queen, black)),
         'k' => Some(square::Square::build_piece(square::TypePiece::King, black)),
         'p' => Some(square::Square::build_piece(square::TypePiece::Pawn, black)),
         '1'..='8' => None, // Empty squares will be handled by the caller (decode function)
-        _ => None, // Invalid character
+        _ => None,         // Invalid character
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -359,19 +391,31 @@ mod tests {
         let position = FEN::decode(fen).expect("Failed to decode FEN");
 
         // Check if the pieces are in the correct initial positions
-        assert_eq!(position.chessboard().squares()[0][0], square::Square::build_piece(TypePiece::Rook, Color::White));
-        assert_eq!(position.chessboard().squares()[0][7], square::Square::build_piece(TypePiece::Rook, Color::White));
-        assert_eq!(position.chessboard().squares()[7][0], square::Square::build_piece(TypePiece::Rook, Color::Black));
-        assert_eq!(position.chessboard().squares()[7][7], square::Square::build_piece(TypePiece::Rook, Color::Black));
+        assert_eq!(
+            position.chessboard().squares()[0][0],
+            square::Square::build_piece(TypePiece::Rook, Color::White)
+        );
+        assert_eq!(
+            position.chessboard().squares()[0][7],
+            square::Square::build_piece(TypePiece::Rook, Color::White)
+        );
+        assert_eq!(
+            position.chessboard().squares()[7][0],
+            square::Square::build_piece(TypePiece::Rook, Color::Black)
+        );
+        assert_eq!(
+            position.chessboard().squares()[7][7],
+            square::Square::build_piece(TypePiece::Rook, Color::Black)
+        );
 
         // Check player turn
         assert_eq!(position.status().player_turn(), square::Color::White);
 
         // Check castling rights
         assert!(position.status().castling_white_king_side());
-        assert!(position.status().castling_white_queen_side());        
+        assert!(position.status().castling_white_queen_side());
         assert!(position.status().castling_black_king_side());
-        assert!(position.status().castling_black_queen_side());        
+        assert!(position.status().castling_black_queen_side());
 
         // Check en passant
         assert_eq!(position.status().pawn_en_passant(), None);
@@ -381,52 +425,112 @@ mod tests {
         assert_eq!(position.status().n_moves(), 1);
     }
 
-    use square::TypePiece;
     use square::Color;
     use square::Square;
-    
+    use square::TypePiece;
+
     #[test]
     fn test_encode_starting_position() {
         let position = Position {
             chessboard: ChessBoard::build([
-            [   Square::build_piece(TypePiece::Rook, Color::White), Square::build_piece(TypePiece::Knight, Color::White), 
-                Square::build_piece(TypePiece::Bishop, Color::White), Square::build_piece(TypePiece::Queen, Color::White),
-                Square::build_piece(TypePiece::King, Color::White), Square::build_piece(TypePiece::Bishop, Color::White),
-                Square::build_piece(TypePiece::Knight, Color::White), Square::build_piece(TypePiece::Rook, Color::White),
-            ],
-            [   Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
-                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
-                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
-                Square::build_piece(TypePiece::Pawn, Color::White), Square::build_piece(TypePiece::Pawn, Color::White),
-            ],
-            [   Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty  ],
-            [   Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty  ],
-            [   Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty  ],
-            [   Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty, Square::Empty  ],
-            [   Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
-                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
-                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
-                Square::build_piece(TypePiece::Pawn, Color::Black), Square::build_piece(TypePiece::Pawn, Color::Black),
-            ],
-            [   Square::build_piece(TypePiece::Rook, Color::Black), Square::build_piece(TypePiece::Knight, Color::Black), 
-                Square::build_piece(TypePiece::Bishop, Color::Black), Square::build_piece(TypePiece::Queen, Color::Black),
-                Square::build_piece(TypePiece::King, Color::Black), Square::build_piece(TypePiece::Bishop, Color::Black),
-                Square::build_piece(TypePiece::Knight, Color::Black), Square::build_piece(TypePiece::Rook, Color::Black),
-            ]]),
+                [
+                    Square::build_piece(TypePiece::Rook, Color::White),
+                    Square::build_piece(TypePiece::Knight, Color::White),
+                    Square::build_piece(TypePiece::Bishop, Color::White),
+                    Square::build_piece(TypePiece::Queen, Color::White),
+                    Square::build_piece(TypePiece::King, Color::White),
+                    Square::build_piece(TypePiece::Bishop, Color::White),
+                    Square::build_piece(TypePiece::Knight, Color::White),
+                    Square::build_piece(TypePiece::Rook, Color::White),
+                ],
+                [
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                    Square::build_piece(TypePiece::Pawn, Color::White),
+                ],
+                [
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                ],
+                [
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                ],
+                [
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                ],
+                [
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                    Square::Empty,
+                ],
+                [
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                    Square::build_piece(TypePiece::Pawn, Color::Black),
+                ],
+                [
+                    Square::build_piece(TypePiece::Rook, Color::Black),
+                    Square::build_piece(TypePiece::Knight, Color::Black),
+                    Square::build_piece(TypePiece::Bishop, Color::Black),
+                    Square::build_piece(TypePiece::Queen, Color::Black),
+                    Square::build_piece(TypePiece::King, Color::Black),
+                    Square::build_piece(TypePiece::Bishop, Color::Black),
+                    Square::build_piece(TypePiece::Knight, Color::Black),
+                    Square::build_piece(TypePiece::Rook, Color::Black),
+                ],
+            ]),
             status: PositionStatus {
                 castling_white_king_side: true,
-                castling_white_queen_side: true,            
+                castling_white_queen_side: true,
                 castling_black_king_side: true,
-                castling_black_queen_side: true,            
+                castling_black_queen_side: true,
                 player_turn: Color::White,
                 pawn_en_passant: None,
                 n_half_moves: 0,
                 n_moves: 1,
-            }
+            },
         };
 
         let fen = FEN::encode(&position).expect("Failed to encode position");
-        assert_eq!(fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        assert_eq!(
+            fen,
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        );
     }
 
     #[test]
@@ -452,14 +556,14 @@ mod tests {
             chessboard: ChessBoard::new(),
             status: PositionStatus {
                 castling_white_king_side: false,
-                castling_white_queen_side: false,            
+                castling_white_queen_side: false,
                 castling_black_king_side: false,
-                castling_black_queen_side: false,            
+                castling_black_queen_side: false,
                 player_turn: Color::White,
                 pawn_en_passant: None,
                 n_half_moves: 0,
                 n_moves: 1,
-            }
+            },
         };
 
         let fen = FEN::encode(&empty_position).expect("Failed to encode position");
@@ -467,8 +571,8 @@ mod tests {
     }
 }
 
-use coord::Coord;
 use super::ChessBoard;
+use coord::Coord;
 
 #[test]
 fn test_decode_en_passant() {
@@ -479,23 +583,26 @@ fn test_decode_en_passant() {
     let expected_coord = Coord::from('e', 6).expect("Failed to create Coord");
     assert_eq!(position.status().pawn_en_passant(), Some(expected_coord));
 }
-  
+
 #[test]
 fn test_encode_en_passant() {
     let position = Position {
-        chessboard: ChessBoard::new(), 
+        chessboard: ChessBoard::new(),
         status: PositionStatus {
             castling_white_king_side: false,
-            castling_white_queen_side: false,        
+            castling_white_queen_side: false,
             castling_black_king_side: false,
-            castling_black_queen_side: false,        
+            castling_black_queen_side: false,
             player_turn: square::Color::White,
             pawn_en_passant: Some(Coord::from('e', 6).expect("Failed to create Coord")),
             n_half_moves: 0,
             n_moves: 1,
-        }
+        },
     };
 
     let fen = FEN::encode(&position).expect("Failed to encode position");
-    assert!(fen.contains("E6"), "Expected en passant square 'e6' not found in encoded FEN");
+    assert!(
+        fen.contains("E6"),
+        "Expected en passant square 'e6' not found in encoded FEN"
+    );
 }

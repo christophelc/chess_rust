@@ -1,6 +1,6 @@
+use std::error::Error;
 /// This module implements a TUI for a chessboard
 use std::fmt;
-use std::error::Error;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
@@ -23,14 +23,17 @@ impl Coord {
     }
     pub fn from(col: char, row: u8) -> Result<Self, Box<dyn Error>> {
         if Self::is_valid_chess_square(col, row) {
-            Ok(Coord { col: col.to_uppercase().next().unwrap(), row })
+            Ok(Coord {
+                col: col.to_uppercase().next().unwrap(),
+                row,
+            })
         } else {
             Err(Box::new(InvalidCoordError { col, row }))
         }
     }
     fn is_valid_chess_square(col: char, row: u8) -> bool {
         match col {
-            'A'..='H' | 'a'..='h' if row >=1 && row <= 8 => true,
+            'A'..='H' | 'a'..='h' if row >= 1 && row <= 8 => true,
             _ => false,
         }
     }
@@ -74,7 +77,7 @@ mod tests {
             assert_eq!(*error, InvalidCoordError { col: 'I', row: 1 });
         } else {
             panic!("Error is not of type InvalidCoordError");
-        }        
+        }
         assert!(Coord::from('A', 9).is_err());
     }
 
@@ -89,4 +92,3 @@ mod tests {
         assert!(!Coord::is_valid_chess_square('j', 8));
     }
 }
-
