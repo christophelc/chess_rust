@@ -45,14 +45,16 @@ impl ChessBoard {
         self.squares[coord.get_y()][coord.get_x()]
     }
 
-    pub fn new() -> Self {
-        ChessBoard::empty()
-    }
-
     // Helper function to create an empty board
-    fn empty() -> Self {
+    pub fn new() -> Self {
         ChessBoard {
             squares: [[square::Square::Empty; 8]; 8],
+        }
+    }
+
+    pub fn build(squares: [[square::Square; 8]; 8]) -> Self {
+        ChessBoard {
+            squares
         }
     }
 

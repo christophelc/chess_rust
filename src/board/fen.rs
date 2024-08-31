@@ -2,7 +2,7 @@ use crate::board::square;
 use crate::board::coord;
 
 pub struct Position {
-    squares: [[square::Square; 8]; 8],    
+    chessboard: ChessBoard,    
     status: PositionStatus,
 }
 
@@ -101,13 +101,13 @@ impl PositionStatus {
 impl Position {
     fn new() -> Self {
         Position {
-            squares: [[square::Square::Empty; 8]; 8],
+            chessboard: ChessBoard::new(),
             status: PositionStatus::new(),
         }
     }
-    pub fn build(squares: [[square::Square; 8]; 8], status: PositionStatus) -> Self {
+    pub fn build(chessboard: ChessBoard, status: PositionStatus) -> Self {
         Position {
-            squares,
+            chessboard,
             status,
         }
     }
@@ -116,16 +116,15 @@ impl Position {
         let fen_str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         return FEN::decode(fen_str).expect("Failed to decode FEN");
     }
-    pub fn chessboard(&self) -> ChessBoard {
-        ChessBoard {
-            squares: self.squares().clone()
-        }
-    }
 
     // getters
     ////////////////////////
-    pub fn squares(&self) -> &[[square::Square; 8]; 8] {
-        &self.squares
+    pub fn chessboard(&self) -> &ChessBoard {
+        &self.chessboard
+    }
+
+    pub fn into_chessboard(self) -> ChessBoard {
+        self.chessboard
     }
 
     pub fn status(&self) -> &PositionStatus {
@@ -230,7 +229,7 @@ impl EncodeUserInput for FEN {
             .map_err(|_| FenError::ParseError("Failed to parse full move number".to_string()))?;
 
         Ok(Position {
-            squares,
+            chessboard: ChessBoard::build(squares),
             status: PositionStatus {
                 castling_white_king_side: parts[2].contains('K'),
                 castling_white_queen_side: parts[2].contains('Q'),
@@ -258,7 +257,7 @@ impl EncodeUserInput for FEN {
             }
 
             for col in 0..8 {
-                match position.squares[row][col] {
+                match position.chessboard().squares()[row][col] {
                     square::Square::Empty => empty_count += 1,
                     square::Square::NonEmpty(piece) => {
                         if empty_count > 0 {
@@ -360,10 +359,10 @@ mod tests {
         let position = FEN::decode(fen).expect("Failed to decode FEN");
 
         // Check if the pieces are in the correct initial positions
-        assert_eq!(position.squares[0][0], square::Square::build_piece(TypePiece::Rook, Color::White));
-        assert_eq!(position.squares[0][7], square::Square::build_piece(TypePiece::Rook, Color::White));
-        assert_eq!(position.squares[7][0], square::Square::build_piece(TypePiece::Rook, Color::Black));
-        assert_eq!(position.squares[7][7], square::Square::build_piece(TypePiece::Rook, Color::Black));
+        assert_eq!(position.chessboard().squares()[0][0], square::Square::build_piece(TypePiece::Rook, Color::White));
+        assert_eq!(position.chessboard().squares()[0][7], square::Square::build_piece(TypePiece::Rook, Color::White));
+        assert_eq!(position.chessboard().squares()[7][0], square::Square::build_piece(TypePiece::Rook, Color::Black));
+        assert_eq!(position.chessboard().squares()[7][7], square::Square::build_piece(TypePiece::Rook, Color::Black));
 
         // Check player turn
         assert_eq!(position.status().player_turn(), square::Color::White);
@@ -389,7 +388,7 @@ mod tests {
     #[test]
     fn test_encode_starting_position() {
         let position = Position {
-            squares: [
+            chessboard: ChessBoard::build([
             [   Square::build_piece(TypePiece::Rook, Color::White), Square::build_piece(TypePiece::Knight, Color::White), 
                 Square::build_piece(TypePiece::Bishop, Color::White), Square::build_piece(TypePiece::Queen, Color::White),
                 Square::build_piece(TypePiece::King, Color::White), Square::build_piece(TypePiece::Bishop, Color::White),
@@ -413,7 +412,7 @@ mod tests {
                 Square::build_piece(TypePiece::Bishop, Color::Black), Square::build_piece(TypePiece::Queen, Color::Black),
                 Square::build_piece(TypePiece::King, Color::Black), Square::build_piece(TypePiece::Bishop, Color::Black),
                 Square::build_piece(TypePiece::Knight, Color::Black), Square::build_piece(TypePiece::Rook, Color::Black),
-            ]],
+            ]]),
             status: PositionStatus {
                 castling_white_king_side: true,
                 castling_white_queen_side: true,            
@@ -450,7 +449,7 @@ mod tests {
     #[test]
     fn test_encode_empty_position() {
         let empty_position = Position {
-            squares: [[Square::Empty; 8]; 8],
+            chessboard: ChessBoard::new(),
             status: PositionStatus {
                 castling_white_king_side: false,
                 castling_white_queen_side: false,            
@@ -484,7 +483,7 @@ fn test_decode_en_passant() {
 #[test]
 fn test_encode_en_passant() {
     let position = Position {
-        squares: [[square::Square::Empty; 8]; 8], // Simplified: setting all squares to empty for this test
+        chessboard: ChessBoard::new(), 
         status: PositionStatus {
             castling_white_king_side: false,
             castling_white_queen_side: false,        
