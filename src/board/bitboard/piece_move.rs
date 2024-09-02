@@ -1,3 +1,6 @@
+mod table;
+use table::table_rook;
+
 use crate::board::{
     bitboard, coord,
     square::{self, TypePiece},
@@ -133,44 +136,12 @@ fn gen_moves_for_knight(
     moves_non_empty(index, moves_bitboard, bit_board)
 }
 
-fn gen_moves_for_rook_projection(col_rook: u8, blockers_first_row: u8) -> u64 {
-    let rook_first_row: u8 = 1 << col_rook;
-    let left_mask = rook_first_row - 1;
-    let right_mask = !left_mask & !rook_first_row;
-
-    let blocker_left = left_mask & blockers_first_row;
-    let blocker_right = right_mask & blockers_first_row;
-    let left_moves: u64 = if col_rook == 0 {
-        0
-    } else {
-        let leading_zeros = (blocker_left << (8 - col_rook)).leading_zeros();
-        if leading_zeros == 0 {
-            0
-        } else {
-            // 0100rxxx becomes 0111rxxx (r is the rook index, x is 0 or 1)
-            // 0110rxxx becomes 0011rxxx
-            ((1 << leading_zeros) - 1) & left_mask as u64
-        }
-    };
-    let right_moves: u64 = if col_rook == 7 {
-        0
-    } else {
-        // xxxxr001 becomes xxxxr110 (r is the rook index, x is 0 or 1)
-        // xxxxr011 becomes xxxxr110
-        let trailing_zeros = (blocker_right >> (col_rook + 1)).trailing_zeros();
-        if trailing_zeros == 0 {
-            0
-        } else {
-            ((1 << trailing_zeros) - 1) & right_mask as u64
-        }
-    };
-    left_moves | right_moves
-}
 fn gen_moves_for_rook_horizontal(index: u8, blockers_h: u64) -> u64 {
     let col = index % 8;
     let index_col_a = index - col;
     let blockers_first_row = (blockers_h << index_col_a) as u8;
-    gen_moves_for_rook_projection(col, blockers_first_row) << index_col_a
+    (table_rook::table_rook_h(col, blockers_first_row) as u64) << index_col_a
+    //gen_moves_for_rook_projection(col, blockers_first_row) << index_col_a
 }
 
 fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64) -> u64 {
@@ -187,7 +158,8 @@ fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64) -> u64 {
         | (rook_first_col >> 42) & 64
         | (rook_first_col >> 49) & 128) as u8;
     let row = index / 8;
-    let projection = gen_moves_for_rook_projection(row, blockers_projection_first_row);
+    let projection = table_rook::table_rook_h(row, blockers_projection_first_row) as u64;
+    //let projection = gen_moves_for_rook_projection(row, blockers_projection_first_row);
     // inverse projection applied to the result
     let inverse_projection = (projection & 1)
         | ((projection & 2) << 7)
@@ -544,11 +516,38 @@ mod tests {
     }
 
     #[test]
+    fn test_rook_blockers_opponent_to_left() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 16);
+        let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
     fn test_rook_blockers_to_right() {
         let index = 17; // Rook on the third row, second column
         let bit_board = bitboard::BitBoard(1 << index | 1 << 23);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 125 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        println!("{}", bitboard::BitBoard(result));
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_rook_blockers_opponent_to_right() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 23);
+        let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
         let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -570,11 +569,23 @@ mod tests {
     }
 
     #[test]
+    fn test_rook_blockers_opponent_on_both_sides() {
+        let index = 18; // Rook on the third row, third column
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 16 | 1 << 23);
+        let expected = 251 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
     fn test_rook_on_first_column() {
         let index = 24; // Rook at the start of the fourth row
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let expected = 254 << 24;
         let expected = 254 << 24 | (1 | 1 << 8 | 1 << 16 | 1 << 32 | 1 << 40 | 1 << 48 | 1 << 56);
         let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
             .unwrap()
@@ -598,11 +609,63 @@ mod tests {
     }
 
     #[test]
-    fn test_rook_full_row_of_blockers_except_rook() {
+    fn test_rook_full_row_of_blockers() {
         let index = 40; // Rook somewhere in the middle of the fifth row
         let bit_board = bitboard::BitBoard(255 << 40 | 1 << 32 | 1 << 48);
         let bit_board_opponent = bitboard::BitBoard(0);
         let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_rook_blockers_to_up() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index | 1 << 25);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let expected = 253 << 16 | (2 | 2 << 8);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_rook_blockers_to_down() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index | 1 << 9);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let expected = 253 << 16 | (2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_rook_blockers_opponent_to_up() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 25);
+        let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_rook_blockers_opponent_to_down() {
+        let index = 17; // Rook on the third row, second column
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 9);
+        let expected = 253 << 16 | (2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
+        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
     }
 }
