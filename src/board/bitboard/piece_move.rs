@@ -1,4 +1,5 @@
 mod table;
+use table::table_bishop;
 use table::table_rook;
 
 use crate::board::{
@@ -49,7 +50,7 @@ fn gen_moves_for_piece(
 ) -> Option<PieceMoves> {
     match type_piece {
         &square::TypePiece::Rook => gen_moves_for_rook(index, bit_board, bit_board_opponent),
-        &square::TypePiece::Bishop => None,
+        &square::TypePiece::Bishop => gen_moves_for_bishop(index, bit_board, bit_board_opponent),
         &square::TypePiece::Knight => gen_moves_for_knight(index, bit_board, bit_board_opponent),
         &square::TypePiece::King => gen_moves_for_king(index, bit_board_opponent),
         &square::TypePiece::Queen => None,
@@ -147,7 +148,7 @@ fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64) -> u64 {
     let col = index % 8;
     // shift to column A
     let blockers_first_col = blockers_v >> col;
-    let moves_first_col = table::table_rook::table_rook_v(index / 8, blockers_first_col);    
+    let moves_first_col = table::table_rook::table_rook_v(index / 8, blockers_first_col);
     moves_first_col << col
 }
 
@@ -164,6 +165,16 @@ fn gen_moves_for_rook(
     let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers & mask_h);
     let moves_vertical = gen_moves_for_rook_vertical(index, blockers & mask_v);
     let moves_bitboard = moves_horizontal | moves_vertical;
+    moves_non_empty(index, moves_bitboard, bit_board)
+}
+
+fn gen_moves_for_bishop(
+    index: u8,
+    bit_board: &bitboard::BitBoard,
+    bit_board_opponent: &bitboard::BitBoard,
+) -> Option<PieceMoves> {
+    let blockers = bit_board.value() | bit_board_opponent.value();
+    let moves_bitboard = table_bishop::bishop_moves(index, blockers);
     moves_non_empty(index, moves_bitboard, bit_board)
 }
 
@@ -225,7 +236,7 @@ mod tests {
         }
         v
     }
-    
+
     ////////////////////////////////////////////////////////
     /// Bit operations tests
     ////////////////////////////////////////////////////////    ///
@@ -243,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_single_bit() {
         assert_eq!(bitboard::BitBoard(1 << 5).trailing_zeros(), 5);
         assert_eq!((bitboard::BitBoard(1 << 0)).trailing_zeros(), 0);
@@ -251,40 +262,40 @@ mod tests {
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_zero_value() {
         assert_eq!(bitboard::BitBoard(0u64).trailing_zeros(), 64);
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_multiple_bits() {
         let value = bitboard::BitBoard((1 << 5) | (1 << 3));
         assert_eq!(value.trailing_zeros(), 3);
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_highest_bit() {
         assert_eq!((bitboard::BitBoard(1u64 << 63)).trailing_zeros(), 63);
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_empty_bitboard() {
         let bitboard = BitBoard(0);
         assert_eq!(list_index(&bitboard), vec![]);
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_list_index_single_bit() {
         let bitboard = BitBoard(1 << 5); // bit at position 5
         assert_eq!(list_index(&bitboard), vec![5]);
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_list_index_multiple_bits() {
         let bitboard = BitBoard((1 << 5) | (1 << 15) | (1 << 30)); // bits at positions 5, 15, 30
         let mut result = list_index(&bitboard);
@@ -293,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]    
+    #[ignore]
     fn test_list_index_bits_at_edges() {
         let bitboard = BitBoard((1 << 0) | (1 << 63)); // bits at positions 0 and 63
         let mut result = list_index(&bitboard);
@@ -650,6 +661,20 @@ mod tests {
         let bit_board_opponent = bitboard::BitBoard(1 << 9);
         let expected = 253 << 16 | (2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
         let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_bishop_blockers() {
+        let index = 20;
+        let bit_board = bitboard::BitBoard(1 << index | 1 << 34);
+        let bit_board_opponent = bitboard::BitBoard(1 << 6);
+        let expected =
+            1 << 2 | (1 << 6 | 1 << 11 | 1 << 13 | 1 << 27 | 1 << 29 | 1 << 38 | 1 << 47);
+        let result = gen_moves_for_bishop(index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;

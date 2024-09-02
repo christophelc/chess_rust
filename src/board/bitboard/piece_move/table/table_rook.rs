@@ -1,3 +1,5 @@
+use super::{MASK_ROW_0, MASK_ROW_1, MASK_ROW_2, MASK_ROW_3, MASK_ROW_4, MASK_ROW_5};
+
 const LEFT_MOVES: [u8; 128] = [
     // 0 - 7
     127, 127, 126, 126, 124, 124, 124, 124, // 8 - 15
@@ -38,7 +40,7 @@ const RIGHT_MOVES: [u8; 128] = [
     15, 1, 3, 1, 7, 1, 3, 1,
 ];
 
-// apply inverse_projection to LEFT_MOVES 
+// apply inverse_projection to LEFT_MOVES
 #[rustfmt::skip]
 const DOWN_MOVES: [u64; 128] = [
     0x1010101010101, 0x1010101010101, 0x1010101010100, 0x1010101010100, 0x1010101010000, 0x1010101010000, 0x1010101010000, 0x1010101010000, 
@@ -59,7 +61,7 @@ const DOWN_MOVES: [u64; 128] = [
     0x1000000000000, 0x1000000000000, 0x1000000000000, 0x1000000000000, 0x1000000000000, 0x1000000000000, 0x1000000000000, 0x1000000000000, 
 ];
 
-// apply inverse_projection to RIGHT_MOVES 
+// apply inverse_projection to RIGHT_MOVES
 #[rustfmt::skip]
 const UP_MOVES: [u64; 128] = [
     0x1010101010101, 0x1, 0x101, 0x1, 0x10101, 0x1, 0x101, 0x1, 
@@ -112,13 +114,6 @@ pub fn table_rook_h(col: u8, blockers: u8) -> u8 {
     }
 }
 
-const MASK_ROW_0: u64 = 255;
-const MASK_ROW_1: u64 = MASK_ROW_0 << 8;
-const MASK_ROW_2: u64 = MASK_ROW_0 << 16;
-const MASK_ROW_3: u64 = MASK_ROW_0 << 24;
-const MASK_ROW_4: u64 = MASK_ROW_0 << 32;
-const MASK_ROW_5: u64 = MASK_ROW_0 << 40;
-
 pub fn table_rook_v(row: u8, blockers: u64) -> u64 {
     // map vertical to horizontal axis
     let blockers: u8 = (blockers & 1
@@ -144,15 +139,18 @@ pub fn table_rook_v(row: u8, blockers: u64) -> u64 {
                 | UP_MOVES[((blockers & 240) as usize) >> 4] << 32
         }
         4 => {
-            DOWN_MOVES[(blockers & 15) as usize] & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3)
+            DOWN_MOVES[(blockers & 15) as usize]
+                & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3)
                 | UP_MOVES[((blockers & 224) as usize) >> 5] << 40
         }
         5 => {
-            DOWN_MOVES[(blockers & 31) as usize] & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4)
+            DOWN_MOVES[(blockers & 31) as usize]
+                & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4)
                 | UP_MOVES[((blockers & 192) as usize) >> 6] << 48
         }
         6 => {
-            DOWN_MOVES[(blockers & 63) as usize] & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5)
+            DOWN_MOVES[(blockers & 63) as usize]
+                & (MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5)
                 | UP_MOVES[((blockers & 128) as usize) >> 7] << 56
         }
         7 => DOWN_MOVES[blockers as usize],
