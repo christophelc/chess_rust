@@ -141,35 +141,14 @@ fn gen_moves_for_rook_horizontal(index: u8, blockers_h: u64) -> u64 {
     let index_col_a = index - col;
     let blockers_first_row = (blockers_h << index_col_a) as u8;
     (table_rook::table_rook_h(col, blockers_first_row) as u64) << index_col_a
-    //gen_moves_for_rook_projection(col, blockers_first_row) << index_col_a
 }
 
 fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64) -> u64 {
     let col = index % 8;
     // shift to column A
-    let rook_first_col = blockers_v >> col;
-    // projection of vertical column A to an horizontal axis
-    let blockers_projection_first_row = (rook_first_col & 1
-        | (rook_first_col >> 7) & 2
-        | (rook_first_col >> 14) & 4
-        | (rook_first_col >> 21) & 8
-        | (rook_first_col >> 28) & 16
-        | (rook_first_col >> 35) & 32
-        | (rook_first_col >> 42) & 64
-        | (rook_first_col >> 49) & 128) as u8;
-    let row = index / 8;
-    let projection = table_rook::table_rook_h(row, blockers_projection_first_row) as u64;
-    //let projection = gen_moves_for_rook_projection(row, blockers_projection_first_row);
-    // inverse projection applied to the result
-    let inverse_projection = (projection & 1)
-        | ((projection & 2) << 7)
-        | ((projection & 4) << 14)
-        | ((projection & 8) << 21)
-        | ((projection & 16) << 28)
-        | ((projection & 32) << 35)
-        | ((projection & 64) << 42)
-        | ((projection & 128) << 49);
-    inverse_projection << col
+    let blockers_first_col = blockers_v >> col;
+    let moves_first_col = table::table_rook::table_rook_v(index / 8, blockers_first_col);    
+    moves_first_col << col
 }
 
 fn gen_moves_for_rook(
