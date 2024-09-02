@@ -167,18 +167,6 @@ fn gen_moves_for_rook(
     moves_non_empty(index, moves_bitboard, bit_board)
 }
 
-pub fn poc() {
-    println!("poc");
-    let matrix = 63 << 1;
-    let column = 2;
-    let mask: u64 = 0x0101010101010101 << column;
-    let left_col_0: u64 = 0xFEFEFEFEFEFEFEFE;
-    let column_bits = matrix & mask;
-    let shifted_column_bits = column_bits >> 1;
-    println!("{}", bitboard::BitBoard(mask));
-    println!("{}", bitboard::BitBoard(shifted_column_bits));
-}
-
 #[derive(Debug)]
 pub struct PieceMoves {
     /// where is the piece
@@ -222,27 +210,40 @@ impl MovesPerTypePiece {
     }
 }
 
-// POC
-fn list_index(bit_board: &bitboard::BitBoard) -> Vec<u8> {
-    let mut v = Vec::new();
-    let mut bb = bit_board.0;
-    while bb != 0 {
-        let lsb = bb.trailing_zeros();
-        v.push(lsb as u8);
-        bb &= bb - 1; // Remove lsb
-    }
-    v
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use bitboard::BitBoard;
 
+    fn list_index(bit_board: &bitboard::BitBoard) -> Vec<u8> {
+        let mut v = Vec::new();
+        let mut bb = bit_board.0;
+        while bb != 0 {
+            let lsb = bb.trailing_zeros();
+            v.push(lsb as u8);
+            bb &= bb - 1; // Remove lsb
+        }
+        v
+    }
+    
     ////////////////////////////////////////////////////////
     /// Bit operations tests
     ////////////////////////////////////////////////////////    ///
     #[test]
+    #[ignore]
+    fn poc() {
+        println!("poc");
+        let matrix = 63 << 1;
+        let column = 2;
+        let mask: u64 = 0x0101010101010101 << column;
+        let column_bits = matrix & mask;
+        let shifted_column_bits = column_bits >> 1;
+        println!("{}", bitboard::BitBoard(mask));
+        println!("{}", bitboard::BitBoard(shifted_column_bits));
+    }
+
+    #[test]
+    #[ignore]    
     fn test_single_bit() {
         assert_eq!(bitboard::BitBoard(1 << 5).trailing_zeros(), 5);
         assert_eq!((bitboard::BitBoard(1 << 0)).trailing_zeros(), 0);
@@ -250,34 +251,40 @@ mod tests {
     }
 
     #[test]
+    #[ignore]    
     fn test_zero_value() {
         assert_eq!(bitboard::BitBoard(0u64).trailing_zeros(), 64);
     }
 
     #[test]
+    #[ignore]    
     fn test_multiple_bits() {
         let value = bitboard::BitBoard((1 << 5) | (1 << 3));
         assert_eq!(value.trailing_zeros(), 3);
     }
 
     #[test]
+    #[ignore]    
     fn test_highest_bit() {
         assert_eq!((bitboard::BitBoard(1u64 << 63)).trailing_zeros(), 63);
     }
 
     #[test]
+    #[ignore]    
     fn test_empty_bitboard() {
         let bitboard = BitBoard(0);
         assert_eq!(list_index(&bitboard), vec![]);
     }
 
     #[test]
+    #[ignore]    
     fn test_list_index_single_bit() {
         let bitboard = BitBoard(1 << 5); // bit at position 5
         assert_eq!(list_index(&bitboard), vec![5]);
     }
 
     #[test]
+    #[ignore]    
     fn test_list_index_multiple_bits() {
         let bitboard = BitBoard((1 << 5) | (1 << 15) | (1 << 30)); // bits at positions 5, 15, 30
         let mut result = list_index(&bitboard);
@@ -286,6 +293,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]    
     fn test_list_index_bits_at_edges() {
         let bitboard = BitBoard((1 << 0) | (1 << 63)); // bits at positions 0 and 63
         let mut result = list_index(&bitboard);

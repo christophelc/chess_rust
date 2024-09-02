@@ -118,8 +118,6 @@ const MASK_ROW_2: u64 = MASK_ROW_0 << 16;
 const MASK_ROW_3: u64 = MASK_ROW_0 << 24;
 const MASK_ROW_4: u64 = MASK_ROW_0 << 32;
 const MASK_ROW_5: u64 = MASK_ROW_0 << 40;
-const MASK_ROW_6: u64 = MASK_ROW_0 << 48;
-const MASK_ROW_7: u64 = MASK_ROW_0 << 56;
 
 pub fn table_rook_v(row: u8, blockers: u64) -> u64 {
     // map vertical to horizontal axis
@@ -183,20 +181,18 @@ mod tests {
         for i in 0..up_moves_inv.len() {
             print!("0x{:x}, ", up_moves_inv[i]);
             if (i + 1) % 8 == 0 {
-                // After every 8 elements, print a newline
                 println!();
             }
         }
     }
 
     #[test]
-    //#[ignore]
+    #[ignore]
     fn show_down_moves_inv() {
         let down_moves_inv = DOWN_MOVES.map(|projection| inverse_projection(projection as u64));
         for i in 0..down_moves_inv.len() {
             print!("0x{:x}, ", down_moves_inv[i]);
             if (i + 1) % 8 == 0 {
-                // After every 8 elements, print a newline
                 println!();
             }
         }

@@ -61,6 +61,4 @@ fn main() {
         &bit_board_black,
     );
     println!("{}", moves[0].moves());
-
-    piece_move::poc();
 }
