@@ -137,20 +137,18 @@ fn gen_moves_for_knight(
     moves_non_empty(index, moves_bitboard, bit_board)
 }
 
-fn gen_moves_for_rook_horizontal(index: u8, blockers_h: u64) -> u64 {
+fn gen_moves_for_rook_horizontal(index: u8, blockers_h: u64, mask_h: u64) -> u64 {
+    let blockers_h = blockers_h & mask_h;
     let col = index % 8;
     let index_col_a = index - col;
     let blockers_first_row = (blockers_h << index_col_a) as u8;
     (table_rook::table_rook_h(col, blockers_first_row) as u64) << index_col_a
 }
 
-fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64) -> u64 {
-    let col = index % 8;
-    // shift to column A
-    let blockers_first_col = blockers_v >> col;
-    let moves_first_col = table::table_rook::table_rook_v(index / 8, blockers_first_col);
-    moves_first_col << col
+fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64, mask_v: u64) -> u64 {
+    table::table_rook::table_rook_v(index, blockers_v, mask_v)    
 }
+
 
 fn gen_moves_for_rook(
     index: u8,
@@ -159,11 +157,11 @@ fn gen_moves_for_rook(
 ) -> Option<PieceMoves> {
     let col = index % 8;
     let mask_h = 255 << (index + 7 - col);
-    let mask_v = 0x0101010101010101 << col;
+    let mask_v = table::MASK_COL_A << (index % 8);    
     let blockers = bit_board.value() | bit_board_opponent.value();
 
-    let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers & mask_h);
-    let moves_vertical = gen_moves_for_rook_vertical(index, blockers & mask_v);
+    let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers, mask_h);
+    let moves_vertical = gen_moves_for_rook_vertical(index, blockers, mask_v);
     let moves_bitboard = moves_horizontal | moves_vertical;
     moves_non_empty(index, moves_bitboard, bit_board)
 }
