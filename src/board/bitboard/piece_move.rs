@@ -53,7 +53,7 @@ fn gen_moves_for_piece(
         &square::TypePiece::Bishop => gen_moves_for_bishop(index, bit_board, bit_board_opponent),
         &square::TypePiece::Knight => gen_moves_for_knight(index, bit_board, bit_board_opponent),
         &square::TypePiece::King => gen_moves_for_king(index, bit_board_opponent),
-        &square::TypePiece::Queen => None,
+        &square::TypePiece::Queen => gen_moves_for_queen(index, bit_board, bit_board_opponent),
         &square::TypePiece::Pawn => None,
     }
 }
@@ -73,6 +73,7 @@ fn moves_non_empty(
         })
     }
 }
+
 // moves generation are not optimized (as a first implementation)
 fn gen_moves_for_king(index: u8, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
     let is_row_1 = index < 8;
@@ -174,6 +175,24 @@ fn gen_moves_for_bishop(
     let blockers = bit_board.value() | bit_board_opponent.value();
     let moves_bitboard = table_bishop::bishop_moves(index, blockers);
     moves_non_empty(index, moves_bitboard, bit_board)
+}
+
+fn gen_moves_for_queen(
+    index: u8,
+    bit_board: &bitboard::BitBoard,
+    bit_board_opponent: &bitboard::BitBoard,    
+) -> Option<PieceMoves> {
+    let rook_moves = gen_moves_for_rook(index, bit_board, bit_board_opponent);
+    let bishop_moves = gen_moves_for_bishop(index, bit_board, bit_board_opponent);
+    match (rook_moves, bishop_moves) {
+        (None, None) => None,
+        (left, None) => left,
+        (None, right) => right,
+        (Some(left), Some(right)) => Some(PieceMoves {
+            index,
+            moves: bitboard::BitBoard(left.moves().value() | right.moves().value()),
+        })
+    }    
 }
 
 #[derive(Debug)]
@@ -678,4 +697,25 @@ mod tests {
             .0;
         assert_eq!(result, expected);
     }
+    #[test]
+    fn test_queen_no_blockers() {
+        let index = 8; // Position of the rook at the start of the second row
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let result_rook = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        let result_bishop = gen_moves_for_bishop(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;        
+        let expected = result_rook | result_bishop;
+        let result = gen_moves_for_queen(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
 }
