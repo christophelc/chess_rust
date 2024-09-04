@@ -3,17 +3,18 @@ use table::table_bishop;
 use table::table_rook;
 
 use crate::board::{
-    bitboard, coord,
-    square::{self, TypePiece},
+    bitboard, square::{self, TypePiece},
 };
 
 pub trait GenMoves {
     fn gen_moves(
         &self,
         type_piece: &TypePiece,
+        color: &square::Color,        
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
+        capture_en_passant: &Option<u64>,        
     ) -> Vec<PieceMoves>;
 }
 
@@ -23,16 +24,18 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
     fn gen_moves(
         &self,
         type_piece: &TypePiece,
+        color: &square::Color,
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
+        capture_en_passant: &Option<u64>,        
     ) -> Vec<PieceMoves> {
         let mut moves = Vec::new();
         let mut bb = bit_board_type_piece.value();
         while bb != 0 {
             let lsb = bb.trailing_zeros();
             if let Some(moves_for_piece) =
-                gen_moves_for_piece(type_piece, lsb as u8, bit_board, bit_board_opponent)
+                gen_moves_for_piece(type_piece, color, lsb as u8, bit_board, bit_board_opponent, capture_en_passant)
             {
                 moves.push(moves_for_piece);
             }
@@ -44,9 +47,11 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
 
 fn gen_moves_for_piece(
     type_piece: &TypePiece,
+    color: &square::Color,    
     index: u8,
     bit_board: &bitboard::BitBoard, // color for piece at index
     bit_board_opponent: &bitboard::BitBoard, // opponent color
+    capture_en_passant: &Option<u64>,    
 ) -> Option<PieceMoves> {
     match type_piece {
         &square::TypePiece::Rook => gen_moves_for_rook(index, bit_board, bit_board_opponent),
@@ -54,7 +59,7 @@ fn gen_moves_for_piece(
         &square::TypePiece::Knight => gen_moves_for_knight(index, bit_board, bit_board_opponent),
         &square::TypePiece::King => gen_moves_for_king(index, bit_board_opponent),
         &square::TypePiece::Queen => gen_moves_for_queen(index, bit_board, bit_board_opponent),
-        &square::TypePiece::Pawn => None,
+        &square::TypePiece::Pawn => gen_moves_for_pawn(index, color, bit_board, bit_board_opponent, capture_en_passant),
     }
 }
 
@@ -193,6 +198,120 @@ fn gen_moves_for_queen(
             moves: bitboard::BitBoard(left.moves().value() | right.moves().value()),
         })
     }    
+}
+
+fn gen_pawn_squares_attacked(
+    index: u8,
+    color: &square::Color,
+    bit_board_opponent: &bitboard::BitBoard,
+) -> u64 {
+    let col = index % 8;    
+    let mut moves: u64 = 0;
+    match color {
+        square::Color::White => {
+            // capture up left
+            if col > 0 {
+                let to = 1 << (index + 7);
+                if (to & bit_board_opponent.value()) != 0 {
+                    moves |= to;
+                }
+            }
+            // capture up right            
+            if col < 7 {
+                let to = 1 << (index + 9);            
+                if (to & bit_board_opponent.value()) != 0 {
+                    moves |= to;
+                }
+            }
+        },
+        square::Color::Black => {
+            if col > 0 {
+                // catpure left down
+                let to = 1 << (index - 9);
+                if (to & bit_board_opponent.value()) != 0 {
+                    moves |= to;
+                }
+            }
+            // catpure right down            
+            if col < 7 {
+                let to = 1 << (index - 7);            
+                if (to & bit_board_opponent.value()) != 0 {
+                    moves |= to;
+                }
+            }
+        },                
+    }
+    moves
+}
+fn gen_pawn_non_attecker_moves(
+    index: u8,
+    color: &square::Color,
+    bit_board: &bitboard::BitBoard,
+    bit_board_opponent: &bitboard::BitBoard,
+    capture_en_passant: &Option<u64>,    
+) -> u64 {
+    let row = index / 8;
+    let blockers = bit_board.value() | bit_board_opponent.value();
+    let mut moves: u64 = 0;
+    match color {
+        square::Color::White => {
+            // up x 1
+            let to = 1 << (index + 8);
+            if to & blockers == 0 {
+                moves |= to;
+                // up x 2
+                if row == 1 {
+                    let to = 1 << (index + 16);
+                    if to & blockers == 0 {
+                        moves |= to;
+                    }
+                }
+            }
+            // capture en passant
+            if let Some(en_passant) = capture_en_passant {
+                let en_passant_idx = en_passant.trailing_zeros() as u8;
+                if index + 7 == en_passant_idx || index + 9 == en_passant_idx {
+                    moves |= 1 << en_passant_idx;
+                }
+            }
+        },
+        square::Color::Black => {
+            // down x 1
+            let to = 1 << (index - 8);
+            if to & blockers == 0 {
+                moves |= to;
+                // down x 2
+                if row == 6 {
+                    let to = to >> 8;
+                    if to & blockers == 0 {
+                        moves |= to;
+                    }
+                }
+            }
+            // capture en passant
+            if let Some(en_passant) = capture_en_passant {
+                let en_passant_idx = en_passant.trailing_zeros() as u8;
+                if index - 7 == en_passant_idx || index - 9 == en_passant_idx {
+                    moves |= 1 << en_passant_idx;
+                }
+            }            
+        },        
+    }    
+    moves
+}
+
+fn gen_moves_for_pawn(
+    index: u8,
+    color: &square::Color,
+    bit_board: &bitboard::BitBoard,
+    bit_board_opponent: &bitboard::BitBoard,
+    capture_en_passant: &Option<u64>,
+) -> Option<PieceMoves> {
+
+    match gen_pawn_non_attecker_moves(index, color, bit_board, bit_board_opponent, capture_en_passant) | gen_pawn_squares_attacked(index, color, bit_board_opponent) {
+        0 => None,
+        to => Some(PieceMoves::new(index, to)),
+    }
 }
 
 #[derive(Debug)]
@@ -684,6 +803,9 @@ mod tests {
         assert_eq!(result, expected);
     }
 
+    ////////////////////////////////////////////////////////
+    /// Bishop moves
+    ////////////////////////////////////////////////////////    ///
     #[test]
     fn test_bishop_blockers() {
         let index = 20;
@@ -712,6 +834,93 @@ mod tests {
             .0;        
         let expected = result_rook | result_bishop;
         let result = gen_moves_for_queen(index, &bit_board, &bit_board_opponent)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    ////////////////////////////////////////////////////////
+    /// Pawn moves
+    ////////////////////////////////////////////////////////    ///
+    #[test]
+    fn test_pawn_white_no_blockers() {
+        let index = 20;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let expected =1 << 28;
+        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_pawn_white_row1_no_blockers() {
+        let index = 10;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let expected = 1 << 18 | 1 << 26;
+        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_pawn_white_capture() {
+        let index = 18;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index | 1 << (index + 8));
+        let bit_board_opponent = bitboard::BitBoard(1 << (index + 7) | 1 << (index + 9));
+        let expected = 1 << 25 | 1 << 27;
+        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_pawn_white_row1_col_a() {
+        let index = 8;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(1 << 17);
+        let expected = 1 << 16 | 1 << 17 | 1 << 24;
+        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+    #[test]
+    fn test_pawn_black_capture() {
+        let index = 50;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index | 1 << (index - 8));
+        let bit_board_opponent = bitboard::BitBoard(1 << (index - 7) | 1 << (index - 9));
+        let expected = 1 << 41 | 1 << 43;
+        // bitboard::BitBoard(result)
+        println!("\n{}", bit_board_opponent);        
+        let result = gen_moves_for_pawn(index, &square::Color::Black, &bit_board, &bit_board_opponent, &capture_en_passant)
+            .unwrap()
+            .moves()
+            .0;
+        assert_eq!(result, expected);
+    }
+    #[test]
+    fn test_pawn_black_row6() {
+        let index = 50;
+        let capture_en_passant: Option<u64> = None;
+        let bit_board = bitboard::BitBoard(1 << index);
+        let bit_board_opponent = bitboard::BitBoard(0);
+        let expected = 1 << 42 | 1 << 34;
+        let result = gen_moves_for_pawn(index, &square::Color::Black, &bit_board, &bit_board_opponent, &capture_en_passant)
             .unwrap()
             .moves()
             .0;
