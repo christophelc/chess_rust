@@ -57,6 +57,7 @@ fn main() {
     let moves = bit_position.bit_boards_white_and_black().gen_moves(
         &white_king_type,
         &board::square::Color::White,
+        board::fen::CheckStatus::NoCheck,
         &white_king_bit_board,
         &bit_board_white,
         &bit_board_black,

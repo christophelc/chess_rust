@@ -2,6 +2,7 @@ mod table;
 use table::table_bishop;
 use table::table_rook;
 
+use crate::board;
 use crate::board::{
     bitboard, square::{self, TypePiece},
 };
@@ -11,6 +12,7 @@ pub trait GenMoves {
         &self,
         type_piece: &TypePiece,
         color: &square::Color,        
+        check_status: board::fen::CheckStatus,
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
@@ -25,12 +27,19 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         &self,
         type_piece: &TypePiece,
         color: &square::Color,
+        check_status: board::fen::CheckStatus,        
         bit_board_type_piece: &bitboard::BitBoard,
         bit_board: &bitboard::BitBoard,
         bit_board_opponent: &bitboard::BitBoard,
         capture_en_passant: &Option<u64>,        
     ) -> Vec<PieceMoves> {
         let mut moves = Vec::new();
+
+        // TODO: 
+        // if check: generate moves for king and remove attacked squares
+        //   - if double check: return
+        //   - if simple check: generate moves to capture the attacker
+        // else:
         let mut bb = bit_board_type_piece.value();
         while bb != 0 {
             let lsb = bb.trailing_zeros();

@@ -1,6 +1,13 @@
 use crate::board::coord;
 use crate::board::square;
 
+#[derive(Clone, Copy)]
+pub enum CheckStatus {
+    SimpleCheck { attacker: square::TypePiece, squares_attacked: u64 } ,
+    DoubleCheck { squares_attacked: u64 },
+    NoCheck,
+}
+
 pub struct Position {
     chessboard: ChessBoard,
     status: PositionStatus,
@@ -127,6 +134,11 @@ impl Position {
 
     pub fn status(&self) -> &PositionStatus {
         &self.status
+    }
+
+    pub fn check_status(&self) -> CheckStatus {
+        // TODO
+        CheckStatus::NoCheck
     }
 }
 
