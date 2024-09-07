@@ -27,8 +27,6 @@ impl Switch for Color {
     }
 }
 
-
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Piece {
     type_piece: TypePiece,

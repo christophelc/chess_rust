@@ -129,7 +129,6 @@ impl Position {
     pub fn status(&self) -> &PositionStatus {
         &self.status
     }
-
 }
 
 use std::error::Error;

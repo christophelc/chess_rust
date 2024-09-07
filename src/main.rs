@@ -51,7 +51,7 @@ fn main() {
         &board::square::Color::White,
         piece_move::CheckStatus::NoCheck,
         &white_king_bit_board,
-        &None
+        &None,
     );
     println!("{}", moves[0].moves());
 }

@@ -21,7 +21,7 @@ fn check_bit(index: u8, value: u64) -> u8 {
 }
 
 fn get_mask_row_up(row: u8, n: u8) -> u64 {
-    let n = if n == 0 { 1 } else { n };    
+    let n = if n == 0 { 1 } else { n };
     match (row, n) {
         (6, _) => MASK_ROW_7,
         (5, 1) => MASK_ROW_6,

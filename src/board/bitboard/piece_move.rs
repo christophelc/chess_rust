@@ -2,25 +2,30 @@ mod table;
 use table::table_bishop;
 use table::table_rook;
 
+use super::BitBoard;
 use crate::board;
 use crate::board::{
-    bitboard, square::{self, TypePiece},
+    bitboard,
+    square::{self, TypePiece},
 };
-use super::BitBoard;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CheckStatus {
-    SimpleCheck { attacker: square::TypePiece, attacker_index: u8 } ,
+    SimpleCheck {
+        attacker: square::TypePiece,
+        attacker_index: u8,
+    },
     DoubleCheck,
     NoCheck,
 }
 
-
 impl board::fen::Position {
     /// check status from a position
     pub fn check_status(&self) -> CheckStatus {
-        let bit_position = board::bitboard::BitPosition::from(self.clone());        
-        bit_position.bit_boards_white_and_black().check_status(&self.status().player_turn())
+        let bit_position = board::bitboard::BitPosition::from(self.clone());
+        bit_position
+            .bit_boards_white_and_black()
+            .check_status(&self.status().player_turn())
     }
 }
 
@@ -28,16 +33,13 @@ pub trait GenMoves {
     fn gen_moves(
         &self,
         type_piece: &TypePiece,
-        color: &square::Color,        
+        color: &square::Color,
         check_status: CheckStatus,
         bit_board_type_piece: &bitboard::BitBoard,
-        capture_en_passant: &Option<u64>,        
+        capture_en_passant: &Option<u64>,
     ) -> Vec<PieceMoves>;
 
-    fn check_status(
-        &self,
-        color: &square::Color
-    ) -> CheckStatus;    
+    fn check_status(&self, color: &square::Color) -> CheckStatus;
 }
 
 impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
@@ -47,18 +49,24 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         &self,
         type_piece: &TypePiece,
         color: &square::Color,
-        check_status: CheckStatus,        
+        check_status: CheckStatus,
         bit_board_type_piece: &bitboard::BitBoard,
-        capture_en_passant: &Option<u64>,        
+        capture_en_passant: &Option<u64>,
     ) -> Vec<PieceMoves> {
         let (bit_board, bit_board_opponent) = if *color == square::Color::White {
-            (self.bit_board_white().concat_bit_boards(), self.bit_board_black().concat_bit_boards())
+            (
+                self.bit_board_white().concat_bit_boards(),
+                self.bit_board_black().concat_bit_boards(),
+            )
         } else {
-            (self.bit_board_black().concat_bit_boards(), self.bit_board_white().concat_bit_boards())
+            (
+                self.bit_board_black().concat_bit_boards(),
+                self.bit_board_white().concat_bit_boards(),
+            )
         };
         let mut moves = Vec::new();
 
-        // TODO: 
+        // TODO:
         // if check: generate moves for king and remove attacked squares
         //   - if double check: return
         //   - if simple check: generate moves to capture the attacker
@@ -66,9 +74,14 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         let mut bb = bit_board_type_piece.value();
         while bb != 0 {
             let lsb = bb.trailing_zeros();
-            if let Some(moves_for_piece) =
-                gen_moves_for_piece(type_piece, color, lsb as u8, &bit_board, &bit_board_opponent, capture_en_passant)
-            {
+            if let Some(moves_for_piece) = gen_moves_for_piece(
+                type_piece,
+                color,
+                lsb as u8,
+                &bit_board,
+                &bit_board_opponent,
+                capture_en_passant,
+            ) {
                 moves.push(moves_for_piece);
             }
             bb &= bb - 1; // Remove lsb
@@ -77,53 +90,107 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
     }
 
     /// check if the current king of color 'color' is under check
-    fn check_status(
-        &self,
-        color: &square::Color
-    ) -> CheckStatus {
+    fn check_status(&self, color: &square::Color) -> CheckStatus {
         let (bit_board, bit_board_opponent) = if *color == square::Color::White {
             (self.bit_board_white(), self.bit_board_black())
         } else {
             (self.bit_board_black(), self.bit_board_white())
-        };        
+        };
         let king_index = bit_board.king().index();
         let king_bit_board = BitBoard::new(1 << king_index);
         // Generate king moves as if it were a rook, bishop, knight, pawn
-        let king_as_rook = self.gen_moves(&square::TypePiece::Rook , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);
-        let king_as_bishop = self.gen_moves(&square::TypePiece::Bishop , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);        
-        let king_as_knight = self.gen_moves(&square::TypePiece::Knight , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);                
-        let king_as_pawn = gen_pawn_squares_attacked(king_index, &color, &bit_board_opponent.concat_bit_boards());
+        let king_as_rook = self
+            .gen_moves(
+                &square::TypePiece::Rook,
+                &color,
+                CheckStatus::NoCheck,
+                &king_bit_board,
+                &None,
+            )
+            .get(0)
+            .map(|m| m.moves().value())
+            .unwrap_or(0);
+        let king_as_bishop = self
+            .gen_moves(
+                &square::TypePiece::Bishop,
+                &color,
+                CheckStatus::NoCheck,
+                &king_bit_board,
+                &None,
+            )
+            .get(0)
+            .map(|m| m.moves().value())
+            .unwrap_or(0);
+        let king_as_knight = self
+            .gen_moves(
+                &square::TypePiece::Knight,
+                &color,
+                CheckStatus::NoCheck,
+                &king_bit_board,
+                &None,
+            )
+            .get(0)
+            .map(|m| m.moves().value())
+            .unwrap_or(0);
+        let king_as_pawn =
+            gen_pawn_squares_attacked(king_index, &color, &bit_board_opponent.concat_bit_boards());
 
         // Intersect king moves with rooks, bishops, knights, pawns bitboards of the opposite color
-        let rook_attackers= king_as_rook & bit_board_opponent.rooks().value();
-        let bishop_attackers= king_as_bishop & bit_board_opponent.bishops().value();        
-        let queen_attackers: u64 = (king_as_rook | king_as_bishop) & bit_board_opponent.queens().value();
-        let knight_attackers: u64 = king_as_knight & bit_board_opponent.knights().value();        
+        let rook_attackers = king_as_rook & bit_board_opponent.rooks().value();
+        let bishop_attackers = king_as_bishop & bit_board_opponent.bishops().value();
+        let queen_attackers: u64 =
+            (king_as_rook | king_as_bishop) & bit_board_opponent.queens().value();
+        let knight_attackers: u64 = king_as_knight & bit_board_opponent.knights().value();
         // TODO: generate pawn opponent capture for king and intersect with opponent panws bitboard
         let pawn_attackers: u64 = king_as_pawn & bit_board_opponent.pawns().value();
-        match (sign(rook_attackers), sign(bishop_attackers), sign(queen_attackers), sign(knight_attackers), sign(pawn_attackers)) {
+        match (
+            sign(rook_attackers),
+            sign(bishop_attackers),
+            sign(queen_attackers),
+            sign(knight_attackers),
+            sign(pawn_attackers),
+        ) {
             (0, 0, 0, 0, 0) => CheckStatus::NoCheck,
-            (1, 0, 0, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Rook), attacker_index: (rook_attackers.trailing_zeros() as u8) },
-            (0, 1, 0, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Bishop), attacker_index: (bishop_attackers.trailing_zeros() as u8) },            
-            (0, 0, 1, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Queen), attacker_index: (queen_attackers.trailing_zeros() as u8) },                        
-            (0, 0, 0, 1, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Knight), attacker_index: (knight_attackers.trailing_zeros() as u8) },     
-            (0, 0, 0, 0, 1) => CheckStatus::SimpleCheck { attacker: (TypePiece::Pawn), attacker_index: (pawn_attackers.trailing_zeros() as u8) },                 
-            _ => CheckStatus::DoubleCheck
-        }        
+            (1, 0, 0, 0, 0) => CheckStatus::SimpleCheck {
+                attacker: (TypePiece::Rook),
+                attacker_index: (rook_attackers.trailing_zeros() as u8),
+            },
+            (0, 1, 0, 0, 0) => CheckStatus::SimpleCheck {
+                attacker: (TypePiece::Bishop),
+                attacker_index: (bishop_attackers.trailing_zeros() as u8),
+            },
+            (0, 0, 1, 0, 0) => CheckStatus::SimpleCheck {
+                attacker: (TypePiece::Queen),
+                attacker_index: (queen_attackers.trailing_zeros() as u8),
+            },
+            (0, 0, 0, 1, 0) => CheckStatus::SimpleCheck {
+                attacker: (TypePiece::Knight),
+                attacker_index: (knight_attackers.trailing_zeros() as u8),
+            },
+            (0, 0, 0, 0, 1) => CheckStatus::SimpleCheck {
+                attacker: (TypePiece::Pawn),
+                attacker_index: (pawn_attackers.trailing_zeros() as u8),
+            },
+            _ => CheckStatus::DoubleCheck,
+        }
     }
 }
 
 fn sign(u: u64) -> u8 {
-    if u == 0 { 0 } else { 1 }
+    if u == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 fn gen_moves_for_piece(
     type_piece: &TypePiece,
-    color: &square::Color,    
+    color: &square::Color,
     index: u8,
     bit_board: &bitboard::BitBoard, // color for piece at index
     bit_board_opponent: &bitboard::BitBoard, // opponent color
-    capture_en_passant: &Option<u64>,    
+    capture_en_passant: &Option<u64>,
 ) -> Option<PieceMoves> {
     match type_piece {
         &square::TypePiece::Rook => gen_moves_for_rook(index, bit_board, bit_board_opponent),
@@ -131,7 +198,13 @@ fn gen_moves_for_piece(
         &square::TypePiece::Knight => gen_moves_for_knight(index, bit_board, bit_board_opponent),
         &square::TypePiece::King => gen_moves_for_king(index, bit_board_opponent),
         &square::TypePiece::Queen => gen_moves_for_queen(index, bit_board, bit_board_opponent),
-        &square::TypePiece::Pawn => gen_moves_for_pawn(index, color, bit_board, bit_board_opponent, capture_en_passant),
+        &square::TypePiece::Pawn => gen_moves_for_pawn(
+            index,
+            color,
+            bit_board,
+            bit_board_opponent,
+            capture_en_passant,
+        ),
     }
 }
 
@@ -224,9 +297,8 @@ fn gen_moves_for_rook_horizontal(index: u8, blockers_h: u64, mask_h: u64) -> u64
 }
 
 fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64, mask_v: u64) -> u64 {
-    table::table_rook::table_rook_v(index, blockers_v, mask_v)    
+    table::table_rook::table_rook_v(index, blockers_v, mask_v)
 }
-
 
 fn gen_moves_for_rook(
     index: u8,
@@ -235,7 +307,7 @@ fn gen_moves_for_rook(
 ) -> Option<PieceMoves> {
     let col = index % 8;
     let mask_h = 255 << (index + 7 - col);
-    let mask_v = table::MASK_COL_A << (index % 8);    
+    let mask_v = table::MASK_COL_A << (index % 8);
     let blockers = bit_board.value() | bit_board_opponent.value();
 
     let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers, mask_h);
@@ -257,7 +329,7 @@ fn gen_moves_for_bishop(
 fn gen_moves_for_queen(
     index: u8,
     bit_board: &bitboard::BitBoard,
-    bit_board_opponent: &bitboard::BitBoard,    
+    bit_board_opponent: &bitboard::BitBoard,
 ) -> Option<PieceMoves> {
     let rook_moves = gen_moves_for_rook(index, bit_board, bit_board_opponent);
     let bishop_moves = gen_moves_for_bishop(index, bit_board, bit_board_opponent);
@@ -268,8 +340,8 @@ fn gen_moves_for_queen(
         (Some(left), Some(right)) => Some(PieceMoves {
             index,
             moves: bitboard::BitBoard(left.moves().value() | right.moves().value()),
-        })
-    }    
+        }),
+    }
 }
 
 fn gen_pawn_squares_attacked(
@@ -277,7 +349,7 @@ fn gen_pawn_squares_attacked(
     color: &square::Color,
     bit_board_opponent: &bitboard::BitBoard,
 ) -> u64 {
-    let col = index % 8;    
+    let col = index % 8;
     let mut moves: u64 = 0;
     match color {
         square::Color::White => {
@@ -288,14 +360,14 @@ fn gen_pawn_squares_attacked(
                     moves |= to;
                 }
             }
-            // capture up right            
+            // capture up right
             if col < 7 {
-                let to = 1 << (index + 9);            
+                let to = 1 << (index + 9);
                 if (to & bit_board_opponent.value()) != 0 {
                     moves |= to;
                 }
             }
-        },
+        }
         square::Color::Black => {
             if col > 0 {
                 // catpure left down
@@ -304,14 +376,14 @@ fn gen_pawn_squares_attacked(
                     moves |= to;
                 }
             }
-            // catpure right down            
+            // catpure right down
             if col < 7 {
-                let to = 1 << (index - 7);            
+                let to = 1 << (index - 7);
                 if (to & bit_board_opponent.value()) != 0 {
                     moves |= to;
                 }
             }
-        },                
+        }
     }
     moves
 }
@@ -320,7 +392,7 @@ fn gen_pawn_non_attecker_moves(
     color: &square::Color,
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
-    capture_en_passant: &Option<u64>,    
+    capture_en_passant: &Option<u64>,
 ) -> u64 {
     let row = index / 8;
     let blockers = bit_board.value() | bit_board_opponent.value();
@@ -346,7 +418,7 @@ fn gen_pawn_non_attecker_moves(
                     moves |= 1 << en_passant_idx;
                 }
             }
-        },
+        }
         square::Color::Black => {
             // down x 1
             let to = 1 << (index - 8);
@@ -366,9 +438,9 @@ fn gen_pawn_non_attecker_moves(
                 if index - 7 == en_passant_idx || index - 9 == en_passant_idx {
                     moves |= 1 << en_passant_idx;
                 }
-            }            
-        },        
-    }    
+            }
+        }
+    }
     moves
 }
 
@@ -379,8 +451,14 @@ fn gen_moves_for_pawn(
     bit_board_opponent: &bitboard::BitBoard,
     capture_en_passant: &Option<u64>,
 ) -> Option<PieceMoves> {
-
-    match gen_pawn_non_attecker_moves(index, color, bit_board, bit_board_opponent, capture_en_passant) | gen_pawn_squares_attacked(index, color, bit_board_opponent) {
+    match gen_pawn_non_attecker_moves(
+        index,
+        color,
+        bit_board,
+        bit_board_opponent,
+        capture_en_passant,
+    ) | gen_pawn_squares_attacked(index, color, bit_board_opponent)
+    {
         0 => None,
         to => Some(PieceMoves::new(index, to)),
     }
@@ -903,7 +981,7 @@ mod tests {
         let result_bishop = gen_moves_for_bishop(index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
-            .0;        
+            .0;
         let expected = result_rook | result_bishop;
         let result = gen_moves_for_queen(index, &bit_board, &bit_board_opponent)
             .unwrap()
@@ -921,11 +999,17 @@ mod tests {
         let capture_en_passant: Option<u64> = None;
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let expected =1 << 28;
-        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        let expected = 1 << 28;
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::White,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
 
@@ -936,10 +1020,16 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1 << 18 | 1 << 26;
-        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::White,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
 
@@ -950,10 +1040,16 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << (index + 8));
         let bit_board_opponent = bitboard::BitBoard(1 << (index + 7) | 1 << (index + 9));
         let expected = 1 << 25 | 1 << 27;
-        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::White,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
 
@@ -964,10 +1060,16 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 17);
         let expected = 1 << 16 | 1 << 17 | 1 << 24;
-        let result = gen_moves_for_pawn(index, &square::Color::White, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::White,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
     #[test]
@@ -978,11 +1080,17 @@ mod tests {
         let bit_board_opponent = bitboard::BitBoard(1 << (index - 7) | 1 << (index - 9));
         let expected = 1 << 41 | 1 << 43;
         // bitboard::BitBoard(result)
-        println!("\n{}", bit_board_opponent);        
-        let result = gen_moves_for_pawn(index, &square::Color::Black, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        println!("\n{}", bit_board_opponent);
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::Black,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
     #[test]
@@ -992,15 +1100,21 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1 << 42 | 1 << 34;
-        let result = gen_moves_for_pawn(index, &square::Color::Black, &bit_board, &bit_board_opponent, &capture_en_passant)
-            .unwrap()
-            .moves()
-            .0;
+        let result = gen_moves_for_pawn(
+            index,
+            &square::Color::Black,
+            &bit_board,
+            &bit_board_opponent,
+            &capture_en_passant,
+        )
+        .unwrap()
+        .moves()
+        .0;
         assert_eq!(result, expected);
     }
     ////////////////////////////////////////////////////////
     /// Check status
-    ////////////////////////////////////////////////////////   
+    ////////////////////////////////////////////////////////
     use board::fen::EncodeUserInput;
 
     #[test]
@@ -1008,7 +1122,10 @@ mod tests {
         let fen = "knbqrbnr/8/8/8/8/8/8/RNBQKBNR w KQkq - 0 1";
         let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
         let check_status = position.check_status();
-        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Rook, attacker_index: 60 };
+        let expected = CheckStatus::SimpleCheck {
+            attacker: TypePiece::Rook,
+            attacker_index: 60,
+        };
         assert_eq!(check_status, expected);
     }
     #[test]
@@ -1017,36 +1134,48 @@ mod tests {
         let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
         println!("{}", position.chessboard());
         let check_status = position.check_status();
-        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Bishop, attacker_index: 56 };
+        let expected = CheckStatus::SimpleCheck {
+            attacker: TypePiece::Bishop,
+            attacker_index: 56,
+        };
         assert_eq!(check_status, expected);
-    }    
+    }
     #[test]
     fn test_check_queen() {
         let fen = "qnbbkbnn/8/8/8/8/8/8/RNBQRBNK w KQkq - 0 1";
         let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
         println!("{}", position.chessboard());
         let check_status = position.check_status();
-        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Queen, attacker_index: 56 };
+        let expected = CheckStatus::SimpleCheck {
+            attacker: TypePiece::Queen,
+            attacker_index: 56,
+        };
         assert_eq!(check_status, expected);
-    }        
+    }
     #[test]
     fn test_check_knight() {
         let fen = "qnbbkbnn/8/8/8/8/8/5nPP/RNBQRBNK w KQkq - 0 1";
         let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
         println!("{}", position.chessboard());
         let check_status = position.check_status();
-        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Knight, attacker_index: 13 };
+        let expected = CheckStatus::SimpleCheck {
+            attacker: TypePiece::Knight,
+            attacker_index: 13,
+        };
         assert_eq!(check_status, expected);
-    }            
+    }
     #[test]
     fn test_check_pawn() {
         let fen = "qnbbkbnn/8/8/8/8/8/6pP/RNBQRBNK w KQkq - 0 1";
         let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
         println!("{}", position.chessboard());
         let check_status = position.check_status();
-        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Pawn, attacker_index: 14 };
+        let expected = CheckStatus::SimpleCheck {
+            attacker: TypePiece::Pawn,
+            attacker_index: 14,
+        };
         assert_eq!(check_status, expected);
-    }        
+    }
     #[test]
     fn test_double_check() {
         let fen = "bnbqkbnr/8/8/8/8/8/8/RNBQRBNK w KQkq - 0 1";
@@ -1055,5 +1184,5 @@ mod tests {
         let check_status = position.check_status();
         let expected = CheckStatus::DoubleCheck;
         assert_eq!(check_status, expected);
-    }    
+    }
 }
