@@ -117,7 +117,7 @@ pub fn table_rook_v(index: u8, blockers: u64, mask_col: u64) -> u64 {
     } else {
         let mask_up = mask_up & mask_col;
         let v_up = blockers & mask_up;
-        let number_of_1_from_left_index = (v_up.trailing_zeros() as u8 - index) / 8;
+        let number_of_1_from_left_index = (crate::board::bitboard::pos2index(v_up) - index) / 8;
         mask_up & super::get_mask_row_up(row, number_of_1_from_left_index)
     };
     let moves_down: u64 = if mask_down == 0 {

@@ -160,7 +160,7 @@ pub fn bishop_moves_diag(
         0
     } else {
         let v_up = mask_up & blockers;
-        let number_of_1_from_left_index = (v_up.trailing_zeros() as u8 - index) / step;
+        let number_of_1_from_left_index = (bitboard::pos2index(v_up) - index) / step;
         mask_up & super::get_mask_row_up(row, number_of_1_from_left_index)
     };
     let moves_down = if mask_down == 0 {
@@ -209,7 +209,7 @@ mod tests {
             let mut v_left = Vec::new();
             let mut v_right = Vec::new();
             while diags != 0 {
-                let lsb = diags.trailing_zeros() as u8;
+                let lsb = bitboard::pos2index(diags);
                 let s = "1 << ".to_string() + &lsb.to_string();
                 if lsb != index {
                     if lsb / 8 > index / 8 && lsb - lsb % 8 > index - index % 8 {

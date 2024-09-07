@@ -11,6 +11,14 @@ pub struct BitPosition {
     bit_boards_white_and_black: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,
 }
+
+fn pos2index(u: u64) -> u8 {
+    u.trailing_zeros() as u8
+}
+fn index2pos(idx: u8) -> u64 {
+    1 << idx
+}
+
 impl BitPosition {
     pub fn bit_boards_white_and_black(&self) -> &BitBoardsWhiteAndBlack {
         &self.bit_boards_white_and_black
@@ -98,15 +106,13 @@ impl BitBoard {
         self.0
     }
     pub fn index(&self) -> u8 {
-        self.value().trailing_zeros() as u8
+        pos2index(self.value())
     }
 
     pub fn new(value: u64) -> Self {
         BitBoard(value)
     }
-    pub fn trailing_zeros(&self) -> u32 {
-        self.0.trailing_zeros()
-    }
+
     fn list_non_empty_squares(&self) -> Vec<coord::Coord> {
         let mut coords = Vec::new();
         for i in (0..8).rev() {
