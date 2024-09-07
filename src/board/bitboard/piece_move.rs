@@ -6,18 +6,38 @@ use crate::board;
 use crate::board::{
     bitboard, square::{self, TypePiece},
 };
+use super::BitBoard;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CheckStatus {
+    SimpleCheck { attacker: square::TypePiece, attacker_index: u8 } ,
+    DoubleCheck,
+    NoCheck,
+}
+
+
+impl board::fen::Position {
+    /// check status from a position
+    pub fn check_status(&self) -> CheckStatus {
+        let bit_position = board::bitboard::BitPosition::from(self.clone());        
+        bit_position.bit_boards_white_and_black().check_status(&self.status().player_turn())
+    }
+}
 
 pub trait GenMoves {
     fn gen_moves(
         &self,
         type_piece: &TypePiece,
         color: &square::Color,        
-        check_status: board::fen::CheckStatus,
+        check_status: CheckStatus,
         bit_board_type_piece: &bitboard::BitBoard,
-        bit_board: &bitboard::BitBoard,
-        bit_board_opponent: &bitboard::BitBoard,
         capture_en_passant: &Option<u64>,        
     ) -> Vec<PieceMoves>;
+
+    fn check_status(
+        &self,
+        color: &square::Color
+    ) -> CheckStatus;    
 }
 
 impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
@@ -27,12 +47,15 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         &self,
         type_piece: &TypePiece,
         color: &square::Color,
-        check_status: board::fen::CheckStatus,        
+        check_status: CheckStatus,        
         bit_board_type_piece: &bitboard::BitBoard,
-        bit_board: &bitboard::BitBoard,
-        bit_board_opponent: &bitboard::BitBoard,
         capture_en_passant: &Option<u64>,        
     ) -> Vec<PieceMoves> {
+        let (bit_board, bit_board_opponent) = if *color == square::Color::White {
+            (self.bit_board_white().concat_bit_boards(), self.bit_board_black().concat_bit_boards())
+        } else {
+            (self.bit_board_black().concat_bit_boards(), self.bit_board_white().concat_bit_boards())
+        };
         let mut moves = Vec::new();
 
         // TODO: 
@@ -44,7 +67,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         while bb != 0 {
             let lsb = bb.trailing_zeros();
             if let Some(moves_for_piece) =
-                gen_moves_for_piece(type_piece, color, lsb as u8, bit_board, bit_board_opponent, capture_en_passant)
+                gen_moves_for_piece(type_piece, color, lsb as u8, &bit_board, &bit_board_opponent, capture_en_passant)
             {
                 moves.push(moves_for_piece);
             }
@@ -52,6 +75,46 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         }
         moves
     }
+
+    /// check if the current king of color 'color' is under check
+    fn check_status(
+        &self,
+        color: &square::Color
+    ) -> CheckStatus {
+        let (bit_board, bit_board_opponent) = if *color == square::Color::White {
+            (self.bit_board_white(), self.bit_board_black())
+        } else {
+            (self.bit_board_black(), self.bit_board_white())
+        };        
+        let king_index = bit_board.king().index();
+        let king_bit_board = BitBoard::new(1 << king_index);
+        // Generate king moves as if it were a rook, bishop, knight, pawn
+        let king_as_rook = self.gen_moves(&square::TypePiece::Rook , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);
+        let king_as_bishop = self.gen_moves(&square::TypePiece::Bishop , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);        
+        let king_as_knight = self.gen_moves(&square::TypePiece::Knight , &color, CheckStatus::NoCheck, &king_bit_board, &None).get(0).map(|m| m.moves().value()).unwrap_or(0);                
+        let king_as_pawn = gen_pawn_squares_attacked(king_index, &color, &bit_board_opponent.concat_bit_boards());
+
+        // Intersect king moves with rooks, bishops, knights, pawns bitboards of the opposite color
+        let rook_attackers= king_as_rook & bit_board_opponent.rooks().value();
+        let bishop_attackers= king_as_bishop & bit_board_opponent.bishops().value();        
+        let queen_attackers: u64 = (king_as_rook | king_as_bishop) & bit_board_opponent.queens().value();
+        let knight_attackers: u64 = king_as_knight & bit_board_opponent.knights().value();        
+        // TODO: generate pawn opponent capture for king and intersect with opponent panws bitboard
+        let pawn_attackers: u64 = king_as_pawn & bit_board_opponent.pawns().value();
+        match (sign(rook_attackers), sign(bishop_attackers), sign(queen_attackers), sign(knight_attackers), sign(pawn_attackers)) {
+            (0, 0, 0, 0, 0) => CheckStatus::NoCheck,
+            (1, 0, 0, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Rook), attacker_index: (rook_attackers.trailing_zeros() as u8) },
+            (0, 1, 0, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Bishop), attacker_index: (bishop_attackers.trailing_zeros() as u8) },            
+            (0, 0, 1, 0, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Queen), attacker_index: (queen_attackers.trailing_zeros() as u8) },                        
+            (0, 0, 0, 1, 0) => CheckStatus::SimpleCheck { attacker: (TypePiece::Knight), attacker_index: (knight_attackers.trailing_zeros() as u8) },     
+            (0, 0, 0, 0, 1) => CheckStatus::SimpleCheck { attacker: (TypePiece::Pawn), attacker_index: (pawn_attackers.trailing_zeros() as u8) },                 
+            _ => CheckStatus::DoubleCheck
+        }        
+    }
+}
+
+fn sign(u: u64) -> u8 {
+    if u == 0 { 0 } else { 1 }
 }
 
 fn gen_moves_for_piece(
@@ -935,5 +998,62 @@ mod tests {
             .0;
         assert_eq!(result, expected);
     }
+    ////////////////////////////////////////////////////////
+    /// Check status
+    ////////////////////////////////////////////////////////   
+    use board::fen::EncodeUserInput;
 
+    #[test]
+    fn test_check_rook() {
+        let fen = "knbqrbnr/8/8/8/8/8/8/RNBQKBNR w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        let check_status = position.check_status();
+        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Rook, attacker_index: 60 };
+        assert_eq!(check_status, expected);
+    }
+    #[test]
+    fn test_check_bishop() {
+        let fen = "bnbqkbnn/8/8/8/8/8/8/RNBQRBNK w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let check_status = position.check_status();
+        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Bishop, attacker_index: 56 };
+        assert_eq!(check_status, expected);
+    }    
+    #[test]
+    fn test_check_queen() {
+        let fen = "qnbbkbnn/8/8/8/8/8/8/RNBQRBNK w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let check_status = position.check_status();
+        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Queen, attacker_index: 56 };
+        assert_eq!(check_status, expected);
+    }        
+    #[test]
+    fn test_check_knight() {
+        let fen = "qnbbkbnn/8/8/8/8/8/5nPP/RNBQRBNK w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let check_status = position.check_status();
+        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Knight, attacker_index: 13 };
+        assert_eq!(check_status, expected);
+    }            
+    #[test]
+    fn test_check_pawn() {
+        let fen = "qnbbkbnn/8/8/8/8/8/6pP/RNBQRBNK w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let check_status = position.check_status();
+        let expected = CheckStatus::SimpleCheck { attacker: TypePiece::Pawn, attacker_index: 14 };
+        assert_eq!(check_status, expected);
+    }        
+    #[test]
+    fn test_double_check() {
+        let fen = "bnbqkbnr/8/8/8/8/8/8/RNBQRBNK w KQkq - 0 1";
+        let position = board::fen::FEN::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let check_status = position.check_status();
+        let expected = CheckStatus::DoubleCheck;
+        assert_eq!(check_status, expected);
+    }    
 }

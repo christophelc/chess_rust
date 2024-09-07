@@ -2,12 +2,6 @@ use crate::board::coord;
 use crate::board::square;
 
 #[derive(Clone, Copy)]
-pub enum CheckStatus {
-    SimpleCheck { attacker: square::TypePiece, squares_attacked: u64 } ,
-    DoubleCheck { squares_attacked: u64 },
-    NoCheck,
-}
-
 pub struct Position {
     chessboard: ChessBoard,
     status: PositionStatus,
@@ -136,10 +130,6 @@ impl Position {
         &self.status
     }
 
-    pub fn check_status(&self) -> CheckStatus {
-        // TODO
-        CheckStatus::NoCheck
-    }
 }
 
 use std::error::Error;
@@ -583,6 +573,7 @@ mod tests {
     }
 }
 
+use super::bitboard::piece_move::GenMoves;
 use super::ChessBoard;
 use coord::Coord;
 

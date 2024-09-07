@@ -40,15 +40,7 @@ fn main() {
     );
     let position = Position::build(bd, status);
     let bit_position = BitPosition::from(position);
-    // white to play
-    let bit_board_white = bit_position
-        .bit_boards_white_and_black()
-        .bit_board_white()
-        .concat_bit_boards();
-    let bit_board_black = bit_position
-        .bit_boards_white_and_black()
-        .bit_board_black()
-        .concat_bit_boards();
+    // white king to play
     let white_king_type = square::TypePiece::King;
     let white_king_bit_board = bit_position
         .bit_boards_white_and_black()
@@ -57,11 +49,9 @@ fn main() {
     let moves = bit_position.bit_boards_white_and_black().gen_moves(
         &white_king_type,
         &board::square::Color::White,
-        board::fen::CheckStatus::NoCheck,
+        piece_move::CheckStatus::NoCheck,
         &white_king_bit_board,
-        &bit_board_white,
-        &bit_board_black,
-       &None
+        &None
     );
     println!("{}", moves[0].moves());
 }

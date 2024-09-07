@@ -97,6 +97,10 @@ impl BitBoard {
     pub fn value(&self) -> u64 {
         self.0
     }
+    pub fn index(&self) -> u8 {
+        self.value().trailing_zeros() as u8
+    }
+
     pub fn new(value: u64) -> Self {
         BitBoard(value)
     }

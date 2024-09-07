@@ -78,7 +78,7 @@ pub fn table_rook_h(col: u8, blockers: u8) -> u8 {
             LEFT_MOVES[(blockers & 63) as usize] & 63
                 | RIGHT_MOVES[((blockers & 128) as usize) >> 7] << 7
         }
-        7 => LEFT_MOVES[blockers as usize],
+        7 => LEFT_MOVES[(blockers & 127) as usize],
         _ => panic!("For rook, col {col} should not happen."),
     }
 }

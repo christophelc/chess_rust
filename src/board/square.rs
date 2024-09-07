@@ -8,11 +8,26 @@ pub enum TypePiece {
     Pawn,
 }
 
+pub trait Switch {
+    fn switch(&self) -> Color;
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Color {
     White,
     Black,
 }
+
+impl Switch for Color {
+    fn switch(&self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
+
+
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Piece {
