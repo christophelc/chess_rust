@@ -230,11 +230,28 @@ pub struct BitPositionStatus {
 }
 
 impl BitPositionStatus {
+    // is castle a valid move to consider ?
     const CASTLING_WHITE_QUEEN_SIDE: u8 = 0b0000_0001;
     const CASTLING_WHITE_KING_SIDE: u8 = 0b0000_0010;
     const CASTLING_BLACK_QUEEN_SIDE: u8 = 0b0000_0100;
     const CASTLING_BLACK_KING_SIDE: u8 = 0b0000_1000;
     const PLAYER_TURN_WHITE: u8 = 0b0001_0000;
+
+    // masks for castle to check empty squares
+    const MASK_CASTLING_KINGSIDE_WHITE_1: u8 = 5;
+    const MASK_CASTLING_KINGSIDE_WHITE_2: u8 = 6;
+    const MASK_CASTLING_KINGSIDE_WHITE: u64 = 0x60;
+    const MASK_CASTLING_QUEENSIDE_WHITE_1: u8 = 1;
+    const MASK_CASTLING_QUEENSIDE_WHITE_2: u8 = 2;
+    const MASK_CASTLING_QUEENSIDE_WHITE_3: u8 = 3;
+    const MASK_CASTLING_QUEENSIDE_WHITE: u64 = 0x0E;
+    const MASK_CASTLING_KINGSIDE_BLACK_1: u8 = 61;
+    const MASK_CASTLING_KINGSIDE_BLACK_2: u8 = 62;
+    const MASK_CASTLING_KINGSIDE_BLACK: u64 = 0x60000000000000;
+    const MASK_CASTLING_QUEENSIDE_BLACK_1: u8 = 57;
+    const MASK_CASTLING_QUEENSIDE_BLACK_2: u8 = 58;
+    const MASK_CASTLING_QUEENSIDE_BLACK_3: u8 = 59;
+    const MASK_CASTLING_QUEENSIDE_BLACK: u64 = 0x0E000000000000;
 
     pub fn new() -> Self {
         BitPositionStatus {
@@ -242,6 +259,68 @@ impl BitPositionStatus {
             pawn_en_passant: -1,
             n_half_moves: 0,
             n_moves: 0,
+        }
+    }
+    pub fn can_castle_queen_side(
+        &self,
+        bit_board: u64,
+        color: &square::Color,
+    ) -> Option<(u8, u8, u8)> {
+        match color {
+            square::Color::White => {
+                if self.castling_white_queen_side()
+                    && bit_board & Self::MASK_CASTLING_QUEENSIDE_WHITE == 0
+                {
+                    Some((
+                        Self::MASK_CASTLING_QUEENSIDE_WHITE_1,
+                        Self::MASK_CASTLING_QUEENSIDE_WHITE_2,
+                        Self::MASK_CASTLING_QUEENSIDE_WHITE_3,
+                    ))
+                } else {
+                    None
+                }
+            }
+            square::Color::Black => {
+                if self.castling_black_queen_side()
+                    && bit_board & Self::MASK_CASTLING_QUEENSIDE_BLACK == 0
+                {
+                    Some((
+                        Self::MASK_CASTLING_QUEENSIDE_BLACK_1,
+                        Self::MASK_CASTLING_QUEENSIDE_BLACK_2,
+                        Self::MASK_CASTLING_QUEENSIDE_BLACK_3,
+                    ))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+    pub fn can_castle_king_side(&self, bit_board: u64, color: &square::Color) -> Option<(u8, u8)> {
+        match color {
+            square::Color::White => {
+                if self.castling_white_king_side()
+                    && bit_board & Self::MASK_CASTLING_KINGSIDE_WHITE == 0
+                {
+                    Some((
+                        Self::MASK_CASTLING_KINGSIDE_WHITE_1,
+                        Self::MASK_CASTLING_KINGSIDE_WHITE_2,
+                    ))
+                } else {
+                    None
+                }
+            }
+            square::Color::Black => {
+                if self.castling_black_king_side()
+                    && bit_board & Self::MASK_CASTLING_KINGSIDE_BLACK == 0
+                {
+                    Some((
+                        Self::MASK_CASTLING_KINGSIDE_BLACK_1,
+                        Self::MASK_CASTLING_KINGSIDE_BLACK_2,
+                    ))
+                } else {
+                    None
+                }
+            }
         }
     }
     pub fn castling_white_queen_side(&self) -> bool {

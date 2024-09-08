@@ -52,6 +52,7 @@ fn main() {
         piece_move::CheckStatus::NoCheck,
         &white_king_bit_board,
         &None,
+        bit_position.bit_position_status(),
     );
     println!("{}", moves[0].moves());
 }
