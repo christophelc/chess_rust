@@ -46,11 +46,9 @@ fn main() {
         .bit_boards_white_and_black()
         .bit_board_white()
         .king();
-    let moves = bit_position.bit_boards_white_and_black().gen_moves(
-        &white_king_type,
+    let moves = bit_position.bit_boards_white_and_black().gen_moves_for_all(
         &board::square::Color::White,
         piece_move::CheckStatus::NoCheck,
-        &white_king_bit_board,
         &None,
         bit_position.bit_position_status(),
     );
@@ -59,4 +57,14 @@ fn main() {
             println!("move: {}-{}", piece_moves.index(), m);
         }
     }
+    let moves: Vec<u8> = moves.get(0).unwrap().moves().iter().collect();
+    let to = moves.get(0).unwrap().clone();
+    let b_move = bitboard::BitBoardMove::from(
+        square::Color::White,
+        square::TypePiece::King,
+        white_king_bit_board.index(),
+        to,
+        &bit_position,
+    );
+    println!("{:?}", b_move);
 }

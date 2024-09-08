@@ -7,7 +7,7 @@ pub struct Position {
     status: PositionStatus,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct PositionStatus {
     castling_white_queen_side: bool,
     castling_white_king_side: bool,

@@ -3,9 +3,64 @@ pub mod piece_move;
 use super::{
     coord,
     fen::{EncodeUserInput, Position, PositionStatus},
-    square, Board, ChessBoard,
+    square::{self, Switch},
+    Board, ChessBoard,
 };
 use std::{fmt, ops::BitOrAssign};
+
+#[derive(Debug, PartialEq)]
+pub struct BitBoardMove {
+    color: square::Color,
+    type_piece: TypePiece,
+    from: u8,
+    to: u8,
+    capture: Option<TypePiece>,
+}
+impl BitBoardMove {
+    pub fn new(
+        color: Color,
+        type_piece: TypePiece,
+        from: u8,
+        to: u8,
+        capture: Option<TypePiece>,
+    ) -> Self {
+        BitBoardMove {
+            color,
+            type_piece,
+            from,
+            to,
+            capture,
+        }
+    }
+    pub fn from(
+        color: Color,
+        type_piece: TypePiece,
+        from: u8,
+        to: u8,
+        bit_board_position: &BitPosition,
+    ) -> Self {
+        let bit_boards = bit_board_position
+            .bit_boards_white_and_black()
+            .bit_board(&color);
+        let b_to: u64 = 1 << to;
+        let mut capture: Option<TypePiece> = None;
+        if bit_boards.rooks().value() & b_to == 1 {
+            capture = Some(TypePiece::Rook);
+        } else if bit_boards.bishops().value() & b_to == 1 {
+            capture = Some(TypePiece::Bishop);
+        } else if bit_boards.knights().value() & b_to == 1 {
+            capture = Some(TypePiece::Knight);
+        } else if bit_boards.queens().value() & b_to == 1 {
+            capture = Some(TypePiece::Queen);
+        } else if bit_boards.pawns().value() & b_to == 1 {
+            capture = Some(TypePiece::Pawn);
+        // should not be possible except in Blitz
+        } else if bit_boards.king().value() & b_to == 1 {
+            capture = Some(TypePiece::King);
+        }
+        Self::new(color, type_piece, from, to, capture)
+    }
+}
 
 pub struct BitPosition {
     bit_boards_white_and_black: BitBoardsWhiteAndBlack,
@@ -20,6 +75,20 @@ fn index2pos(idx: u8) -> u64 {
 }
 
 impl BitPosition {
+    pub fn move_piece(self, b_move: &BitBoardMove) -> BitPosition {
+        let bit_board_pawn_opponent = match b_move.color {
+            Color::White => self.bit_boards_white_and_black.bit_board_black.pawns,
+            Color::Black => self.bit_boards_white_and_black.bit_board_white.pawns,
+        };
+        BitPosition {
+            bit_boards_white_and_black: self.bit_boards_white_and_black.move_piece(&b_move),
+            bit_position_status: update_status(
+                b_move,
+                &bit_board_pawn_opponent,
+                self.bit_position_status,
+            ),
+        }
+    }
     pub fn bit_boards_white_and_black(&self) -> &BitBoardsWhiteAndBlack {
         &self.bit_boards_white_and_black
     }
@@ -41,6 +110,55 @@ impl BitPosition {
     }
 }
 
+fn update_status(
+    b_move: &BitBoardMove,
+    bit_board_pawn_opponent: &BitBoard,
+    bit_position_status: BitPositionStatus,
+) -> BitPositionStatus {
+    let mut bit_position_status = bit_position_status.clone();
+    // move of a rook
+    match b_move.type_piece {
+        TypePiece::Rook => {
+            if b_move.from == 1 || b_move.from == 56 {
+                bit_position_status.set_castling_queen_side(b_move.color, false)
+            }
+            if b_move.from == 7 || b_move.from == 63 {
+                bit_position_status.set_castling_king_side(b_move.color, false)
+            }
+        }
+        TypePiece::King => bit_position_status.disable_castling(b_move.color),
+        TypePiece::Pawn => {
+            let mut capture_en_passant: Option<i8> = None;
+            if b_move.from + 16 == b_move.to {
+                if bit_board_pawn_opponent.value()
+                    & (1 << (b_move.from + 7) | 1 << (b_move.from + 9))
+                    != 0
+                {
+                    capture_en_passant = Some((b_move.from + 8) as i8);
+                }
+            } else if b_move.to + 16 == b_move.from {
+                if bit_board_pawn_opponent.value() & (1 << (b_move.to + 7) | 1 << (b_move.to + 9))
+                    != 0
+                {
+                    capture_en_passant = Some((b_move.to + 8) as i8);
+                }
+            };
+            bit_position_status.set_pawn_en_passant(capture_en_passant);
+        }
+        _ => {}
+    }
+    // Change player turn
+    bit_position_status.set_player_turn_white(b_move.color == Color::Black);
+    // half_moves
+    if b_move.capture.is_none() && b_move.type_piece != TypePiece::Pawn {
+        bit_position_status.inc_n_half_moves();
+    } else {
+        bit_position_status.reset_n_half_moves();
+    }
+
+    bit_position_status
+}
+
 #[derive(Debug)]
 pub struct BitBoardsWhiteAndBlack {
     bit_board_white: BitBoards,
@@ -48,6 +166,49 @@ pub struct BitBoardsWhiteAndBlack {
 }
 
 impl BitBoardsWhiteAndBlack {
+    pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
+        let mask_remove: u64 = if b_move.capture.is_some() {
+            1 << b_move.to
+        } else if b_move.type_piece == TypePiece::Pawn && b_move.from % 8 != b_move.to % 8 {
+            1 << (b_move.from - b_move.from % 8 + b_move.to % 8)
+        } else {
+            0
+        };
+        match b_move.color {
+            square::Color::White => BitBoardsWhiteAndBlack {
+                bit_board_white: self.bit_board_white.move_piece(
+                    b_move.type_piece,
+                    b_move.from,
+                    b_move.to,
+                ),
+                bit_board_black: if mask_remove != 0 {
+                    self.bit_board_black
+                        .remove_piece(b_move.type_piece, mask_remove)
+                } else {
+                    self.bit_board_black
+                },
+            },
+            square::Color::Black => BitBoardsWhiteAndBlack {
+                bit_board_black: self.bit_board_black.move_piece(
+                    b_move.type_piece,
+                    b_move.from,
+                    b_move.to,
+                ),
+                bit_board_white: if mask_remove != 0 {
+                    self.bit_board_white
+                        .remove_piece(b_move.type_piece, mask_remove)
+                } else {
+                    self.bit_board_white
+                },
+            },
+        }
+    }
+    pub fn bit_board(&self, color: &Color) -> &BitBoards {
+        match color {
+            Color::White => self.bit_board_white(),
+            Color::Black => self.bit_board_black(),
+        }
+    }
     pub fn bit_board_white(&self) -> &BitBoards {
         &self.bit_board_white
     }
@@ -98,7 +259,7 @@ impl BitBoardsWhiteAndBlack {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BitBoard(u64);
 pub struct BitIterator {
     bitboard: BitBoard,
@@ -107,7 +268,7 @@ impl Iterator for BitIterator {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut bb = self.bitboard.value();
+        let bb = self.bitboard.value();
         if bb != 0 {
             let lsb = self.bitboard.index();
             self.bitboard = BitBoard(bb & bb - 1);
@@ -182,6 +343,64 @@ pub struct BitBoards {
     pawns: BitBoard,
 }
 impl BitBoards {
+    pub fn remove_piece(self, type_piece: square::TypePiece, mask_remove: u64) -> BitBoards {
+        match type_piece {
+            TypePiece::Rook => BitBoards {
+                rooks: BitBoard::new(self.rooks.value() ^ mask_remove),
+                ..self
+            },
+            TypePiece::Bishop => BitBoards {
+                bishops: BitBoard::new(self.knights.value() ^ mask_remove),
+                ..self
+            },
+            TypePiece::Knight => BitBoards {
+                knights: BitBoard::new(self.knights.value() ^ mask_remove),
+                ..self
+            },
+            TypePiece::Queen => BitBoards {
+                queens: BitBoard::new(self.queens.value() ^ mask_remove),
+                ..self
+            },
+            TypePiece::King => BitBoards {
+                king: BitBoard::new(self.king.value() ^ mask_remove),
+                ..self
+            },
+            TypePiece::Pawn => BitBoards {
+                pawns: BitBoard::new(self.pawns.value() ^ mask_remove),
+                ..self
+            },
+        }
+    }
+
+    pub fn move_piece(self, type_piece: square::TypePiece, from: u8, to: u8) -> BitBoards {
+        let mask = 1 << from | 1 << to;
+        match type_piece {
+            TypePiece::Rook => BitBoards {
+                rooks: BitBoard::new(self.rooks.value() ^ mask),
+                ..self
+            },
+            TypePiece::Bishop => BitBoards {
+                bishops: BitBoard::new(self.knights.value() ^ mask),
+                ..self
+            },
+            TypePiece::Knight => BitBoards {
+                knights: BitBoard::new(self.knights.value() ^ mask),
+                ..self
+            },
+            TypePiece::Queen => BitBoards {
+                queens: BitBoard::new(self.queens.value() ^ mask),
+                ..self
+            },
+            TypePiece::King => BitBoards {
+                king: BitBoard::new(self.king.value() ^ mask),
+                ..self
+            },
+            TypePiece::Pawn => BitBoards {
+                pawns: BitBoard::new(self.pawns.value() ^ mask),
+                ..self
+            },
+        }
+    }
     pub fn rooks(&self) -> &BitBoard {
         &self.rooks
     }
@@ -244,6 +463,8 @@ impl BitBoards {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
 pub struct BitPositionStatus {
     flags: u8,
     pawn_en_passant: i8, // 1 byte for the en passant square (-1 if None, 0-63 if Some)
@@ -381,6 +602,23 @@ impl BitPositionStatus {
     }
 
     // Setters
+    pub fn disable_castling(&mut self, color: Color) {
+        self.set_castling_king_side(color, false);
+        self.set_castling_queen_side(color, false);
+    }
+    pub fn set_castling_queen_side(&mut self, color: Color, value: bool) {
+        match color {
+            Color::White => self.set_castling_white_queen_side(value),
+            Color::Black => self.set_castling_black_queen_side(value),
+        }
+    }
+    pub fn set_castling_king_side(&mut self, color: Color, value: bool) {
+        match color {
+            Color::White => self.set_castling_white_king_side(value),
+            Color::Black => self.set_castling_black_king_side(value),
+        }
+    }
+
     pub fn set_castling_white_queen_side(&mut self, value: bool) {
         if value {
             self.flags |= Self::CASTLING_WHITE_QUEEN_SIDE;
@@ -430,6 +668,15 @@ impl BitPositionStatus {
     pub fn set_n_half_moves(&mut self, value: u16) {
         self.n_half_moves = value;
     }
+    pub fn reset_n_half_moves(&mut self) {
+        self.n_half_moves = 0;
+    }
+    pub fn inc_n_half_moves(&mut self) {
+        self.n_half_moves += 1;
+        if self.n_half_moves % 2 == 0 {
+            self.n_half_moves += 1;
+        }
+    }
 
     pub fn set_n_moves(&mut self, value: u16) {
         self.n_moves = value;
@@ -450,7 +697,7 @@ impl BitPositionStatus {
 
     pub fn to(&self) -> PositionStatus {
         let mut bp = PositionStatus::new();
-        bp.set_castling_white_queen_side(self.castling_black_queen_side());
+        bp.set_castling_white_queen_side(self.castling_white_queen_side());
         bp.set_castling_white_king_side(self.castling_white_king_side());
         bp.set_castling_black_queen_side(self.castling_black_queen_side());
         bp.set_castling_black_king_side(self.castling_black_king_side());
@@ -605,10 +852,6 @@ mod tests {
             square::Color::White,
         );
         let bit_position = BitBoardsWhiteAndBlack::from(mixed_board);
-
-        //println!("white: {}", bit_position.bit_board_white);
-        println!("{}", bit_position.bit_board_white.pawns);
-        //println!("black: {}", bit_position.bit_board_black);
         assert_eq!(bit_position.bit_board_white.rooks, BitBoard(1)); // Index 0
         assert_eq!(bit_position.bit_board_white.queens, BitBoard(1 << 27)); // Index 27 (3 * 8 + 3)
         assert_eq!(bit_position.bit_board_black.king, BitBoard(1 << 63)); // Index 63 (7 * 8 + 7)
