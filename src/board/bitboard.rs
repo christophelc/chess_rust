@@ -100,8 +100,30 @@ impl BitBoardsWhiteAndBlack {
 
 #[derive(Debug, PartialEq)]
 pub struct BitBoard(u64);
+pub struct BitIterator {
+    bitboard: BitBoard,
+}
+impl Iterator for BitIterator {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut bb = self.bitboard.value();
+        if bb != 0 {
+            let lsb = self.bitboard.index();
+            self.bitboard = BitBoard(bb & bb - 1);
+            Some(lsb)
+        } else {
+            None
+        }
+    }
+}
 
 impl BitBoard {
+    pub fn iter(&self) -> BitIterator {
+        BitIterator {
+            bitboard: BitBoard::new(self.0),
+        }
+    }
     pub fn value(&self) -> u64 {
         self.0
     }
@@ -648,5 +670,44 @@ mod tests {
             fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");
         let expected_fen = "7k/8/p7/4b3/3Q4/8/P1P4P/R7 w - - 0 0";
         assert_eq!(fen_str, expected_fen);
+    }
+
+    ////////////////////////////////////////////////////////
+    /// Bit iterator tests
+    ////////////////////////////////////////////////////////    ///
+    #[test]
+    fn test_bit_iterator_empty_bitboard() {
+        let bitboard = BitBoard(0);
+        let mut iterator = BitIterator { bitboard: bitboard };
+        assert_eq!(iterator.next(), None);
+    }
+
+    #[test]
+    fn test_bit_iterator_single_bit() {
+        let bitboard = BitBoard(1 << 5); // Only the 6th bit is set (index 5)
+        let mut iterator = BitIterator { bitboard: bitboard };
+        assert_eq!(iterator.next(), Some(5));
+        assert_eq!(iterator.next(), None);
+    }
+
+    #[test]
+    fn test_bit_iterator_multiple_bits() {
+        let bitboard = BitBoard((1 << 3) | (1 << 5) | (1 << 15)); // Bits set at positions 3, 5, and 15
+        let mut iterator = BitIterator { bitboard: bitboard };
+        let expected = vec![3, 5, 15];
+        let results: Vec<u8> = iterator.by_ref().collect();
+        assert_eq!(results, expected);
+        assert_eq!(iterator.next(), None); // Ensure iterator is exhausted
+    }
+
+    #[test]
+    fn test_bit_iterator_full_bitboard() {
+        let bitboard = BitBoard(!0); // All bits are set
+        let mut iterator = BitIterator { bitboard: bitboard };
+        let mut count = 0;
+        while let Some(_) = iterator.next() {
+            count += 1;
+        }
+        assert_eq!(count, 64); // Ensure all 64 bits are iterated
     }
 }

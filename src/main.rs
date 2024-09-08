@@ -31,7 +31,7 @@ fn main() {
     println!("Encode initial position to FEN position:");
     println!("{}", fen_str);
 
-    println!("Generate moves for white king consider pawn is in e4");
+    println!("Generate moves for white king considering pawn is in e4");
     let status = position.status().clone();
     let mut bd = position.into_chessboard().clone();
     bd.move_piece(
@@ -54,5 +54,9 @@ fn main() {
         &None,
         bit_position.bit_position_status(),
     );
-    println!("{}", moves[0].moves());
+    for piece_moves in &moves {
+        for m in piece_moves.moves().iter() {
+            println!("move: {}-{}", piece_moves.index(), m);
+        }
+    }
 }
