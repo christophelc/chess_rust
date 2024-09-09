@@ -10,6 +10,12 @@ use piece_move::table;
 
 use std::{fmt, ops::BitOrAssign};
 
+#[derive(Debug)]
+pub enum Castle {
+    ShortCastle,
+    LongCastle,
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct BitBoardMove {
     color: square::Color,
@@ -56,6 +62,19 @@ impl BitBoardMove {
         self.type_piece == TypePiece::Pawn
             && self.capture.is_none()
             && (self.start % 8 != self.end % 8)
+    }
+    pub fn check_castle(&self) -> Option<Castle> {
+        let mut castle: Option<Castle> = None;
+        if self.type_piece() == TypePiece::King {
+            let delta_col = (self.end as i8) - (self.start as i8);
+            if delta_col == 2 {
+                castle = Some(Castle::ShortCastle);
+            };
+            if delta_col == -2 {
+                castle = Some(Castle::LongCastle);
+            }
+        }
+        castle
     }
     pub fn from(
         color: Color,
@@ -216,14 +235,17 @@ pub struct BitBoardsWhiteAndBlack {
 
 impl BitBoardsWhiteAndBlack {
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
-        let mask_remove: u64 = if b_move.capture.is_some() {
-            1 << b_move.end
-        } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
-            1 << (b_move.start - b_move.start % 8 + b_move.end % 8)
+        // TODO: castle
+
+        let mut mask_remove: u64 = 0;
+        if b_move.capture.is_some() {
+            mask_remove = 1 << b_move.end;
         } else {
-            0
+            if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
+                    mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
+            };
         };
-        match b_move.color {
+        let new_bitboards = match b_move.color {
             square::Color::White => BitBoardsWhiteAndBlack {
                 bit_board_white: self.bit_board_white.move_piece(
                     b_move.type_piece,
@@ -252,6 +274,27 @@ impl BitBoardsWhiteAndBlack {
                     self.bit_board_white
                 },
             },
+        };
+        match b_move.check_castle() {
+            Some(Castle::ShortCastle) => {
+                let b_move = BitBoardMove {
+                    type_piece: TypePiece::Rook,
+                    start: b_move.start() + 3,
+                    end: b_move.end() - 1,
+                    ..*b_move
+                };
+                new_bitboards.move_piece(&b_move)
+            },
+            Some(Castle::LongCastle) => {
+                let b_move = BitBoardMove {
+                    type_piece: TypePiece::Rook,
+                    start: b_move.start() - 4,
+                    end: b_move.end() + 1,
+                    ..*b_move
+                };
+                new_bitboards.move_piece(&b_move)
+            }
+            None => new_bitboards
         }
     }
     pub fn bit_board(&self, color: &Color) -> &BitBoards {

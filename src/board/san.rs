@@ -9,7 +9,7 @@ const SAN_QUEEN: [char; 2] = ['D', 'Q'];
 const SAN_KING: [char; 2] = ['R', 'K'];
 
 #[derive(Debug)]
-struct SAN {
+pub struct SAN {
     info: String,
 }
 
@@ -52,15 +52,11 @@ pub fn san_to_str(
     );
 
     let to = move_to_translate.end();
-    if move_to_translate.type_piece() == TypePiece::King {
-        let delta_col = (to as i8) - (move_to_translate.start() as i8);
-        if delta_col == 2 {
-            return SAN::new("o-o".to_string());
-        };
-        if delta_col == -2 {
-            return SAN::new("o-o-o".to_string());
-        }
-    }
+    match move_to_translate.check_castle() {
+        Some(bitboard::Castle::ShortCastle) => return SAN::new("o-o".to_string()),
+        Some(bitboard::Castle::LongCastle) => return SAN::new("o-o-o".to_string()),
+        None => {},
+    };
     // look for a move that have the same destination for the same type_piece
     let moves_to: Vec<&bitboard::BitBoardMove> = (*moves)
         .iter()

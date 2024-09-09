@@ -90,7 +90,7 @@ mod tests {
         let position = bit_board_position2.to();
         let fen = FEN::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
-        assert_eq!(fen, "qnbbkbnn/8/8/8/8/8/8/R5KR b kq - 1 1");
+        assert_eq!(fen, "qnbbkbnn/8/8/8/8/8/8/R4RK1 b kq - 1 1");
     }
 
     #[test]
