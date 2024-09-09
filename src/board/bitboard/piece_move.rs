@@ -1,8 +1,10 @@
-mod table;
+pub mod table;
 use table::table_bishop;
 use table::table_rook;
 
 use super::BitBoard;
+use super::BitBoardsWhiteAndBlack;
+use super::BitPosition;
 use super::BitPositionStatus;
 use crate::board;
 use crate::board::square::Switch;
@@ -100,7 +102,7 @@ pub trait GenMoves {
         check_status: CheckStatus,
         capture_en_passant: &Option<u64>,
         bit_position_status: &bitboard::BitPositionStatus,
-    ) -> Vec<PieceMoves>;
+    ) -> Vec<bitboard::BitBoardMove>;
 
     fn attackers(
         &self,
@@ -117,6 +119,27 @@ pub trait GenMoves {
     ) -> CheckStatus;
 }
 
+fn moves2bitboard_moves(
+    color: square::Color,
+    moves: Vec<PieceMoves>,
+    bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
+) -> Vec<bitboard::BitBoardMove> {
+    let mut bitboard_moves: Vec<bitboard::BitBoardMove> = vec![];
+    for piece_moves in &moves {
+        for to in piece_moves.moves().iter() {
+            let bitboard_move = bitboard::BitBoardMove::from(
+                color,
+                piece_moves.type_piece(),
+                piece_moves.index(),
+                to,
+                bit_boards_white_and_black,
+            );
+            bitboard_moves.extend(bitboard_move);
+        }
+    }
+    bitboard_moves
+}
+
 impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
     fn gen_moves_for_all(
         &self,
@@ -124,10 +147,10 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         check_status: CheckStatus,
         capture_en_passant: &Option<u64>,
         bit_position_status: &bitboard::BitPositionStatus,
-    ) -> Vec<PieceMoves> {
+    ) -> Vec<bitboard::BitBoardMove> {
         let bit_board = self.bit_board(color);
         let bit_board_opponent = self.bit_board(&color.switch());
-        match check_status {
+        let moves_all = match check_status {
             CheckStatus::NoCheck => {
                 let mut moves_all: Vec<PieceMoves> = vec![];
                 for (type_piece, bit_board_type_piece) in bit_board.list_boards() {
@@ -196,7 +219,8 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
                     }]
                 }
             }
-        }
+        };
+        moves2bitboard_moves(*color, moves_all, self)
     }
 
     /// Identify attackers for piece_index for color
@@ -763,7 +787,7 @@ fn gen_pawn_squares_attacked(
     }
     moves
 }
-fn gen_pawn_non_attecker_moves(
+fn gen_pawn_non_attacker_moves(
     index: u8,
     color: &square::Color,
     bit_board: &bitboard::BitBoard,
@@ -827,7 +851,7 @@ fn gen_moves_for_pawn(
     bit_board_opponent: &bitboard::BitBoard,
     capture_en_passant: &Option<u64>,
 ) -> Option<PieceMoves> {
-    let to = gen_pawn_non_attecker_moves(
+    let to = gen_pawn_non_attacker_moves(
         index,
         color,
         bit_board,

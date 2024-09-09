@@ -40,31 +40,11 @@ fn main() {
     );
     let position = Position::build(bd, status);
     let bit_position = BitPosition::from(position);
-    // white king to play
-    let white_king_type = square::TypePiece::King;
-    let white_king_bit_board = bit_position
-        .bit_boards_white_and_black()
-        .bit_board_white()
-        .king();
     let moves = bit_position.bit_boards_white_and_black().gen_moves_for_all(
         &board::square::Color::White,
         piece_move::CheckStatus::NoCheck,
         &None,
         bit_position.bit_position_status(),
     );
-    for piece_moves in &moves {
-        for m in piece_moves.moves().iter() {
-            println!("move: {}-{}", piece_moves.index(), m);
-        }
-    }
-    let moves: Vec<u8> = moves.get(0).unwrap().moves().iter().collect();
-    let to = moves.get(0).unwrap().clone();
-    let b_move = bitboard::BitBoardMove::from(
-        square::Color::White,
-        square::TypePiece::King,
-        white_king_bit_board.index(),
-        to,
-        &bit_position,
-    );
-    println!("{:?}", b_move);
+    println!("{:?}", moves);
 }

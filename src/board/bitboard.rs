@@ -6,42 +6,60 @@ use super::{
     square::{self, Switch},
     Board, ChessBoard,
 };
+use piece_move::table;
+
 use std::{fmt, ops::BitOrAssign};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct BitBoardMove {
     color: square::Color,
     type_piece: TypePiece,
-    from: u8,
-    to: u8,
+    start: u8,
+    end: u8,
     capture: Option<TypePiece>,
+    promotion: Option<TypePiece>,
 }
 impl BitBoardMove {
     pub fn new(
         color: Color,
         type_piece: TypePiece,
-        from: u8,
-        to: u8,
+        start: u8,
+        end: u8,
         capture: Option<TypePiece>,
+        promotion: Option<TypePiece>,
     ) -> Self {
         BitBoardMove {
             color,
             type_piece,
-            from,
-            to,
+            start,
+            end,
             capture,
+            promotion,
         }
+    }
+    pub fn start(&self) -> u8 {
+        self.start
+    }
+    pub fn end(&self) -> u8 {
+        self.end
+    }
+    pub fn type_piece(&self) -> TypePiece {
+        self.type_piece
+    }
+    pub fn capture(&self) -> Option<TypePiece> {
+        self.capture
+    }
+    pub fn promotion(&self) -> Option<TypePiece> {
+        self.promotion
     }
     pub fn from(
         color: Color,
         type_piece: TypePiece,
         from: u8,
         to: u8,
-        bit_board_position: &BitPosition,
-    ) -> Self {
-        let bit_boards = bit_board_position
-            .bit_boards_white_and_black()
-            .bit_board(&color);
+        bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
+    ) -> Vec<Self> {
+        let bit_boards = bit_boards_white_and_black.bit_board(&color);
         let b_to: u64 = 1 << to;
         let mut capture: Option<TypePiece> = None;
         if bit_boards.rooks().value() & b_to == 1 {
@@ -58,7 +76,33 @@ impl BitBoardMove {
         } else if bit_boards.king().value() & b_to == 1 {
             capture = Some(TypePiece::King);
         }
-        Self::new(color, type_piece, from, to, capture)
+        if type_piece == TypePiece::Pawn
+            && ((color == Color::White && (1 << to) & table::MASK_ROW_7 != 0)
+                || (color == Color::Black && (1 << to) & table::MASK_ROW_0 != 0))
+        {
+            vec![
+                Self::new(color, type_piece, from, to, capture, Some(TypePiece::Rook)),
+                Self::new(
+                    color,
+                    type_piece,
+                    from,
+                    to,
+                    capture,
+                    Some(TypePiece::Bishop),
+                ),
+                Self::new(
+                    color,
+                    type_piece,
+                    from,
+                    to,
+                    capture,
+                    Some(TypePiece::Knight),
+                ),
+                Self::new(color, type_piece, from, to, capture, Some(TypePiece::Queen)),
+            ]
+        } else {
+            vec![Self::new(color, type_piece, from, to, capture, None)]
+        }
     }
 }
 
@@ -119,28 +163,28 @@ fn update_status(
     // move of a rook
     match b_move.type_piece {
         TypePiece::Rook => {
-            if b_move.from == 1 || b_move.from == 56 {
+            if b_move.start == 1 || b_move.start == 56 {
                 bit_position_status.set_castling_queen_side(b_move.color, false)
             }
-            if b_move.from == 7 || b_move.from == 63 {
+            if b_move.start == 7 || b_move.start == 63 {
                 bit_position_status.set_castling_king_side(b_move.color, false)
             }
         }
         TypePiece::King => bit_position_status.disable_castling(b_move.color),
         TypePiece::Pawn => {
             let mut capture_en_passant: Option<i8> = None;
-            if b_move.from + 16 == b_move.to {
+            if b_move.start + 16 == b_move.end {
                 if bit_board_pawn_opponent.value()
-                    & (1 << (b_move.from + 7) | 1 << (b_move.from + 9))
+                    & (1 << (b_move.start + 7) | 1 << (b_move.start + 9))
                     != 0
                 {
-                    capture_en_passant = Some((b_move.from + 8) as i8);
+                    capture_en_passant = Some((b_move.start + 8) as i8);
                 }
-            } else if b_move.to + 16 == b_move.from {
-                if bit_board_pawn_opponent.value() & (1 << (b_move.to + 7) | 1 << (b_move.to + 9))
+            } else if b_move.end + 16 == b_move.start {
+                if bit_board_pawn_opponent.value() & (1 << (b_move.end + 7) | 1 << (b_move.end + 9))
                     != 0
                 {
-                    capture_en_passant = Some((b_move.to + 8) as i8);
+                    capture_en_passant = Some((b_move.end + 8) as i8);
                 }
             };
             bit_position_status.set_pawn_en_passant(capture_en_passant);
@@ -168,9 +212,9 @@ pub struct BitBoardsWhiteAndBlack {
 impl BitBoardsWhiteAndBlack {
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
         let mask_remove: u64 = if b_move.capture.is_some() {
-            1 << b_move.to
-        } else if b_move.type_piece == TypePiece::Pawn && b_move.from % 8 != b_move.to % 8 {
-            1 << (b_move.from - b_move.from % 8 + b_move.to % 8)
+            1 << b_move.end
+        } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
+            1 << (b_move.start - b_move.start % 8 + b_move.end % 8)
         } else {
             0
         };
@@ -178,8 +222,9 @@ impl BitBoardsWhiteAndBlack {
             square::Color::White => BitBoardsWhiteAndBlack {
                 bit_board_white: self.bit_board_white.move_piece(
                     b_move.type_piece,
-                    b_move.from,
-                    b_move.to,
+                    b_move.start,
+                    b_move.end,
+                    b_move.promotion,
                 ),
                 bit_board_black: if mask_remove != 0 {
                     self.bit_board_black
@@ -191,8 +236,9 @@ impl BitBoardsWhiteAndBlack {
             square::Color::Black => BitBoardsWhiteAndBlack {
                 bit_board_black: self.bit_board_black.move_piece(
                     b_move.type_piece,
-                    b_move.from,
-                    b_move.to,
+                    b_move.start,
+                    b_move.end,
+                    b_move.promotion,
                 ),
                 bit_board_white: if mask_remove != 0 {
                     self.bit_board_white
@@ -372,23 +418,42 @@ impl BitBoards {
         }
     }
 
-    pub fn move_piece(self, type_piece: square::TypePiece, from: u8, to: u8) -> BitBoards {
-        let mask = 1 << from | 1 << to;
-        match type_piece {
+    pub fn move_piece(
+        self,
+        type_piece: square::TypePiece,
+        from: u8,
+        to: u8,
+        promotion: Option<TypePiece>,
+    ) -> BitBoards {
+        let (
+            mask,
+            mask_promotion_rook,
+            mask_promotion_bishop,
+            mask_promotion_knight,
+            mask_promotion_queen,
+        ) = match promotion {
+            None => (1u64 << from | 1u64 << to, 0u64, 0u64, 0u64, 0u64),
+            Some(TypePiece::Rook) => (1u64 << from, 1u64 << to, 0u64, 0u64, 0u64),
+            Some(TypePiece::Bishop) => (1u64 << from, 0u64, 1u64 << to, 0u64, 0u64),
+            Some(TypePiece::Knight) => (1u64 << from, 0u64, 0u64, 1u64 << to, 0u64),
+            Some(TypePiece::Queen) => (1u64 << from, 0u64, 0u64, 0u64, 1u64 << to),
+            _ => panic!("Pawn promotion can only be Rook, Bishop, Knight, Queen"),
+        };
+        let bitboards = match type_piece {
             TypePiece::Rook => BitBoards {
-                rooks: BitBoard::new(self.rooks.value() ^ mask),
+                rooks: BitBoard::new((self.rooks.value() ^ mask) | mask_promotion_rook),
                 ..self
             },
             TypePiece::Bishop => BitBoards {
-                bishops: BitBoard::new(self.knights.value() ^ mask),
+                bishops: BitBoard::new((self.knights.value() ^ mask) | mask_promotion_bishop),
                 ..self
             },
             TypePiece::Knight => BitBoards {
-                knights: BitBoard::new(self.knights.value() ^ mask),
+                knights: BitBoard::new((self.knights.value() ^ mask) | mask_promotion_knight),
                 ..self
             },
             TypePiece::Queen => BitBoards {
-                queens: BitBoard::new(self.queens.value() ^ mask),
+                queens: BitBoard::new((self.queens.value() ^ mask) | mask_promotion_queen),
                 ..self
             },
             TypePiece::King => BitBoards {
@@ -399,6 +464,27 @@ impl BitBoards {
                 pawns: BitBoard::new(self.pawns.value() ^ mask),
                 ..self
             },
+        };
+        match promotion {
+            None => bitboards,
+            Some(p_type_piece) if p_type_piece == type_piece => bitboards,
+            Some(TypePiece::Rook) => BitBoards {
+                rooks: BitBoard::new(bitboards.rooks.value() | mask_promotion_rook),
+                ..bitboards
+            },
+            Some(TypePiece::Bishop) => BitBoards {
+                bishops: BitBoard::new(bitboards.bishops.value() | mask_promotion_bishop),
+                ..bitboards
+            },
+            Some(TypePiece::Knight) => BitBoards {
+                knights: BitBoard::new(bitboards.knights.value() | mask_promotion_knight),
+                ..bitboards
+            },
+            Some(TypePiece::Queen) => BitBoards {
+                queens: BitBoard::new(bitboards.queens.value() | mask_promotion_queen),
+                ..bitboards
+            },
+            _ => panic!("Pawn promotion can only be Rook, Bishop, Knight, Queen"),
         }
     }
     pub fn rooks(&self) -> &BitBoard {
@@ -952,5 +1038,27 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, 64); // Ensure all 64 bits are iterated
+    }
+    ////////////////////////////////////////////////////////
+    /// Promotion
+    ////////////////////////////////////////////////////////
+    #[test]
+    fn test_promotion() {
+        let fen = "7k/8/8/8/8/8/8/7K w KQ - 0 1";
+        let position = fen::FEN::decode(fen).expect("Failed to decode FEN");
+        let bit_board_position = BitPosition::from(position);
+        let color = square::Color::White;
+
+        let type_piece = TypePiece::Pawn;
+        let from = 48;
+        let to = 56;
+        let moves = BitBoardMove::from(
+            color,
+            type_piece,
+            from,
+            to,
+            bit_board_position.bit_boards_white_and_black(),
+        );
+        assert_eq!(moves.len(), 4)
     }
 }
