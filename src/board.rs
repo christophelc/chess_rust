@@ -2,6 +2,7 @@ pub mod bitboard;
 pub mod coord;
 pub mod fen;
 pub mod game;
+pub mod san;
 pub mod square;
 
 pub trait Board {

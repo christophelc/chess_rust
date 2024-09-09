@@ -52,6 +52,11 @@ impl BitBoardMove {
     pub fn promotion(&self) -> Option<TypePiece> {
         self.promotion
     }
+    pub fn is_capture_en_passant(&self) -> bool {
+        self.type_piece == TypePiece::Pawn
+            && self.capture.is_none()
+            && (self.start % 8 != self.end % 8)
+    }
     pub fn from(
         color: Color,
         type_piece: TypePiece,
