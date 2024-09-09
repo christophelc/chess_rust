@@ -493,11 +493,13 @@ fn gen_moves_for_piece(
 ) -> Option<PieceMoves> {
     match type_piece {
         &square::TypePiece::Rook => gen_moves_for_rook(
+            false,
             index,
             &bit_board.concat_bit_boards(),
             &bit_board_opponent.concat_bit_boards(),
         ),
         &square::TypePiece::Bishop => gen_moves_for_bishop(
+            false,
             index,
             &bit_board.concat_bit_boards(),
             &bit_board_opponent.concat_bit_boards(),
@@ -700,6 +702,7 @@ fn gen_moves_for_rook_vertical(index: u8, blockers_v: u64, mask_v: u64) -> u64 {
 }
 
 fn gen_moves_for_rook(
+    is_queen: bool,
     index: u8,
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
@@ -712,17 +715,28 @@ fn gen_moves_for_rook(
     let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers, mask_h);
     let moves_vertical = gen_moves_for_rook_vertical(index, blockers, mask_v);
     let moves_bitboard = moves_horizontal | moves_vertical;
-    moves_non_empty(TypePiece::Rook, index, moves_bitboard, bit_board)
+    let type_piece = if is_queen {
+        TypePiece::Queen
+    } else {
+        TypePiece::Rook
+    };
+    moves_non_empty(type_piece, index, moves_bitboard, bit_board)
 }
 
 fn gen_moves_for_bishop(
+    is_queen: bool,
     index: u8,
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
 ) -> Option<PieceMoves> {
     let blockers = bit_board.value() | bit_board_opponent.value();
     let moves_bitboard = table_bishop::bishop_moves(index, blockers);
-    moves_non_empty(TypePiece::Bishop, index, moves_bitboard, bit_board)
+    let type_piece = if is_queen {
+        TypePiece::Queen
+    } else {
+        TypePiece::Bishop
+    };
+    moves_non_empty(type_piece, index, moves_bitboard, bit_board)
 }
 
 fn gen_moves_for_queen(
@@ -730,8 +744,8 @@ fn gen_moves_for_queen(
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
 ) -> Option<PieceMoves> {
-    let rook_moves = gen_moves_for_rook(index, bit_board, bit_board_opponent);
-    let bishop_moves = gen_moves_for_bishop(index, bit_board, bit_board_opponent);
+    let rook_moves = gen_moves_for_rook(true, index, bit_board, bit_board_opponent);
+    let bishop_moves = gen_moves_for_bishop(true, index, bit_board, bit_board_opponent);
     match (rook_moves, bishop_moves) {
         (None, None) => None,
         (left, None) => left,
@@ -1161,7 +1175,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 254 << 8 | (1 | 1 << 16 | 1 << 24 | 1 << 32 | 1 << 40 | 1 << 48 | 1 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1174,7 +1188,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 16);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 252 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1187,7 +1201,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 16);
         let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1200,7 +1214,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 23);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 125 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1214,7 +1228,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 4 | 1 << 8);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1 << 1 | 1 << 2 | 1 << 3;
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1228,7 +1242,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 23);
         let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1241,7 +1255,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 16 | 1 << 23);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 122 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1254,7 +1268,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 16 | 1 << 23);
         let expected = 251 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1267,7 +1281,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 254 << 24 | (1 | 1 << 8 | 1 << 16 | 1 << 32 | 1 << 40 | 1 << 48 | 1 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1281,7 +1295,7 @@ mod tests {
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 127 << 24
             | (128 | 128 << 8 | 128 << 16 | 128 << 32 | 128 << 40 | 128 << 48 | 128 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1293,7 +1307,7 @@ mod tests {
         let index = 40; // Rook somewhere in the middle of the fifth row
         let bit_board = bitboard::BitBoard(255 << 40 | 1 << 32 | 1 << 48);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent);
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent);
         assert!(result.is_none());
     }
 
@@ -1303,7 +1317,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 25);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 253 << 16 | (2 | 2 << 8);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1316,7 +1330,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index | 1 << 9);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 253 << 16 | (2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1329,7 +1343,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 25);
         let expected = 253 << 16 | (2 | 2 << 8 | 2 << 24);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1342,7 +1356,7 @@ mod tests {
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(1 << 9);
         let expected = 253 << 16 | (2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
-        let result = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1359,7 +1373,7 @@ mod tests {
         let bit_board_opponent = bitboard::BitBoard(1 << 6);
         let expected =
             1 << 2 | (1 << 6 | 1 << 11 | 1 << 13 | 1 << 27 | 1 << 29 | 1 << 38 | 1 << 47);
-        let result = gen_moves_for_bishop(index, &bit_board, &bit_board_opponent)
+        let result = gen_moves_for_bishop(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
@@ -1370,11 +1384,11 @@ mod tests {
         let index = 8; // Position of the rook at the start of the second row
         let bit_board = bitboard::BitBoard(1 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let result_rook = gen_moves_for_rook(index, &bit_board, &bit_board_opponent)
+        let result_rook = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
-        let result_bishop = gen_moves_for_bishop(index, &bit_board, &bit_board_opponent)
+        let result_bishop = gen_moves_for_bishop(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
             .0;
