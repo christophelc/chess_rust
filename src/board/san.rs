@@ -55,7 +55,7 @@ pub fn san_to_str(
     match move_to_translate.check_castle() {
         Some(bitboard::Castle::ShortCastle) => return SAN::new("o-o".to_string()),
         Some(bitboard::Castle::LongCastle) => return SAN::new("o-o-o".to_string()),
-        None => {},
+        None => {}
     };
     // look for a move that have the same destination for the same type_piece
     let moves_to: Vec<&bitboard::BitBoardMove> = (*moves)

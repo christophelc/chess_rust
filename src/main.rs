@@ -1,4 +1,5 @@
 mod board;
+mod uci;
 use board::bitboard;
 use board::bitboard::BitBoard;
 use board::bitboard::BitPosition;

@@ -242,7 +242,7 @@ impl BitBoardsWhiteAndBlack {
             mask_remove = 1 << b_move.end;
         } else {
             if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
-                    mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
+                mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
             };
         };
         let new_bitboards = match b_move.color {
@@ -284,7 +284,7 @@ impl BitBoardsWhiteAndBlack {
                     ..*b_move
                 };
                 new_bitboards.move_piece(&b_move)
-            },
+            }
             Some(Castle::LongCastle) => {
                 let b_move = BitBoardMove {
                     type_piece: TypePiece::Rook,
@@ -294,7 +294,7 @@ impl BitBoardsWhiteAndBlack {
                 };
                 new_bitboards.move_piece(&b_move)
             }
-            None => new_bitboards
+            None => new_bitboards,
         }
     }
     pub fn bit_board(&self, color: &Color) -> &BitBoards {
