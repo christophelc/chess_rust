@@ -1,9 +1,14 @@
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, stdout, BufRead, Stdin, Stdout, Write};
+use std::ops::Index;
 
+use crate::board::bitboard::BitBoardMove;
 use crate::board::fen::{self, EncodeUserInput, Position};
+use crate::board::square::TypePiece;
+use crate::board::{bitboard, square, Board, ChessBoard};
 
+#[derive(Debug)]
 pub enum Command {
     Uci,     // "uci" command, no additional data needed
     IsReady, // "isready" command, no additional data needed
@@ -12,12 +17,16 @@ pub enum Command {
     Stop, // "stop" command to stop search
     Quit, // "quit" command to exit the engine
 }
+
+#[derive(Debug)]
 struct PositionStruct {
     // "position" command, with optional FEN and moves
     startpos: bool,      // `true` if the starting position is requested
     fen: Option<String>, // The FEN string, if specified (None if using startpos)
     moves: Vec<String>,  // A list of moves played after the position
 }
+
+#[derive(Debug)]
 struct GoStruct {
     // "go" command, with search parameters
     depth: Option<u32>,    // Optional depth to search
@@ -27,26 +36,47 @@ struct GoStruct {
     btime: Option<u64>,
     search_moves: Vec<String>,
 }
+fn promotion2type_piece(opt_promotion_as_char: Option<char>) -> Result<Option<TypePiece>, String> {
+    match opt_promotion_as_char {
+        None => Ok(None),
+        Some('q') => Ok(Some(TypePiece::Queen)),
+        Some('r') => Ok(Some(TypePiece::Rook)),
+        Some('n') => Ok(Some(TypePiece::Knight)),
+        Some('b') => Ok(Some(TypePiece::Bishop)),
+        Some(p) => Err(format!(
+            "Unknow promotion piece: '{}'. Valid pieces are: q, r, n",
+            p
+        )),
+    }
+}
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LongAlgebricNotationMove {
     start: u8,
     end: u8,
+    opt_promotion: Option<TypePiece>,
 }
 impl LongAlgebricNotationMove {
-    pub fn new(start: u8, end: u8) -> Self {
-        LongAlgebricNotationMove { start, end }
+    pub fn new(start: u8, end: u8, opt_promotion: Option<TypePiece>) -> Self {
+        LongAlgebricNotationMove {
+            start,
+            end,
+            opt_promotion,
+        }
     }
-    pub fn build_from_str(move_str: String) -> Result<Self, String> {
+    pub fn build_from_str(move_str: &str) -> Result<Self, String> {
         let mut result = Err(format!("Invalid move: {}", move_str));
-        if move_str.len() == 4 {
+        if move_str.len() >= 4 && move_str.len() <= 5 {
             let from_square = &move_str[0..2]; // First two characters (e.g., "e2")
             let to_square = &move_str[2..4]; // Last two characters (e.g., "e4")
             let from_index = square_to_index(from_square);
             let to_index = square_to_index(to_square);
+            let opt_promotion = promotion2type_piece(move_str.chars().nth(4))?;
             if from_index < 64 && to_index < 64 {
                 result = Ok(LongAlgebricNotationMove {
                     start: from_index,
                     end: to_index,
+                    opt_promotion,
                 });
             }
         }
@@ -58,6 +88,12 @@ impl LongAlgebricNotationMove {
             index_to_string(self.start),
             index_to_string(self.end)
         )
+    }
+    pub fn start(&self) -> u8 {
+        self.start
+    }
+    pub fn end(&self) -> u8 {
+        self.end
     }
 }
 fn index_to_string(index: u8) -> String {
@@ -91,26 +127,47 @@ pub enum Event {
     Stop,
     Quit,
 }
-pub struct Configuration {
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Parameters {
     opt_depth: Option<u32>,
     opt_time_per_move_in_ms: Option<u32>,
     opt_wtime: Option<u64>,
     opt_btime: Option<u64>,
     search_moves: Vec<LongAlgebricNotationMove>,
-    moves: Vec<LongAlgebricNotationMove>,
+}
+
+#[derive(Clone)]
+pub struct Configuration {
+    parameters: Parameters,
     opt_position: Option<Position>,
 }
 impl Configuration {
     pub fn new() -> Self {
         Configuration {
-            opt_depth: None,
-            opt_time_per_move_in_ms: None,
-            moves: vec![],
-            opt_wtime: None,
-            opt_btime: None,
-            search_moves: vec![],
+            parameters: Parameters::default(),
             opt_position: None,
         }
+    }
+    fn execute_command(&mut self, command: Command, stdout: &mut Stdout) -> bool {
+        let mut is_quit = false;
+        let events = self.handle_command(command);
+        for event in &events {
+            // pdate the configuration
+            let uci_result = self.handle_event(event, stdout);
+            // quit, stop and show best move or continue
+            match uci_result {
+                Ok(UciResult::Continue) => {}
+                Ok(UciResult::Quit) => {
+                    is_quit = true;
+                }
+                Ok(UciResult::BestMove(best_move)) => _ = best_move_action(stdout, best_move),
+                Err(HandleEventError { event, error }) => {
+                    _ = write_err(stdout, format!("{:?}{}", event, error))
+                }
+            }
+        }
+        is_quit
     }
 }
 
@@ -218,43 +275,38 @@ fn parse_position(position_command: String) -> Result<Command, CommandError> {
         // Case for startpos without moves
         ["position", "startpos"] => {
             parsed.startpos = true;
+            Ok(Command::Position(parsed))
         }
 
         // Case for startpos with moves
         ["position", "startpos", "moves", moves @ ..] => {
             parsed.startpos = true;
             parsed.moves = moves.iter().map(|&m| m.to_string()).collect();
+            Ok(Command::Position(parsed))
         }
 
         // Case for fen without moves
         ["position", "fen", fen_part @ ..] if fen_part.len() == 6 => {
             parsed.fen = Some(fen_part.join(" "));
+            Ok(Command::Position(parsed))
         }
 
         // Case for fen with moves
         ["position", "fen", fen_part @ ..] if fen_part.len() > 6 && fen_part[6] == "moves" => {
             let (fen, moves) = fen_part.split_at(6);
             parsed.fen = Some(fen.join(" "));
-            parsed.moves = moves[1..].iter().map(|&m| m.to_string()).collect(); // Skip "moves"
+            parsed.moves = moves[1..].iter().map(|&m| m.to_string()).collect(); // Skip "moves";
+            Ok(Command::Position(parsed))
         }
 
-        _ => {
-            println!("Error: Invalid position command");
-        }
+        _ => Err(CommandError::new(
+            format!("position command error: {}", position_command).to_string(),
+        )),
     }
-    Err(CommandError::new(
-        format!("position command error: {}", position_command).to_string(),
-    ))
 }
 
 impl Configuration {
-    pub fn read_input(stdin: &mut Stdin) -> Result<Command, CommandError> {
-        let mut input = String::new();
-        stdin
-            .lock()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-        let input = input.trim();
+    pub fn parse_input(input: &str) -> Result<Command, CommandError> {
         match input {
             "uci" => Ok(Command::Uci),
             "isready" => Ok(Command::IsReady),
@@ -276,6 +328,7 @@ impl Configuration {
         match event {
             Event::Write(s) => {
                 writeln!(stdout, "{}", s).unwrap();
+                stdout.flush().unwrap();
             }
             Event::StartPos => {
                 let position: fen::Position = fen::Position::build_initial_position();
@@ -286,19 +339,42 @@ impl Configuration {
                 self.opt_position = Some(position);
             }
             // Go command
-            Event::Depth(depth) => self.opt_depth = Some(*depth),
-            Event::SearchInfinite => self.opt_time_per_move_in_ms = None,
+            Event::Depth(depth) => self.parameters.opt_depth = Some(*depth),
+            Event::SearchInfinite => self.parameters.opt_time_per_move_in_ms = None,
             Event::TimePerMoveInMs(time) => {
-                self.opt_time_per_move_in_ms = Some(*time);
+                self.parameters.opt_time_per_move_in_ms = Some(*time);
             }
             event @ Event::Moves(moves) => match moves_validation(moves) {
-                Ok(valid_moves) => self.moves = valid_moves,
+                Ok(valid_moves) => {
+                    if let Some(position) = self.opt_position {
+                        let mut result: Result<(), String> = Ok(());
+                        let mut bit_position = bitboard::BitPosition::from(position);
+                        for m in valid_moves {
+                            let color = bit_position.bit_position_status().player_turn();
+                            match check_move(color, m, &bit_position.bit_boards_white_and_black()) {
+                                Err(err) => {
+                                    result = Err(err);
+                                    break;
+                                }
+                                Ok(b_move) => {
+                                    bit_position = bit_position.move_piece(&b_move);
+                                    self.opt_position = Some(bit_position.to());
+                                }
+                            }
+                        }
+                    } else {
+                        result = Err(HandleEventError::new(
+                            event.clone(),
+                            "no configuration defined".to_string(),
+                        ));
+                    }
+                }
                 Err(err) => result = Err(HandleEventError::new(event.clone(), err)),
             },
-            Event::Wtime(wtime) => self.opt_wtime = Some(*wtime),
-            Event::Btime(btime) => self.opt_btime = Some(*btime),
+            Event::Wtime(wtime) => self.parameters.opt_wtime = Some(*wtime),
+            Event::Btime(btime) => self.parameters.opt_btime = Some(*btime),
             event @ Event::SearchMoves(search_moves) => match moves_validation(search_moves) {
-                Ok(valid_moves) => self.search_moves = valid_moves,
+                Ok(valid_moves) => self.parameters.search_moves = valid_moves,
                 Err(err) => result = Err(HandleEventError::new(event.clone(), err)),
             },
             Event::Stop => {
@@ -313,8 +389,7 @@ impl Configuration {
                         // TODO:
                         // - stop current search
                         // - get bestmove e2e4
-                        let best_move =
-                            LongAlgebricNotationMove::build_from_str("e2e4".to_string()).unwrap();
+                        let best_move = LongAlgebricNotationMove::build_from_str("e2e4").unwrap();
                         result = Ok(UciResult::BestMove(best_move));
                     }
                 }
@@ -400,11 +475,27 @@ impl Configuration {
     }
 }
 
+// The start square must contain a piece
+fn check_move(
+    player_turn: square::Color,
+    m: LongAlgebricNotationMove,
+    bitboard_white_and_black: &bitboard::BitBoardsWhiteAndBlack,
+) -> Result<BitBoardMove, String> {
+    let start_square = bitboard_white_and_black.peek(m.start());
+    let end_square = bitboard_white_and_black.peek(m.end());
+    match (start_square, end_square) {
+        (square::Square::Empty, _) => Err(format!("empty start square {}", m.start())),
+        (square::Square::NonEmpty(piece), square::Square::Empty) => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion)),
+        (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion)),
+        (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start(), m.end())),
+    }
+}
+
 fn moves_validation(moves: &Vec<String>) -> Result<Vec<LongAlgebricNotationMove>, String> {
     let mut valid_moves: Vec<LongAlgebricNotationMove> = vec![];
     let mut errors: Vec<String> = vec![];
     for m in moves {
-        match LongAlgebricNotationMove::build_from_str(m.clone()) {
+        match LongAlgebricNotationMove::build_from_str(&m) {
             Ok(valid_move) => valid_moves.push(valid_move),
             Err(err) => errors.push(err),
         }
@@ -420,10 +511,14 @@ fn best_move_action(
     stdout: &mut Stdout,
     best_move: LongAlgebricNotationMove,
 ) -> Result<(), io::Error> {
-    writeln!(stdout, "{}", best_move.cast())
+    let res = writeln!(stdout, "{}", best_move.cast());
+    stdout.flush().unwrap();
+    res
 }
 fn write_err(stdout: &mut Stdout, err: String) -> Result<(), io::Error> {
-    writeln!(stdout, "{}", err)
+    let res = writeln!(stdout, "{}", err);
+    stdout.flush().unwrap();
+    res
 }
 
 pub fn uci_loop() {
@@ -431,23 +526,29 @@ pub fn uci_loop() {
     let mut stdout = io::stdout();
 
     let mut configuration = Configuration::new();
+    let mut parameters_before = Configuration::new().parameters;
 
-    'main_loop: loop {
-        let command = Configuration::read_input(&mut stdin).expect("Invalid command");
-        let events = configuration.handle_command(command);
-        for event in &events {
-            let uci_result = configuration.handle_event(event, &mut stdout);
-            match uci_result {
-                Ok(UciResult::Continue) => {}
-                Ok(UciResult::Quit) => break 'main_loop,
-                Ok(UciResult::BestMove(best_move)) => _ = best_move_action(&mut stdout, best_move),
-                Err(HandleEventError { event, error }) => {
-                    _ = write_err(&mut stdout, format!("{:?}{}", event, error))
-                }
-            }
-            stdout.flush().unwrap();
+    loop {
+        let input = uci_read(&mut stdin);
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        if configuration.execute_command(command, &mut stdout) {
+            break;
         }
+        // check for configuration change
+        if configuration.parameters != parameters_before {
+            println!("The parameters have changed");
+        }
+        parameters_before = configuration.parameters.clone();
     }
+}
+
+fn uci_read(stdin: &mut Stdin) -> String {
+    let mut input = String::new();
+    stdin
+        .lock()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    input.trim().to_string()
 }
 
 #[cfg(test)]
@@ -455,8 +556,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_uci_input() {
+    fn test_uci_input_start_pos() {
+        let mut configuration = Configuration::new();
+        let mut stdout = io::stdout();
+        let input = "position startpos";
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        println!("{:?}", command);
+        let is_quit = configuration.execute_command(command, &mut stdout);
+        assert!(!is_quit);
+        let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
+            .expect("Failed to encode position");
+        assert_eq!(fen, fen::FEN_START_POSITION);
+    }
+    #[test]
+    fn test_uci_input_start_pos_with_moves() {
+        let mut configuration = Configuration::new();
+        let mut stdout = io::stdout();
         let input = "position startpos moves e2e4 e7e5 g1f3";
-        // TODO
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        println!("{:?}", command);
+        let is_quit = configuration.execute_command(command, &mut stdout);
+        assert!(!is_quit);
+        let expected: Vec<LongAlgebricNotationMove> = vec!["e2e4", "e7e5", "g1f3"]
+            .iter()
+            .map(|m| LongAlgebricNotationMove::build_from_str(m).unwrap())
+            .collect();
+        let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
+        let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
+            .expect("Failed to encode position");
+        assert_eq!(fen, fen_str);
     }
 }

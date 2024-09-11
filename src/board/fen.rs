@@ -1,6 +1,8 @@
 use crate::board::coord;
 use crate::board::square;
 
+pub const FEN_START_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 #[derive(Clone, Copy)]
 pub struct Position {
     chessboard: ChessBoard,
@@ -112,7 +114,7 @@ impl Position {
     }
 
     pub fn build_initial_position() -> Self {
-        let fen_str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let fen_str = FEN_START_POSITION;
         return FEN::decode(fen_str).expect("Failed to decode FEN");
     }
 
@@ -388,7 +390,7 @@ mod tests {
 
     #[test]
     fn test_decode_starting_position() {
-        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let fen = FEN_START_POSITION;
         let position = FEN::decode(fen).expect("Failed to decode FEN");
 
         // Check if the pieces are in the correct initial positions
@@ -528,15 +530,12 @@ mod tests {
         };
 
         let fen = FEN::encode(&position).expect("Failed to encode position");
-        assert_eq!(
-            fen,
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        );
+        assert_eq!(fen, FEN_START_POSITION);
     }
 
     #[test]
     fn test_decode_encode_symmetry() {
-        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let fen = FEN_START_POSITION;
         let position = FEN::decode(fen).expect("Failed to decode FEN");
         let encoded_fen = FEN::encode(&position).expect("Failed to encode position");
 

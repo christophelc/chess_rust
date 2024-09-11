@@ -217,6 +217,10 @@ fn update_status(
     }
     // Change player turn
     bit_position_status.set_player_turn_white(b_move.color == Color::Black);
+    // n_moves
+    if b_move.color == Color::Black {
+        bit_position_status.inc_n_moves();
+    }
     // half_moves
     if b_move.capture.is_none() && b_move.type_piece != TypePiece::Pawn {
         bit_position_status.inc_n_half_moves();
@@ -234,6 +238,47 @@ pub struct BitBoardsWhiteAndBlack {
 }
 
 impl BitBoardsWhiteAndBlack {
+    pub fn peek(&self, index: u8) -> Square {
+        let bit_square = 1u64 << index;
+        let mut square: Square = Square::Empty;
+        if self.bit_board_white.rooks.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Rook, Color::White)
+        };
+        if self.bit_board_white.bishops.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Bishop, Color::White)
+        };
+        if self.bit_board_white.knights.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Knight, Color::White)
+        };
+        if self.bit_board_white.queens.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Queen, Color::White)
+        };
+        if self.bit_board_white.king.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::King, Color::White)
+        };
+        if self.bit_board_white.pawns.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Pawn, Color::White)
+        };
+        if self.bit_board_black.rooks.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Rook, Color::Black)
+        };
+        if self.bit_board_black.bishops.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Bishop, Color::Black)
+        };
+        if self.bit_board_black.knights.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Knight, Color::Black)
+        };
+        if self.bit_board_black.queens.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Queen, Color::Black)
+        };
+        if self.bit_board_black.king.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::King, Color::Black)
+        };
+        if self.bit_board_black.pawns.value() & bit_square != 0 {
+            square = Square::build_piece(TypePiece::Pawn, Color::Black)
+        };
+        square
+    }
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
         // TODO: castle
 
@@ -715,6 +760,14 @@ impl BitPositionStatus {
         (self.flags & Self::CASTLING_BLACK_KING_SIDE) != 0
     }
 
+    pub fn player_turn(&self) -> square::Color {
+        if self.player_turn_white() {
+            square::Color::White
+        } else {
+            square::Color::Black
+        }
+    }
+
     pub fn player_turn_white(&self) -> bool {
         (self.flags & Self::PLAYER_TURN_WHITE) != 0
     }
@@ -807,9 +860,9 @@ impl BitPositionStatus {
     }
     pub fn inc_n_half_moves(&mut self) {
         self.n_half_moves += 1;
-        if self.n_half_moves % 2 == 0 {
-            self.n_half_moves += 1;
-        }
+    }
+    pub fn inc_n_moves(&mut self) {
+        self.n_moves += 1;
     }
 
     pub fn set_n_moves(&mut self, value: u16) {
@@ -835,11 +888,7 @@ impl BitPositionStatus {
         bp.set_castling_white_king_side(self.castling_white_king_side());
         bp.set_castling_black_queen_side(self.castling_black_queen_side());
         bp.set_castling_black_king_side(self.castling_black_king_side());
-        let player_turn = if self.player_turn_white() {
-            square::Color::White
-        } else {
-            square::Color::Black
-        };
+        let player_turn = self.player_turn();
         bp.set_player_turn(player_turn);
         bp.set_pawn_en_passant(decode_pawn_en_passant(self.pawn_en_passant()));
         bp.set_n_half_moves(self.n_half_moves());
