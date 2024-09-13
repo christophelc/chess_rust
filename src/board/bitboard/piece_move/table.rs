@@ -13,7 +13,7 @@ pub const MASK_ROW_7: u64 = MASK_ROW_0 << 56;
 pub const MASK_COL_A: u64 = 0x0101010101010101;
 
 fn check_bit(index: u8, value: u64) -> u8 {
-    if (1 << index) & value == 0 {
+    if (1u64 << index) & value == 0 {
         0
     } else {
         1

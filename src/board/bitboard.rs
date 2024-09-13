@@ -84,7 +84,7 @@ impl BitBoardMove {
         bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
     ) -> Vec<Self> {
         let bit_boards = bit_boards_white_and_black.bit_board(&color);
-        let b_to: u64 = 1 << to;
+        let b_to: u64 = 1u64 << to;
         let mut capture: Option<TypePiece> = None;
         if bit_boards.rooks().value() & b_to == 1 {
             capture = Some(TypePiece::Rook);
@@ -101,8 +101,8 @@ impl BitBoardMove {
             capture = Some(TypePiece::King);
         }
         if type_piece == TypePiece::Pawn
-            && ((color == Color::White && (1 << to) & table::MASK_ROW_7 != 0)
-                || (color == Color::Black && (1 << to) & table::MASK_ROW_0 != 0))
+            && ((color == Color::White && (1u64 << to) & table::MASK_ROW_7 != 0)
+                || (color == Color::Black && (1u64 << to) & table::MASK_ROW_0 != 0))
         {
             vec![
                 Self::new(color, type_piece, from, to, capture, Some(TypePiece::Rook)),
@@ -139,7 +139,7 @@ fn pos2index(u: u64) -> u8 {
     u.trailing_zeros() as u8
 }
 fn index2pos(idx: u8) -> u64 {
-    1 << idx
+    1u64 << idx
 }
 
 impl BitPosition {
@@ -199,13 +199,13 @@ fn update_status(
             let mut capture_en_passant: Option<i8> = None;
             if b_move.start + 16 == b_move.end {
                 if bit_board_pawn_opponent.value()
-                    & (1 << (b_move.start + 7) | 1 << (b_move.start + 9))
+                    & (1u64 << (b_move.start + 7) | 1u64 << (b_move.start + 9))
                     != 0
                 {
                     capture_en_passant = Some((b_move.start + 8) as i8);
                 }
             } else if b_move.end + 16 == b_move.start {
-                if bit_board_pawn_opponent.value() & (1 << (b_move.end + 7) | 1 << (b_move.end + 9))
+                if bit_board_pawn_opponent.value() & (1u64 << (b_move.end + 7) | 1u64 << (b_move.end + 9))
                     != 0
                 {
                     capture_en_passant = Some((b_move.end + 8) as i8);
@@ -284,7 +284,7 @@ impl BitBoardsWhiteAndBlack {
 
         let mut mask_remove: u64 = 0;
         if b_move.capture.is_some() {
-            mask_remove = 1 << b_move.end;
+            mask_remove = 1u64 << b_move.end;
         } else {
             if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
                 mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
@@ -364,7 +364,7 @@ impl BitBoardsWhiteAndBlack {
                         square::Color::White => &mut bit_board_white,
                         square::Color::Black => &mut bit_board_black,
                     };
-                    let byte = 1 << (idx as u8);
+                    let byte = 1u64 << (idx as u8);
                     match piece.type_piece() {
                         square::TypePiece::Rook => bd.rooks |= byte,
                         square::TypePiece::Bishop => bd.bishops |= byte,
@@ -1036,12 +1036,12 @@ mod tests {
         );
         let bit_position = BitBoardsWhiteAndBlack::from(mixed_board);
         assert_eq!(bit_position.bit_board_white.rooks, BitBoard(1)); // Index 0
-        assert_eq!(bit_position.bit_board_white.queens, BitBoard(1 << 27)); // Index 27 (3 * 8 + 3)
-        assert_eq!(bit_position.bit_board_black.king, BitBoard(1 << 63)); // Index 63 (7 * 8 + 7)
-        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(1 << 36)); // Index 36 (4 * 8 + 4)
+        assert_eq!(bit_position.bit_board_white.queens, BitBoard(1u64 << 27)); // Index 27 (3 * 8 + 3)
+        assert_eq!(bit_position.bit_board_black.king, BitBoard(1u64 << 63)); // Index 63 (7 * 8 + 7)
+        assert_eq!(bit_position.bit_board_black.bishops, BitBoard(1u64 << 36)); // Index 36 (4 * 8 + 4)
         assert_eq!(
             bit_position.bit_board_white.pawns,
-            BitBoard(1 << 8 | 1 << 10 | 1 << 15)
+            BitBoard(1u64 << 8 | 1u64 << 10 | 1u64 << 15)
         );
     }
 
@@ -1074,17 +1074,17 @@ mod tests {
             rooks: BitBoard(1),
             knights: BitBoard(0),
             bishops: BitBoard(0),
-            queens: BitBoard(1 << 27),
+            queens: BitBoard(1u64 << 27),
             king: BitBoard(0),
-            pawns: BitBoard(1 << 8 | 1 << 10 | 1 << 15),
+            pawns: BitBoard(1u64 << 8 | 1u64 << 10 | 1u64 << 15),
         };
         let bit_board_black = BitBoards {
             rooks: BitBoard(0),
             knights: BitBoard(0),
-            bishops: BitBoard(1 << 36),
+            bishops: BitBoard(1u64 << 36),
             queens: BitBoard(0),
-            king: BitBoard(1 << 63),
-            pawns: BitBoard(1 << 40),
+            king: BitBoard(1u64 << 63),
+            pawns: BitBoard(1u64 << 40),
         };
         let bit_position = BitBoardsWhiteAndBlack {
             bit_board_white,
@@ -1110,7 +1110,7 @@ mod tests {
 
     #[test]
     fn test_bit_iterator_single_bit() {
-        let bitboard = BitBoard(1 << 5); // Only the 6th bit is set (index 5)
+        let bitboard = BitBoard(1u64 << 5); // Only the 6th bit is set (index 5)
         let mut iterator = BitIterator { bitboard: bitboard };
         assert_eq!(iterator.next(), Some(5));
         assert_eq!(iterator.next(), None);
@@ -1118,7 +1118,7 @@ mod tests {
 
     #[test]
     fn test_bit_iterator_multiple_bits() {
-        let bitboard = BitBoard((1 << 3) | (1 << 5) | (1 << 15)); // Bits set at positions 3, 5, and 15
+        let bitboard = BitBoard((1u64 << 3) | (1u64 << 5) | (1u64 << 15)); // Bits set at positions 3, 5, and 15
         let mut iterator = BitIterator { bitboard: bitboard };
         let expected = vec![3, 5, 15];
         let results: Vec<u8> = iterator.by_ref().collect();
