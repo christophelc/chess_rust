@@ -205,7 +205,8 @@ fn update_status(
                     capture_en_passant = Some((b_move.start + 8) as i8);
                 }
             } else if b_move.end + 16 == b_move.start {
-                if bit_board_pawn_opponent.value() & (1u64 << (b_move.end + 7) | 1u64 << (b_move.end + 9))
+                if bit_board_pawn_opponent.value()
+                    & (1u64 << (b_move.end + 7) | 1u64 << (b_move.end + 9))
                     != 0
                 {
                     capture_en_passant = Some((b_move.end + 8) as i8);

@@ -6,7 +6,7 @@ use std::ops::Index;
 use crate::board::bitboard::BitBoardMove;
 use crate::board::fen::{self, EncodeUserInput, Position};
 use crate::board::square::TypePiece;
-use crate::board::{bitboard, square, Board, ChessBoard};
+use crate::board::{bitboard, square, ChessBoard};
 
 #[derive(Debug)]
 pub enum Command {
@@ -29,12 +29,12 @@ struct PositionStruct {
 #[derive(Debug)]
 struct GoStruct {
     // "go" command, with search parameters
-    depth: Option<u32>,    // Optional depth to search
-    movetime: Option<u32>, // Optional maximum time for the move (in ms)
-    infinite: bool,        // If true, search indefinitely until told to stop
-    wtime: Option<u64>,
-    btime: Option<u64>,
-    search_moves: Vec<String>,
+    depth: Option<u32>,        // Optional depth to search
+    movetime: Option<u32>,     // Optional maximum time for the move (in ms)
+    infinite: bool,            // If true, search indefinitely until told to stop
+    wtime: Option<u64>,        // White time left,
+    btime: Option<u64>,        // Black time left
+    search_moves: Vec<String>, // Restrict search to this moves only
 }
 fn promotion2type_piece(opt_promotion_as_char: Option<char>) -> Result<Option<TypePiece>, String> {
     match opt_promotion_as_char {
@@ -226,7 +226,7 @@ fn parse_go(go_command: String) -> Result<Command, CommandError> {
         btime: None,
         search_moves: vec![],
     };
-    for i in 1..go_vec.len() {
+    for i in (1..go_vec.len()).step_by(2) {
         match go_vec[i] {
             "depth" => {
                 parsed.depth = Some(go_vec[i + 1].parse().unwrap());
@@ -347,13 +347,13 @@ impl Configuration {
             event @ Event::Moves(moves) => match moves_validation(moves) {
                 Ok(valid_moves) => {
                     if let Some(position) = self.opt_position {
-                        let mut result: Result<(), String> = Ok(());
                         let mut bit_position = bitboard::BitPosition::from(position);
                         for m in valid_moves {
                             let color = bit_position.bit_position_status().player_turn();
                             match check_move(color, m, &bit_position.bit_boards_white_and_black()) {
                                 Err(err) => {
-                                    result = Err(err);
+                                    result =
+                                        Err(HandleEventError::new(event.clone(), err.to_string()));
                                     break;
                                 }
                                 Ok(b_move) => {
@@ -375,7 +375,7 @@ impl Configuration {
             Event::Btime(btime) => self.parameters.opt_btime = Some(*btime),
             event @ Event::SearchMoves(search_moves) => match moves_validation(search_moves) {
                 Ok(valid_moves) => self.parameters.search_moves = valid_moves,
-                Err(err) => result = Err(HandleEventError::new(event.clone(), err)),
+                Err(err) => result = Err(HandleEventError::new(event.clone(), err.to_string())),
             },
             Event::Stop => {
                 match self.opt_position {
@@ -521,15 +521,15 @@ fn write_err(stdout: &mut Stdout, err: String) -> Result<(), io::Error> {
     res
 }
 
-pub fn uci_loop() {
-    let mut stdin = io::stdin();
+// let mut uci_read = UciReadWrapper::new(&mut stdin);
+// let mut configuration = Configuration::new();
+pub fn uci_loop<T: UciRead>(mut uci_reader: T, configuration: &mut Configuration) {
     let mut stdout = io::stdout();
 
-    let mut configuration = Configuration::new();
     let mut parameters_before = Configuration::new().parameters;
 
     loop {
-        let input = uci_read(&mut stdin);
+        let input = uci_reader.uci_read();
         let command = Configuration::parse_input(&input).expect("Invalid command");
         if configuration.execute_command(command, &mut stdout) {
             break;
@@ -542,18 +542,53 @@ pub fn uci_loop() {
     }
 }
 
-fn uci_read(stdin: &mut Stdin) -> String {
-    let mut input = String::new();
-    stdin
-        .lock()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    input.trim().to_string()
+pub trait UciRead {
+    fn uci_read(&mut self) -> String;
+}
+struct UciReadWrapper<'a> {
+    stdin: &'a mut Stdin,
+}
+impl<'a> UciReadWrapper<'a> {
+    pub fn new(stdin: &'a mut Stdin) -> Self {
+        UciReadWrapper { stdin }
+    }
+}
+
+impl<'a> UciRead for UciReadWrapper<'a> {
+    fn uci_read(&mut self) -> String {
+        let mut input = String::new();
+        self.stdin
+            .lock()
+            .read_line(&mut input)
+            .expect("Failed to read line");
+        input.trim().to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct UciReadTestWrapper<'a> {
+        idx: usize,
+        inputs: &'a [&'a str],
+    }
+    impl<'a> UciReadTestWrapper<'a> {
+        pub fn new(inputs: &'a [&str]) -> Self {
+            UciReadTestWrapper { idx: 0, inputs }
+        }
+    }
+    impl<'a> UciRead for UciReadTestWrapper<'a> {
+        fn uci_read(&mut self) -> String {
+            if self.idx < self.inputs.len() {
+                let result = self.inputs[self.idx];
+                self.idx += 1;
+                result.to_string()
+            } else {
+                "quit".to_string()
+            }
+        }
+    }
 
     #[test]
     fn test_uci_input_start_pos() {
@@ -561,7 +596,6 @@ mod tests {
         let mut stdout = io::stdout();
         let input = "position startpos";
         let command = Configuration::parse_input(&input).expect("Invalid command");
-        println!("{:?}", command);
         let is_quit = configuration.execute_command(command, &mut stdout);
         assert!(!is_quit);
         let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
@@ -574,16 +608,70 @@ mod tests {
         let mut stdout = io::stdout();
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let command = Configuration::parse_input(&input).expect("Invalid command");
-        println!("{:?}", command);
         let is_quit = configuration.execute_command(command, &mut stdout);
         assert!(!is_quit);
-        let expected: Vec<LongAlgebricNotationMove> = vec!["e2e4", "e7e5", "g1f3"]
-            .iter()
-            .map(|m| LongAlgebricNotationMove::build_from_str(m).unwrap())
-            .collect();
         let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
         let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen_str);
+    }
+    #[test]
+    fn test_uci_input_fen_pos() {
+        let mut configuration = Configuration::new();
+        let mut stdout = io::stdout();
+        let input = format!("position fen {}", fen::FEN_START_POSITION);
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        let is_quit = configuration.execute_command(command, &mut stdout);
+        assert!(!is_quit);
+        let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
+            .expect("Failed to encode position");
+        assert_eq!(fen, fen::FEN_START_POSITION);
+    }
+    #[test]
+    fn test_uci_input_fen_pos_with_moves() {
+        let mut configuration = Configuration::new();
+        let mut stdout = io::stdout();
+        let input = format!(
+            "position fen {} moves e2e4 e7e5 g1f3",
+            fen::FEN_START_POSITION
+        );
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        let is_quit = configuration.execute_command(command, &mut stdout);
+        assert!(!is_quit);
+        let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
+        let fen = fen::FEN::encode(&configuration.opt_position.unwrap())
+            .expect("Failed to encode position");
+        assert_eq!(fen, fen_str);
+    }
+    #[test]
+    fn test_uci_input_default_parameters() {
+        let mut configuration = Configuration::new();
+        let mut stdout = io::stdout();
+        let input = "position startpos";
+        let command = Configuration::parse_input(&input).expect("Invalid command");
+        let is_quit = configuration.execute_command(command, &mut stdout);
+        assert!(!is_quit);
+        let parameters = configuration.parameters;
+        let expected = Parameters::default();
+        assert_eq!(parameters, expected)
+    }
+    #[test]
+    fn test_uci_input_modified_parameters() {
+        let mut configuration = Configuration::new();
+        let inputs = vec![
+            "position startpos",
+            "go depth 3 movetime 5000 wtime 3600000 btime 3600001",
+        ];
+        let uci_reader = UciReadTestWrapper::new(inputs.as_slice());
+        uci_loop(uci_reader, &mut configuration);
+        let parameters = configuration.parameters;
+        let expected = Parameters {
+            opt_depth: Some(3),
+            opt_time_per_move_in_ms: Some(5000),
+            opt_wtime: Some(3600000),
+            opt_btime: Some(3600001),
+            search_moves: vec![],
+        };
+        assert_eq!(parameters, expected)
     }
 }
