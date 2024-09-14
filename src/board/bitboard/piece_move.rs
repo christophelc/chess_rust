@@ -1095,7 +1095,8 @@ mod tests {
         let king_position = 62; // G8
         let bit_board = BitBoard(0);
         let result = gen_moves_for_king_except_castle(king_position, &bit_board);
-        let expected_moves = (1u64 << 61) | (1u64 << 63) | (1u64 << 53) | (1u64 << 54) | (1u64 << 55); // Moves: F8, H8, F7, G7, H7
+        let expected_moves =
+            (1u64 << 61) | (1u64 << 63) | (1u64 << 53) | (1u64 << 54) | (1u64 << 55); // Moves: F8, H8, F7, G7, H7
         assert_eq!(result, expected_moves);
     }
 
@@ -1110,8 +1111,14 @@ mod tests {
 
         let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
         // Moves from d4 are to e2, f3, f5, e6, c6, b5, b3, c2 (calculating their respective bit positions)
-        let expected_moves =
-            1u64 << 10 | 1u64 << 12 | 1u64 << 17 | 1u64 << 21 | 1u64 << 33 | 1u64 << 37 | 1u64 << 42 | 1u64 << 44;
+        let expected_moves = 1u64 << 10
+            | 1u64 << 12
+            | 1u64 << 17
+            | 1u64 << 21
+            | 1u64 << 33
+            | 1u64 << 37
+            | 1u64 << 42
+            | 1u64 << 44;
         assert_eq!(moves.moves().0, expected_moves);
     }
 
@@ -1148,7 +1155,8 @@ mod tests {
 
         let moves = gen_moves_for_knight(knight_index, &own_pieces, &opponent_board).unwrap();
         // Adjusted for blockages, valid moves are to e2, f3, f5, c6, b5, b3, c2
-        let expected_moves = 1u64 << 10 | 1u64 << 12 | 1u64 << 21 | 1u64 << 33 | 1u64 << 37 | 1u64 << 42;
+        let expected_moves =
+            1u64 << 10 | 1u64 << 12 | 1u64 << 21 | 1u64 << 33 | 1u64 << 37 | 1u64 << 42;
         assert_eq!(moves.moves().value(), expected_moves);
     }
 
@@ -1161,8 +1169,14 @@ mod tests {
 
         let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_pieces).unwrap();
         // Includes potential captures, valid moves are e2, f3, f5, e6, c6, b5, b3, c2
-        let expected_moves =
-            1u64 << 10 | 1u64 << 12 | 1u64 << 17 | 1u64 << 21 | 1u64 << 33 | 1u64 << 37 | 1u64 << 42 | 1u64 << 44;
+        let expected_moves = 1u64 << 10
+            | 1u64 << 12
+            | 1u64 << 17
+            | 1u64 << 21
+            | 1u64 << 33
+            | 1u64 << 37
+            | 1u64 << 42
+            | 1u64 << 44;
         assert_eq!(moves.moves().0, expected_moves); // Includes potential captures
     }
 
@@ -1174,7 +1188,8 @@ mod tests {
         let index = 8; // Position of the rook at the start of the second row
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let expected = 254 << 8 | (1 | 1u64 << 16 | 1u64 << 24 | 1u64 << 32 | 1u64 << 40 | 1u64 << 48 | 1u64 << 56);
+        let expected = 254 << 8
+            | (1 | 1u64 << 16 | 1u64 << 24 | 1u64 << 32 | 1u64 << 40 | 1u64 << 48 | 1u64 << 56);
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1267,7 +1282,8 @@ mod tests {
         let index = 18; // Rook on the third row, third column
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(1u64 << 16 | 1u64 << 23);
-        let expected = 251u64 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
+        let expected =
+            251u64 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1280,7 +1296,8 @@ mod tests {
         let index = 24; // Rook at the start of the fourth row
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
-        let expected = 254 << 24 | (1 | 1u64 << 8 | 1u64 << 16 | 1u64 << 32 | 1u64 << 40 | 1u64 << 48 | 1u64 << 56);
+        let expected = 254 << 24
+            | (1 | 1u64 << 8 | 1u64 << 16 | 1u64 << 32 | 1u64 << 40 | 1u64 << 48 | 1u64 << 56);
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1371,8 +1388,14 @@ mod tests {
         let index = 20;
         let bit_board = bitboard::BitBoard(1u64 << index | 1u64 << 34);
         let bit_board_opponent = bitboard::BitBoard(1u64 << 6);
-        let expected =
-            1u64 << 2 | (1u64 << 6 | 1u64 << 11 | 1u64 << 13 | 1u64 << 27 | 1u64 << 29 | 1u64 << 38 | 1u64 << 47);
+        let expected = 1u64 << 2
+            | (1u64 << 6
+                | 1u64 << 11
+                | 1u64 << 13
+                | 1u64 << 27
+                | 1u64 << 29
+                | 1u64 << 38
+                | 1u64 << 47);
         let result = gen_moves_for_bishop(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1649,7 +1672,8 @@ mod tests {
             bit_position.bit_position_status(),
         );
         let result = moves.get(0).unwrap().moves().value();
-        let expected: u64 = 1u64 << 3 | 1u64 << 5 | 1u64 << 11 | 1u64 << 12 | 1u64 << 13 | 1u64 << 2 | 1u64 << 6;
+        let expected: u64 =
+            1u64 << 3 | 1u64 << 5 | 1u64 << 11 | 1u64 << 12 | 1u64 << 13 | 1u64 << 2 | 1u64 << 6;
         assert_eq!(result, expected)
     }
 }

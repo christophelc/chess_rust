@@ -312,8 +312,13 @@ mod tests {
         let index = 0;
         let blockers = 0;
         let moves = bishop_moves(index, blockers);
-        let expected =
-            (1u64 << 9) | (1u64 << 18) | (1u64 << 27) | (1u64 << 36) | (1u64 << 45) | (1u64 << 54) | (1u64 << 63);
+        let expected = (1u64 << 9)
+            | (1u64 << 18)
+            | (1u64 << 27)
+            | (1u64 << 36)
+            | (1u64 << 45)
+            | (1u64 << 54)
+            | (1u64 << 63);
         assert_eq!(moves, expected);
     }
 
@@ -322,8 +327,13 @@ mod tests {
         let index = 63;
         let blockers = 0;
         let moves = bishop_moves(index, blockers);
-        let expected =
-            (1u64 << 54) | (1u64 << 45) | (1u64 << 36) | (1u64 << 27) | (1u64 << 18) | (1u64 << 9) | (1u64 << 0);
+        let expected = (1u64 << 54)
+            | (1u64 << 45)
+            | (1u64 << 36)
+            | (1u64 << 27)
+            | (1u64 << 18)
+            | (1u64 << 9)
+            | (1u64 << 0);
         assert_eq!(moves, expected);
     }
 
@@ -338,7 +348,13 @@ mod tests {
             | (1u64 << 37)
             | (1u64 << 46)
             | (1u64 << 55)
-            | (1u64 << 56 | 1u64 << 49 | 1u64 << 42 | 1u64 << 35 | 1u64 << 21 | 1u64 << 14 | 1u64 << 7);
+            | (1u64 << 56
+                | 1u64 << 49
+                | 1u64 << 42
+                | 1u64 << 35
+                | 1u64 << 21
+                | 1u64 << 14
+                | 1u64 << 7);
         assert_eq!(moves, expected);
     }
 
@@ -364,8 +380,10 @@ mod tests {
         let index = 36;
         let blockers = (1u64 << 27) | (1u64 << 45);
         let moves = bishop_moves(index, blockers);
-        let expected =
-            (1u64 << 27) | (1u64 << 45) | (1u64 << 15) | (1u64 << 22 | 1u64 << 29 | 1u64 << 43 | 1u64 << 50 | 1u64 << 57);
+        let expected = (1u64 << 27)
+            | (1u64 << 45)
+            | (1u64 << 15)
+            | (1u64 << 22 | 1u64 << 29 | 1u64 << 43 | 1u64 << 50 | 1u64 << 57);
         assert_eq!(moves, expected);
     }
 }
