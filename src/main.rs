@@ -1,4 +1,5 @@
 mod board;
+mod engine;
 mod uci;
 use board::bitboard;
 use board::bitboard::BitBoard;

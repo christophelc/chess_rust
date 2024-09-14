@@ -130,6 +130,7 @@ impl BitBoardMove {
     }
 }
 
+#[derive(PartialEq)]
 pub struct BitPosition {
     bit_boards_white_and_black: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,
@@ -232,7 +233,7 @@ fn update_status(
     bit_position_status
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BitBoardsWhiteAndBlack {
     bit_board_white: BitBoards,
     bit_board_black: BitBoards,
@@ -473,7 +474,7 @@ impl BitOrAssign<u64> for BitBoard {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BitBoards {
     rooks: BitBoard,
     bishops: BitBoard,
@@ -644,7 +645,7 @@ impl BitBoards {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BitPositionStatus {
     flags: u8,
     pawn_en_passant: i8, // 1 byte for the en passant square (-1 if None, 0-63 if Some)

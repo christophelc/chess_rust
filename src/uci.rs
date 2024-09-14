@@ -7,6 +7,7 @@ use crate::board::bitboard::BitBoardMove;
 use crate::board::fen::{self, EncodeUserInput, Position};
 use crate::board::square::TypePiece;
 use crate::board::{bitboard, square, ChessBoard};
+use crate::engine;
 
 #[derive(Debug)]
 pub enum Command {
@@ -26,7 +27,7 @@ struct PositionStruct {
     moves: Vec<String>,  // A list of moves played after the position
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct GoStruct {
     // "go" command, with search parameters
     depth: Option<u32>,        // Optional depth to search
@@ -137,18 +138,26 @@ pub struct Parameters {
     search_moves: Vec<LongAlgebricNotationMove>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Configuration {
     parameters: Parameters,
     opt_position: Option<Position>,
 }
-impl Configuration {
-    pub fn new() -> Self {
-        Configuration {
-            parameters: Parameters::default(),
-            opt_position: None,
-        }
+impl PartialEq for Configuration {
+    fn eq(&self, other: &Self) -> bool {
+        let equal_opt_position = match (self.opt_position, other.opt_position) {
+            (None, None) => true,
+            (Some(pos), Some(pos_other)) => {
+                let bit_position = bitboard::BitPosition::from(pos);
+                let bit_position_other = bitboard::BitPosition::from(pos_other);
+                bit_position == bit_position_other
+            }
+            _ => false,
+        };
+        self.parameters == other.parameters && equal_opt_position
     }
+}
+impl Configuration {
     fn execute_command(&mut self, command: Command, stdout: &mut Stdout) -> bool {
         let mut is_quit = false;
         let events = self.handle_command(command);
@@ -218,14 +227,7 @@ fn parse_go(go_command: String) -> Result<Command, CommandError> {
     let mut result = true;
     let go_vec = go_command.split_whitespace().collect::<Vec<&str>>();
     // TODO: use trait default
-    let mut parsed = GoStruct {
-        depth: None,
-        movetime: None,
-        infinite: false,
-        wtime: None,
-        btime: None,
-        search_moves: vec![],
-    };
+    let mut parsed = GoStruct::default();
     for i in (1..go_vec.len()).step_by(2) {
         match go_vec[i] {
             "depth" => {
@@ -522,23 +524,20 @@ fn write_err(stdout: &mut Stdout, err: String) -> Result<(), io::Error> {
 }
 
 // let mut uci_read = UciReadWrapper::new(&mut stdin);
-// let mut configuration = Configuration::new();
-pub fn uci_loop<T: UciRead>(mut uci_reader: T, configuration: &mut Configuration) {
+pub fn uci_loop<T: UciRead, E: engine::Engine>(mut uci_reader: T, e: &mut E) {
     let mut stdout = io::stdout();
-
-    let mut parameters_before = Configuration::new().parameters;
 
     loop {
         let input = uci_reader.uci_read();
         let command = Configuration::parse_input(&input).expect("Invalid command");
+        let mut configuration = e.configuration().clone();
         if configuration.execute_command(command, &mut stdout) {
             break;
         }
         // check for configuration change
-        if configuration.parameters != parameters_before {
-            println!("The parameters have changed");
+        if configuration != *e.configuration() {
+            e.update(&configuration);
         }
-        parameters_before = configuration.parameters.clone();
     }
 }
 
@@ -567,6 +566,8 @@ impl<'a> UciRead for UciReadWrapper<'a> {
 
 #[cfg(test)]
 mod tests {
+    use engine::Engine;
+
     use super::*;
 
     struct UciReadTestWrapper<'a> {
@@ -592,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_uci_input_start_pos() {
-        let mut configuration = Configuration::new();
+        let mut configuration = Configuration::default();
         let mut stdout = io::stdout();
         let input = "position startpos";
         let command = Configuration::parse_input(&input).expect("Invalid command");
@@ -604,7 +605,7 @@ mod tests {
     }
     #[test]
     fn test_uci_input_start_pos_with_moves() {
-        let mut configuration = Configuration::new();
+        let mut configuration = Configuration::default();
         let mut stdout = io::stdout();
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let command = Configuration::parse_input(&input).expect("Invalid command");
@@ -617,7 +618,7 @@ mod tests {
     }
     #[test]
     fn test_uci_input_fen_pos() {
-        let mut configuration = Configuration::new();
+        let mut configuration = Configuration::default();
         let mut stdout = io::stdout();
         let input = format!("position fen {}", fen::FEN_START_POSITION);
         let command = Configuration::parse_input(&input).expect("Invalid command");
@@ -629,7 +630,7 @@ mod tests {
     }
     #[test]
     fn test_uci_input_fen_pos_with_moves() {
-        let mut configuration = Configuration::new();
+        let mut configuration = Configuration::default();
         let mut stdout = io::stdout();
         let input = format!(
             "position fen {} moves e2e4 e7e5 g1f3",
@@ -645,7 +646,7 @@ mod tests {
     }
     #[test]
     fn test_uci_input_default_parameters() {
-        let mut configuration = Configuration::new();
+        let mut configuration = Configuration::default();
         let mut stdout = io::stdout();
         let input = "position startpos";
         let command = Configuration::parse_input(&input).expect("Invalid command");
@@ -657,14 +658,13 @@ mod tests {
     }
     #[test]
     fn test_uci_input_modified_parameters() {
-        let mut configuration = Configuration::new();
         let inputs = vec![
             "position startpos",
             "go depth 3 movetime 5000 wtime 3600000 btime 3600001",
         ];
         let uci_reader = UciReadTestWrapper::new(inputs.as_slice());
-        uci_loop(uci_reader, &mut configuration);
-        let parameters = configuration.parameters;
+        let mut engine_random = engine::EngineRandom::new();
+        uci_loop(uci_reader, &mut engine_random);
         let expected = Parameters {
             opt_depth: Some(3),
             opt_time_per_move_in_ms: Some(5000),
@@ -672,6 +672,6 @@ mod tests {
             opt_btime: Some(3600001),
             search_moves: vec![],
         };
-        assert_eq!(parameters, expected)
+        assert_eq!(engine_random.configuration().parameters, expected)
     }
 }
