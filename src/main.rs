@@ -1,15 +1,11 @@
 mod board;
-mod engine;
+mod game;
 mod uci;
-use board::bitboard;
-use board::bitboard::BitBoard;
 use board::bitboard::BitPosition;
 use board::coord;
 use board::fen;
 use board::fen::Position;
-use board::square;
 use board::Board;
-use board::ChessBoard;
 use fen::EncodeUserInput;
 
 use board::bitboard::piece_move;

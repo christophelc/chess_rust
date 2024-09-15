@@ -3,11 +3,9 @@ pub mod piece_move;
 use super::{
     coord,
     fen::{EncodeUserInput, Position, PositionStatus},
-    square::{self, Switch},
-    Board, ChessBoard,
+    square, Board, ChessBoard,
 };
 use piece_move::table;
-
 use std::{fmt, ops::BitOrAssign};
 
 #[derive(Debug)]

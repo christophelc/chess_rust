@@ -1,8 +1,4 @@
-use super::{
-    MASK_ROW_0, MASK_ROW_1, MASK_ROW_2, MASK_ROW_3, MASK_ROW_4, MASK_ROW_5, MASK_ROW_6, MASK_ROW_7,
-};
 use crate::board::bitboard;
-use core::num;
 
 #[rustfmt::skip]
 const MASK_BISHOP_DIAG1: [(u64, u64); 64] = [

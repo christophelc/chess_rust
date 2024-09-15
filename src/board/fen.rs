@@ -3,7 +3,7 @@ use crate::board::square;
 
 pub const FEN_START_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Position {
     chessboard: ChessBoard,
     status: PositionStatus,
@@ -390,8 +390,7 @@ mod tests {
 
     #[test]
     fn test_decode_starting_position() {
-        let fen = FEN_START_POSITION;
-        let position = FEN::decode(fen).expect("Failed to decode FEN");
+        let position = Position::build_initial_position();
 
         // Check if the pieces are in the correct initial positions
         assert_eq!(
@@ -571,7 +570,6 @@ mod tests {
     }
 }
 
-use super::bitboard::piece_move::GenMoves;
 use super::ChessBoard;
 use coord::Coord;
 
