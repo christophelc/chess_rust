@@ -5,7 +5,6 @@ use table::table_rook;
 use super::BitBoard;
 use super::BitBoardsWhiteAndBlack;
 use super::BitPositionStatus;
-use crate::board;
 use crate::board::square::Switch;
 use crate::board::{
     bitboard,
@@ -80,17 +79,6 @@ impl Attackers {
             && self.bishops == 0
             && self.pawns == 0
             && self.king == 0
-    }
-}
-
-impl board::fen::Position {
-    /// check status from a position
-    pub fn check_status(&self) -> CheckStatus {
-        let bit_position = board::bitboard::BitPosition::from(self.clone());
-        bit_position.bit_boards_white_and_black().check_status(
-            &self.status().player_turn(),
-            bit_position.bit_position_status(),
-        )
     }
 }
 
@@ -251,10 +239,10 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         color: &square::Color,
         bit_position_status: &bitboard::BitPositionStatus,
     ) -> CheckStatus {
-        let (bit_board, bit_board_opponent) = if *color == square::Color::White {
-            (self.bit_board_white(), self.bit_board_black())
+        let bit_board = if *color == square::Color::White {
+            self.bit_board_white()
         } else {
-            (self.bit_board_black(), self.bit_board_white())
+            self.bit_board_black()
         };
         let king_index = bit_board.king().index();
         let attackers = self.attackers(true, king_index, color, bit_position_status);
@@ -503,11 +491,7 @@ fn gen_moves_for_piece(
             &bit_board.concat_bit_boards(),
             &bit_board_opponent.concat_bit_boards(),
         ),
-        &square::TypePiece::Knight => gen_moves_for_knight(
-            index,
-            &bit_board.concat_bit_boards(),
-            &bit_board_opponent.concat_bit_boards(),
-        ),
+        &square::TypePiece::Knight => gen_moves_for_knight(index, &bit_board.concat_bit_boards()),
         &square::TypePiece::King => {
             let moves =
                 gen_moves_for_king_except_castle(index, &bit_board_opponent.concat_bit_boards())
@@ -660,11 +644,7 @@ fn gen_moves_for_king_except_castle(index: u8, bit_board: &bitboard::BitBoard) -
     moves_bitboard & !bit_board.value()
 }
 
-fn gen_moves_for_knight(
-    index: u8,
-    bit_board: &bitboard::BitBoard,
-    bit_board_opponent: &bitboard::BitBoard,
-) -> Option<PieceMoves> {
+fn gen_moves_for_knight(index: u8, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
     let deltas: [(i8, i8); 8] = [
         (-1, -2),
         (-1, 2),
@@ -906,7 +886,19 @@ impl PieceMoves {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::board;
     use bitboard::BitBoard;
+
+    impl board::fen::Position {
+        /// check status from a position
+        pub fn check_status(&self) -> CheckStatus {
+            let bit_position = board::bitboard::BitPosition::from(self.clone());
+            bit_position.bit_boards_white_and_black().check_status(
+                &self.status().player_turn(),
+                bit_position.bit_position_status(),
+            )
+        }
+    }
 
     fn list_index(bit_board: &bitboard::BitBoard) -> Vec<u8> {
         let mut v = Vec::new();
@@ -1104,9 +1096,8 @@ mod tests {
     fn knight_center_moves() {
         let knight_index = 27u8; // Position at center of the board (d4)
         let empty_board = BitBoard::new(0);
-        let opponent_board = BitBoard::new(0);
 
-        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Moves from d4 are to e2, f3, f5, e6, c6, b5, b3, c2 (calculating their respective bit positions)
         let expected_moves = 1u64 << 10
             | 1u64 << 12
@@ -1123,9 +1114,8 @@ mod tests {
     fn knight_corner_moves() {
         let knight_index = 0u8; // Position at a1
         let empty_board = BitBoard::new(0);
-        let opponent_board = BitBoard::new(0);
 
-        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Moves from a1 are to b3 and c2
         let expected_moves = 1u64 << 10 | 1u64 << 17;
         assert_eq!(moves.moves().0, expected_moves); // Moves from a1 should be limited to b3 and c2
@@ -1135,9 +1125,8 @@ mod tests {
     fn knight_edge_moves() {
         let knight_index = 8u8; // Position at a2
         let empty_board = BitBoard::new(0);
-        let opponent_board = BitBoard::new(0);
 
-        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_board).unwrap();
+        let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Moves from a2 are to b4, c3, and c1
         let expected_moves = 1u64 << 2 | 1u64 << 18 | 1u64 << 25;
         assert_eq!(moves.moves().0, expected_moves); // Valid moves from a2
@@ -1148,9 +1137,8 @@ mod tests {
         let knight_index = 27u8; // d4 again for center moves
                                  // Block e6 and c2 with own pieces
         let own_pieces = BitBoard::new(1u64 << 17 | 1u64 << 44); // Block e6 and b3
-        let opponent_board = BitBoard::new(0);
 
-        let moves = gen_moves_for_knight(knight_index, &own_pieces, &opponent_board).unwrap();
+        let moves = gen_moves_for_knight(knight_index, &own_pieces).unwrap();
         // Adjusted for blockages, valid moves are to e2, f3, f5, c6, b5, b3, c2
         let expected_moves =
             1u64 << 10 | 1u64 << 12 | 1u64 << 21 | 1u64 << 33 | 1u64 << 37 | 1u64 << 42;
@@ -1162,9 +1150,8 @@ mod tests {
         let knight_index = 27u8; // d4
         let empty_board = BitBoard::new(0);
         // Block e6 and c2 with own pieces
-        let opponent_pieces = BitBoard::new(1u64 << 17 | 1u64 << 44); // Block e6 and b3
 
-        let moves = gen_moves_for_knight(knight_index, &empty_board, &opponent_pieces).unwrap();
+        let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Includes potential captures, valid moves are e2, f3, f5, e6, c6, b5, b3, c2
         let expected_moves = 1u64 << 10
             | 1u64 << 12

@@ -2,8 +2,8 @@ pub mod piece_move;
 
 use super::{
     coord,
-    fen::{EncodeUserInput, Position, PositionStatus},
-    square, Board, ChessBoard,
+    fen::{Position, PositionStatus},
+    square, ChessBoard,
 };
 use piece_move::table;
 use std::{fmt, ops::BitOrAssign};
@@ -136,9 +136,6 @@ pub struct BitPosition {
 
 fn pos2index(u: u64) -> u8 {
     u.trailing_zeros() as u8
-}
-fn index2pos(idx: u8) -> u64 {
-    1u64 << idx
 }
 
 impl BitPosition {
@@ -994,7 +991,7 @@ mod tests {
         assert_eq!(bit_position.bit_board_black.pawns, BitBoard(0));
     }
 
-    use crate::board::{fen, Board};
+    use crate::board::fen::{self, EncodeUserInput};
 
     #[test]
     fn test_bit_position_from_mixed_board() {

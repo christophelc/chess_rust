@@ -1,14 +1,9 @@
 pub mod command;
 pub mod event;
 pub mod notation;
-use std::io::{self, BufRead, Stdin, Stdout, Write};
-
+use crate::game::{self, configuration};
 use command::parser;
-
-use crate::game::{
-    self,
-    configuration::{self, Configuration},
-};
+use std::io::{self, BufRead, Stdin, Stdout, Write};
 
 pub enum UciResult {
     Quit,
@@ -25,7 +20,6 @@ fn best_move_action(
     res
 }
 
-// let mut uci_read = UciReadWrapper::new(&mut stdin);
 pub async fn uci_loop<T: UciRead>(mut uci_reader: T, game_actor: &game::GameActor) {
     let mut stdout = io::stdout();
 
@@ -42,7 +36,7 @@ pub async fn uci_loop<T: UciRead>(mut uci_reader: T, game_actor: &game::GameActo
 pub trait UciRead {
     fn uci_read(&mut self) -> String;
 }
-struct UciReadWrapper<'a> {
+pub struct UciReadWrapper<'a> {
     stdin: &'a mut Stdin,
 }
 impl<'a> UciReadWrapper<'a> {
@@ -97,7 +91,7 @@ mod tests {
         let command = parser.parse_input().expect("Invalid command");
         (game_actor, command)
     }
-    async fn get_configuration(game_actor: &GameActor) -> Configuration {
+    async fn get_configuration(game_actor: &GameActor) -> configuration::Configuration {
         let result = game_actor.send(game::GetConfiguration).await.unwrap();
         result.unwrap()
     }
@@ -116,7 +110,7 @@ mod tests {
         assert_eq!(fen, fen::FEN_START_POSITION);
     }
 
-    //#[actix::test]
+    #[actix::test]
     async fn test_uci_input_start_pos_with_moves() {
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let mut stdout = io::stdout();
@@ -130,6 +124,7 @@ mod tests {
             .expect("Failed to encode position");
         assert_eq!(fen, fen_str);
     }
+
     #[actix::test]
     async fn test_uci_input_fen_pos() {
         let input = format!("position fen {}", fen::FEN_START_POSITION);
@@ -208,7 +203,7 @@ mod tests {
     }
 }
 
-async fn execute_command(
+pub async fn execute_command(
     game_actor: &game::GameActor,
     command: command::Command,
     stdout: &mut Stdout,

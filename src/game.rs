@@ -14,7 +14,7 @@ pub struct GetBestMove;
 impl Handler<GetBestMove> for Game {
     type Result = Option<LongAlgebricNotationMove>;
 
-    fn handle(&mut self, msg: GetBestMove, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: GetBestMove, _ctx: &mut Self::Context) -> Self::Result {
         self.best_move
     }
 }
@@ -26,7 +26,7 @@ pub struct GetConfiguration;
 impl Handler<GetConfiguration> for Game {
     type Result = Result<configuration::Configuration, ()>;
 
-    fn handle(&mut self, msg: GetConfiguration, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: GetConfiguration, _ctx: &mut Self::Context) -> Self::Result {
         Ok(self.configuration().clone())
     }
 }
@@ -63,9 +63,6 @@ impl Game {
     pub fn configuration(&self) -> &configuration::Configuration {
         &self.configuration
     }
-    pub fn set_configuration(&mut self, configuration: configuration::Configuration) {
-        self.configuration = configuration;
-    }
 }
 impl Actor for Game {
     type Context = Context<Self>;
@@ -74,7 +71,7 @@ impl Actor for Game {
 impl Handler<UciCommand> for Game {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, msg: UciCommand, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UciCommand, _ctx: &mut Self::Context) -> Self::Result {
         let mut result = Ok(());
         match msg {
             UciCommand::Btime(time) => {

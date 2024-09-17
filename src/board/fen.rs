@@ -103,12 +103,6 @@ impl PositionStatus {
 }
 
 impl Position {
-    fn new() -> Self {
-        Position {
-            chessboard: ChessBoard::new(),
-            status: PositionStatus::new(),
-        }
-    }
     pub fn build(chessboard: ChessBoard, status: PositionStatus) -> Self {
         Position { chessboard, status }
     }

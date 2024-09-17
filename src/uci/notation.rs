@@ -23,11 +23,11 @@ impl LongAlgebricNotationMove {
             let to_index = square_to_index(to_square);
             let opt_promotion = promotion2type_piece(move_str.chars().nth(4))?;
             if from_index < 64 && to_index < 64 {
-                result = Ok(LongAlgebricNotationMove {
-                    start: from_index,
-                    end: to_index,
+                result = Ok(LongAlgebricNotationMove::new(
+                    from_index,
+                    to_index,
                     opt_promotion,
-                });
+                ));
             }
         }
         result
@@ -55,9 +55,6 @@ fn index_to_string(index: u8) -> String {
     let row = index / 8;
     let col = index % 8;
     format!("{}{}", col, row)
-}
-fn col_as_char(col: u8) -> char {
-    (b'a' + col) as char
 }
 
 fn square_to_index(square: &str) -> u8 {

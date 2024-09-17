@@ -112,7 +112,7 @@ impl Event {
     }
 }
 
-pub fn moves_validation(
+fn moves_validation(
     moves: &Vec<String>,
 ) -> Result<Vec<notation::LongAlgebricNotationMove>, String> {
     let mut valid_moves: Vec<notation::LongAlgebricNotationMove> = vec![];

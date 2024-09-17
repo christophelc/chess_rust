@@ -52,12 +52,6 @@ impl Square {
     pub fn build_piece(type_piece: TypePiece, color: Color) -> Square {
         Square::NonEmpty(Piece { color, type_piece })
     }
-    pub fn is_empty(&self) -> bool {
-        *self == Square::Empty
-    }
-    pub fn non_empty(&self) -> bool {
-        !self.is_empty()
-    }
 }
 
 use std::fmt;

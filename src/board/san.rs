@@ -1,7 +1,10 @@
 use super::{bitboard, square::TypePiece};
 
-const LANG_FR: usize = 0;
-const LANG_EN: usize = 1;
+#[derive(Clone)]
+pub enum Lang {
+    LangFr = 0,
+    LangEn = 1,
+}
 const SAN_ROOK: [char; 2] = ['T', 'R'];
 const SAN_BISHOP: [char; 2] = ['F', 'B'];
 const SAN_KNIGHT: [char; 2] = ['C', 'N'];
@@ -29,7 +32,8 @@ fn as_str(row: u8, col: u8, capture: String) -> String {
     format!("{}{}{}", capture, col_as_char(col), (row + 1))
 }
 
-fn piece_to_char(type_piece: TypePiece, language: usize) -> Option<char> {
+fn piece_to_char(type_piece: TypePiece, lang: &Lang) -> Option<char> {
+    let language = lang.clone() as usize;
     match type_piece {
         TypePiece::Rook => Some(SAN_ROOK[language]),
         TypePiece::Bishop => Some(SAN_BISHOP[language]),
@@ -40,17 +44,12 @@ fn piece_to_char(type_piece: TypePiece, language: usize) -> Option<char> {
     }
 }
 
+// we need all the moves to detect ambiguous short notation moves
 pub fn san_to_str(
     move_to_translate: &bitboard::BitBoardMove,
-    moves: Vec<bitboard::BitBoardMove>,
-    language: usize,
+    moves: &Vec<bitboard::BitBoardMove>,
+    lang: &Lang,
 ) -> SAN {
-    assert!(
-        language < 2,
-        "language can be either 0 or 1. Here we have: {}",
-        language
-    );
-
     let to = move_to_translate.end();
     match move_to_translate.check_castle() {
         Some(bitboard::Castle::ShortCastle) => return SAN::new("o-o".to_string()),
@@ -79,7 +78,7 @@ pub fn san_to_str(
             "".to_string()
         };
     let to_as_str = as_str(row, col, capture_as_str);
-    let piece_char: Option<char> = piece_to_char(move_to_translate.type_piece(), language);
+    let piece_char: Option<char> = piece_to_char(move_to_translate.type_piece(), lang);
     let piece_as_str = piece_char.map_or(String::new(), |c| c.to_ascii_uppercase().to_string());
     let str = if move_to_translate.type_piece() != TypePiece::Pawn {
         if let Some(another_move) = moves_to.first().clone() {
@@ -97,7 +96,7 @@ pub fn san_to_str(
         }
     } else {
         let promotion = if let Some(new_piece) = move_to_translate.promotion() {
-            format!("={}", piece_to_char(new_piece, language).unwrap())
+            format!("={}", piece_to_char(new_piece, lang).unwrap())
         } else {
             "".to_string()
         };
@@ -107,9 +106,11 @@ pub fn san_to_str(
 }
 
 mod tests {
-    use crate::board::square::{self, TypePiece};
-
-    use super::*;
+    use crate::board::{
+        bitboard,
+        san::{san_to_str, Lang},
+        square::{self, TypePiece},
+    };
 
     #[test]
     fn test_san_pawn_capture() {
@@ -122,7 +123,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangEn);
         assert_eq!(result.info(), "fxe3")
     }
 
@@ -137,7 +138,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangFr);
         assert_eq!(result.info(), "f4")
     }
 
@@ -152,7 +153,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangFr);
         assert_eq!(result.info(), "a8=D")
     }
     #[test]
@@ -166,7 +167,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangFr);
         assert_eq!(result.info(), "Txf4")
     }
     #[test]
@@ -180,7 +181,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangFr);
         assert_eq!(result.info(), "o-o")
     }
     #[test]
@@ -194,7 +195,7 @@ mod tests {
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
-        let result = san_to_str(&move_to_translate, moves, LANG_FR);
+        let result = san_to_str(&move_to_translate, &moves, &Lang::LangFr);
         assert_eq!(result.info(), "o-o-o")
     }
 }

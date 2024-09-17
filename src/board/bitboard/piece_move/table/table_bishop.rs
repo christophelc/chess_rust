@@ -170,9 +170,13 @@ pub fn bishop_moves_diag(
 }
 
 mod tests {
-    use super::*;
     use std::cmp;
 
+    use crate::board::bitboard;
+
+    use super::bishop_moves;
+
+    #[allow(dead_code)]
     fn compute_diag1(index: u8) -> u64 {
         let row = index / 8;
         let col = index % 8;
@@ -184,6 +188,7 @@ mod tests {
         }
         diag
     }
+    #[allow(dead_code)]
     fn compute_diag2(index: u8) -> u64 {
         let row = index / 8;
         let col = index % 8;
