@@ -56,6 +56,27 @@ impl<'a> UciRead for UciReadWrapper<'a> {
     }
 }
 
+pub struct UciReadVecStringWrapper<'a> {
+    idx: usize,
+    inputs: &'a [&'a str],
+}
+impl<'a> UciReadVecStringWrapper<'a> {
+    pub fn new(inputs: &'a [&str]) -> Self {
+        UciReadVecStringWrapper { idx: 0, inputs }
+    }
+}
+impl<'a> UciRead for UciReadVecStringWrapper<'a> {
+    fn uci_read(&mut self) -> String {
+        if self.idx < self.inputs.len() {
+            let result = self.inputs[self.idx];
+            self.idx += 1;
+            result.to_string()
+        } else {
+            "quit".to_string()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -63,27 +84,6 @@ mod tests {
     use actix::Actor;
     use game::{parameters, Game, GameActor};
     use parser::InputParser;
-
-    struct UciReadTestWrapper<'a> {
-        idx: usize,
-        inputs: &'a [&'a str],
-    }
-    impl<'a> UciReadTestWrapper<'a> {
-        pub fn new(inputs: &'a [&str]) -> Self {
-            UciReadTestWrapper { idx: 0, inputs }
-        }
-    }
-    impl<'a> UciRead for UciReadTestWrapper<'a> {
-        fn uci_read(&mut self) -> String {
-            if self.idx < self.inputs.len() {
-                let result = self.inputs[self.idx];
-                self.idx += 1;
-                result.to_string()
-            } else {
-                "quit".to_string()
-            }
-        }
-    }
 
     async fn init(input: &str) -> (GameActor, command::Command) {
         let game_actor = Game::start(Game::new());
@@ -192,7 +192,7 @@ mod tests {
             "position startpos",
             "go depth 3 movetime 5000 wtime 3600000 btime 3600001",
         ];
-        let uci_reader = UciReadTestWrapper::new(inputs.as_slice());
+        let uci_reader = UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = Game::start(Game::new());
         uci_loop(uci_reader, &game_actor).await;
         let configuration = get_configuration(&game_actor).await;

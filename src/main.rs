@@ -9,8 +9,12 @@ use fen::EncodeUserInput;
 use piece_move::GenMoves;
 use std::io;
 use uci::command::parser;
+use uci::UciRead;
+use uci::UciReadWrapper;
 
 use actix::prelude::*;
+
+use std::env;
 
 fn fen() {
     println!("chessboard generated from initial position encoded with FEN");
@@ -61,13 +65,60 @@ async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     uci::uci_loop(uci_reader, &game_actor).await;
 }
 
+async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
+    // init the game
+    let inputs = vec!["position startpos", "quit"];
+    let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+    uci::uci_loop(uci_reader, game_actor).await;
+    let mut stdin_reader = UciReadWrapper::new(stdin);
+    // loop
+    loop {
+        let configuration = game_actor
+            .send(game::GetConfiguration)
+            .await
+            .unwrap()
+            .unwrap();
+        println!("\n{}", configuration.opt_position().unwrap().chessboard());
+        let input = stdin_reader.uci_read();
+        let input = input.trim();
+        match input {
+            "quit" => break,
+            // e2e4 for example
+            _ if input.len() == 4 => {
+                let configuration = game_actor
+                    .send(game::GetConfiguration)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let position = configuration.opt_position().unwrap();
+                let fen = fen::FEN::encode(&position).unwrap();
+                // prepare the command by adding move to the last known position
+                let uci_command = format!("position fen {} moves {}", fen, input);
+                let inputs: Vec<&str> = vec![&uci_command, "quit"];
+                // update the game
+                let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+                uci::uci_loop(uci_reader, game_actor).await;
+            }
+            _ => println!("Please enter a move to a format like e2e4"),
+        }
+    }
+}
+
 #[actix::main]
 async fn main() {
     let mut stdin = io::stdin();
     let game_actor = game::Game::new().start();
 
-    fen();
-    test(&game_actor).await;
-    println!("Enter an uci command:");
-    uci_loop(&game_actor, &mut stdin).await;
+    let args: Vec<String> = env::args().collect();
+    if args.len() <= 1 {
+        println!("Entering in uci mode");
+        fen();
+        test(&game_actor).await;
+        println!("Enter an uci command:");
+        uci_loop(&game_actor, &mut stdin).await;
+    } else {
+        println!("Entering in tui mode");
+        println!("{:?}", args);
+        tui_loop(&game_actor, &mut stdin).await;
+    }
 }

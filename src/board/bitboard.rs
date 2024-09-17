@@ -277,8 +277,6 @@ impl BitBoardsWhiteAndBlack {
         square
     }
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
-        // TODO: castle
-
         let mut mask_remove: u64 = 0;
         if b_move.capture.is_some() {
             mask_remove = 1u64 << b_move.end;
@@ -527,6 +525,7 @@ impl BitBoards {
             Some(TypePiece::Bishop) => (1u64 << from, 0u64, 1u64 << to, 0u64, 0u64),
             Some(TypePiece::Knight) => (1u64 << from, 0u64, 0u64, 1u64 << to, 0u64),
             Some(TypePiece::Queen) => (1u64 << from, 0u64, 0u64, 0u64, 1u64 << to),
+            // TODO: create a type piece for promotion
             _ => panic!("Pawn promotion can only be Rook, Bishop, Knight, Queen"),
         };
         let bitboards = match type_piece {
@@ -535,7 +534,7 @@ impl BitBoards {
                 ..self
             },
             TypePiece::Bishop => BitBoards {
-                bishops: BitBoard::new((self.knights.value() ^ mask) | mask_promotion_bishop),
+                bishops: BitBoard::new((self.bishops.value() ^ mask) | mask_promotion_bishop),
                 ..self
             },
             TypePiece::Knight => BitBoards {
