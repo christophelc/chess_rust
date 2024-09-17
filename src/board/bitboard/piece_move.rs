@@ -99,7 +99,7 @@ pub trait GenMoves {
         &self,
         color: &square::Color,
         check_status: CheckStatus,
-        capture_en_passant: &Option<u64>,
+        capture_en_passant: &Option<u8>,
         bit_position_status: &bitboard::BitPositionStatus,
     ) -> Vec<bitboard::BitBoardMove>;
 
@@ -144,7 +144,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         &self,
         color: &square::Color,
         check_status: CheckStatus,
-        capture_en_passant: &Option<u64>,
+        capture_en_passant: &Option<u8>,
         bit_position_status: &bitboard::BitPositionStatus,
     ) -> Vec<bitboard::BitBoardMove> {
         let bit_board = self.bit_board(color);
@@ -303,7 +303,7 @@ fn gen_moves_for_type_piece(
     color: &square::Color,
     check_status: CheckStatus,
     bit_board_type_piece: &bitboard::BitBoard,
-    capture_en_passant: &Option<u64>,
+    capture_en_passant: &Option<u8>,
     bit_board: &bitboard::BitBoards,
     bit_board_opponent: &bitboard::BitBoards,
     bit_position_status: &bitboard::BitPositionStatus,
@@ -453,7 +453,7 @@ fn gen_moves_no_check(
     bit_board_type_piece: &bitboard::BitBoard,
     bit_board: &bitboard::BitBoards,
     bit_board_opponent: &bitboard::BitBoards,
-    capture_en_passant: &Option<u64>,
+    capture_en_passant: &Option<u8>,
     bit_position_status: &BitPositionStatus,
 ) -> Vec<PieceMoves> {
     let mut moves = vec![];
@@ -487,7 +487,7 @@ fn gen_moves_for_piece(
     index: u8,
     bit_board: &bitboard::BitBoards, // color for piece at index
     bit_board_opponent: &bitboard::BitBoards, // opponent color
-    capture_en_passant: &Option<u64>,
+    capture_en_passant: &Option<u8>,
     bit_position_status: &BitPositionStatus,
 ) -> Option<PieceMoves> {
     match type_piece {
@@ -805,7 +805,7 @@ fn gen_pawn_non_attacker_moves(
     color: &square::Color,
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
-    capture_en_passant: &Option<u64>,
+    capture_en_passant: &Option<u8>,
 ) -> u64 {
     let row = index / 8;
     let blockers = bit_board.value() | bit_board_opponent.value();
@@ -825,9 +825,8 @@ fn gen_pawn_non_attacker_moves(
                 }
             }
             // capture en passant
-            if let Some(en_passant) = capture_en_passant {
-                let en_passant_idx = bitboard::pos2index(en_passant.clone());
-                if index + 7 == en_passant_idx || index + 9 == en_passant_idx {
+            if let Some(en_passant_idx) = capture_en_passant {
+                if index + 7 == *en_passant_idx || index + 9 == *en_passant_idx {
                     moves |= 1u64 << en_passant_idx;
                 }
             }
@@ -846,9 +845,8 @@ fn gen_pawn_non_attacker_moves(
                 }
             }
             // capture en passant
-            if let Some(en_passant) = capture_en_passant {
-                let en_passant_idx = bitboard::pos2index(en_passant.clone());
-                if index - 7 == en_passant_idx || index - 9 == en_passant_idx {
+            if let Some(en_passant_idx) = capture_en_passant {
+                if index - 7 == *en_passant_idx || index - 9 == *en_passant_idx {
                     moves |= 1u64 << en_passant_idx;
                 }
             }
@@ -862,7 +860,7 @@ fn gen_moves_for_pawn(
     color: &square::Color,
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
-    capture_en_passant: &Option<u64>,
+    capture_en_passant: &Option<u8>,
 ) -> Option<PieceMoves> {
     let to = gen_pawn_non_attacker_moves(
         index,
@@ -1428,7 +1426,7 @@ mod tests {
     #[test]
     fn test_pawn_white_no_blockers() {
         let index = 20;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1u64 << 28;
@@ -1448,7 +1446,7 @@ mod tests {
     #[test]
     fn test_pawn_white_row1_no_blockers() {
         let index = 10;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1u64 << 18 | 1u64 << 26;
@@ -1468,7 +1466,7 @@ mod tests {
     #[test]
     fn test_pawn_white_capture() {
         let index = 18;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index | 1u64 << (index + 8));
         let bit_board_opponent = bitboard::BitBoard(1u64 << (index + 7) | 1u64 << (index + 9));
         let expected = 1u64 << 25 | 1u64 << 27;
@@ -1488,7 +1486,7 @@ mod tests {
     #[test]
     fn test_pawn_white_row1_col_a() {
         let index = 8;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(1u64 << 17);
         let expected = 1u64 << 16 | 1u64 << 17 | 1u64 << 24;
@@ -1507,7 +1505,7 @@ mod tests {
     #[test]
     fn test_pawn_black_capture() {
         let index = 50;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index | 1u64 << (index - 8));
         let bit_board_opponent = bitboard::BitBoard(1u64 << (index - 7) | 1u64 << (index - 9));
         let expected = 1u64 << 41 | 1u64 << 43;
@@ -1528,7 +1526,7 @@ mod tests {
     #[test]
     fn test_pawn_black_row6() {
         let index = 50;
-        let capture_en_passant: Option<u64> = None;
+        let capture_en_passant: Option<u8> = None;
         let bit_board = bitboard::BitBoard(1u64 << index);
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 1u64 << 42 | 1u64 << 34;

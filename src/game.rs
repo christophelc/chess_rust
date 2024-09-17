@@ -1,6 +1,7 @@
 pub mod configuration;
 pub mod parameters;
 
+use crate::board::bitboard::piece_move::GenMoves;
 use crate::board::bitboard::BitBoardMove;
 use crate::board::{bitboard, fen, square};
 use crate::uci::notation::{self, LongAlgebricNotationMove};
@@ -118,7 +119,7 @@ impl Handler<UciCommand> for Game {
                     let mut bit_position = bitboard::BitPosition::from(position);
                     for m in valid_moves {
                         let color = bit_position.bit_position_status().player_turn();
-                        match check_move(color, m, &bit_position.bit_boards_white_and_black()) {
+                        match check_move(color, m, &bit_position) {
                             Err(err) => {
                                 result = Err(err);
                                 break;
@@ -154,32 +155,40 @@ impl Handler<UciCommand> for Game {
 fn check_move(
     player_turn: square::Color,
     m: notation::LongAlgebricNotationMove,
-    bitboard_white_and_black: &bitboard::BitBoardsWhiteAndBlack,
+    bitboard_position: &bitboard::BitPosition,
 ) -> Result<BitBoardMove, String> {
-    let start_square = bitboard_white_and_black.peek(m.start());
-    let end_square = bitboard_white_and_black.peek(m.end());
+    let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
+    let start_square = bit_boards_white_and_black.peek(m.start());
+    let end_square = bit_boards_white_and_black.peek(m.end());
     match (start_square, end_square) {
         (square::Square::Empty, _) => Err(format!("empty start square {}", m.start())),
-        (square::Square::NonEmpty(piece), square::Square::Empty) => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion())),
+        (square::Square::NonEmpty(piece), square::Square::Empty) => {
+            let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
+            check_move_level2(b_move, &bitboard_position)
+        },
         (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion())),
         (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start(), m.end())),
     }
 }
 
-pub fn moves_validation(
-    moves: &Vec<String>,
-) -> Result<Vec<notation::LongAlgebricNotationMove>, String> {
-    let mut valid_moves: Vec<notation::LongAlgebricNotationMove> = vec![];
-    let mut errors: Vec<String> = vec![];
-    for m in moves {
-        match notation::LongAlgebricNotationMove::build_from_str(&m) {
-            Ok(valid_move) => valid_moves.push(valid_move),
-            Err(err) => errors.push(err),
-        }
-    }
-    if !errors.is_empty() {
-        Err(errors.join(", "))
+fn check_move_level2(
+    b_move: BitBoardMove,
+    bitboard_position: &bitboard::BitPosition,
+) -> Result<BitBoardMove, String> {
+    let color = bitboard_position.bit_position_status().player_turn();
+    let bit_position_status = bitboard_position.bit_position_status();
+    let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
+    let check_status = bit_boards_white_and_black.check_status(&color, bit_position_status);
+    let capture_en_passant = bit_position_status.pawn_en_passant();
+    let moves = bit_boards_white_and_black.gen_moves_for_all(
+        &color,
+        check_status,
+        &capture_en_passant,
+        bit_position_status,
+    );
+    if moves.iter().any(|m| *m == b_move) {
+        Ok(b_move)
     } else {
-        Ok(valid_moves)
+        Err(format!("The move {:?} is invalid.", b_move))
     }
 }

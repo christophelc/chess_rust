@@ -161,6 +161,24 @@ mod tests {
         assert_eq!(fen, fen_str);
     }
     #[actix::test]
+    async fn test_uci_input_fen_pos_with_moves_invalid() {
+        let input = format!(
+            "position fen {} moves e2e4 e7e5 g1f4",
+            fen::FEN_START_POSITION
+        );
+        let mut stdout = io::stdout();
+        let (game_actor, command) = init(&input).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        assert!(!is_quit);
+        let configuration = get_configuration(&game_actor).await;
+        assert!(configuration.opt_position().is_some());
+        // The knight is still in g1
+        let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
+        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+            .expect("Failed to encode position");
+        assert_eq!(fen, fen_str);
+    }
+    #[actix::test]
     async fn test_uci_input_default_parameters() {
         let input = "position startpos";
         let mut stdout = io::stdout();

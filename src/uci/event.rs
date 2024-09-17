@@ -1,6 +1,6 @@
 use std::{error::Error, io::Stdout};
 
-use super::UciResult;
+use super::{notation, UciResult};
 use crate::board::fen;
 use crate::board::fen::EncodeUserInput;
 use crate::game;
@@ -80,7 +80,7 @@ impl Event {
             Event::TimePerMoveInMs(time) => {
                 let _ = (*game).send(game::UciCommand::TimePerMoveInMs(*time)).await;
             }
-            event @ Event::Moves(moves) => match game::moves_validation(moves) {
+            event @ Event::Moves(moves) => match moves_validation(moves) {
                 Ok(valid_moves) => {
                     let _ = (*game)
                         .send(game::UciCommand::ValidMoves(valid_moves))
@@ -94,16 +94,14 @@ impl Event {
             Event::Btime(btime) => {
                 let _ = (*game).send(game::UciCommand::Btime(*btime)).await;
             }
-            event @ Event::SearchMoves(search_moves) => {
-                match game::moves_validation(search_moves) {
-                    Ok(valid_moves) => {
-                        let _ = (*game)
-                            .send(game::UciCommand::SearchMoves(valid_moves))
-                            .await;
-                    }
-                    Err(err) => result = Err(HandleEventError::new(event.clone(), err.to_string())),
+            event @ Event::SearchMoves(search_moves) => match moves_validation(search_moves) {
+                Ok(valid_moves) => {
+                    let _ = (*game)
+                        .send(game::UciCommand::SearchMoves(valid_moves))
+                        .await;
                 }
-            }
+                Err(err) => result = Err(HandleEventError::new(event.clone(), err.to_string())),
+            },
             Event::Stop => {
                 let _ = (*game).send(game::UciCommand::Stop).await;
                 result = Ok(UciResult::BestMove);
@@ -111,5 +109,23 @@ impl Event {
             Event::Quit => result = Ok(UciResult::Quit),
         }
         result
+    }
+}
+
+pub fn moves_validation(
+    moves: &Vec<String>,
+) -> Result<Vec<notation::LongAlgebricNotationMove>, String> {
+    let mut valid_moves: Vec<notation::LongAlgebricNotationMove> = vec![];
+    let mut errors: Vec<String> = vec![];
+    for m in moves {
+        match notation::LongAlgebricNotationMove::build_from_str(&m) {
+            Ok(valid_move) => valid_moves.push(valid_move),
+            Err(err) => errors.push(err),
+        }
+    }
+    if !errors.is_empty() {
+        Err(errors.join(", "))
+    } else {
+        Ok(valid_moves)
     }
 }
