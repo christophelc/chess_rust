@@ -9,6 +9,8 @@ use fen::EncodeUserInput;
 use piece_move::GenMoves;
 use std::io;
 use uci::command::parser;
+use uci::event;
+use uci::notation::LongAlgebricNotationMove;
 use uci::UciRead;
 use uci::UciReadWrapper;
 
@@ -67,8 +69,7 @@ async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
 
 async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     // init the game
-    // "position startpos moves e2e4 e7e5 g1f3 g8f6 f1c4 f8c5",
-    let inputs = vec!["position startpos moves", "quit"];
+    let inputs = vec!["position startpos moves e2e4 d7d5", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
     uci::uci_loop(uci_reader, game_actor).await;
     let mut stdin_reader = UciReadWrapper::new(stdin);
@@ -86,19 +87,13 @@ async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
             "quit" => break,
             // e2e4 for example
             _ if input.len() == 4 => {
-                let configuration = game_actor
-                    .send(game::GetConfiguration)
+                let moves = vec![input.to_string()];
+                let long_algebric_moves = event::moves_validation(&moves).expect("invalid move");
+                game_actor
+                    .send(game::PlayMoves(long_algebric_moves))
                     .await
                     .unwrap()
                     .unwrap();
-                let position = configuration.opt_position().unwrap();
-                let fen = fen::Fen::encode(&position).unwrap();
-                // prepare the command by adding move to the last known position
-                let uci_command = format!("position fen {} moves {}", fen, input);
-                let inputs: Vec<&str> = vec![&uci_command, "quit"];
-                // update the game
-                let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-                uci::uci_loop(uci_reader, game_actor).await;
             }
             _ => println!("Please enter a move to a format like e2e4"),
         }

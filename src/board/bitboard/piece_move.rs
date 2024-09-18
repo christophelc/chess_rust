@@ -112,6 +112,7 @@ fn moves2bitboard_moves(
     bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
 ) -> Vec<bitboard::BitBoardMove> {
     let mut bitboard_moves: Vec<bitboard::BitBoardMove> = vec![];
+    println!("moves: {:?}", moves);
     for piece_moves in &moves {
         for to in piece_moves.moves().iter() {
             let bitboard_move = bitboard::BitBoardMove::from(

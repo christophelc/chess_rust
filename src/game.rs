@@ -31,11 +31,23 @@ impl Handler<GetConfiguration> for Game {
     }
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<(), String>")]
+pub struct PlayMoves(pub Vec<LongAlgebricNotationMove>);
+
+impl Handler<PlayMoves> for Game {
+    type Result = Result<(), String>;
+
+    fn handle(&mut self, msg: PlayMoves, _ctx: &mut Self::Context) -> Self::Result {
+        self.play_moves(msg.0)
+    }
+}
+
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
 pub enum UciCommand {
     InitPosition,
-    UpdatePosition(fen::Position),
+    UpdatePosition(String, fen::Position),
     DepthFinite(u32),
     TimePerMoveInMs(u32),
     SearchInfinite,
@@ -48,20 +60,64 @@ pub enum UciCommand {
 
 pub type GameActor = Addr<Game>;
 
+#[derive(Debug, Default)]
+pub struct History {
+    fen: String,
+    moves: Vec<BitBoardMove>,
+}
+impl History {
+    pub fn init(&mut self) {
+        self.set_fen(fen::FEN_START_POSITION);
+    }
+    pub fn set_fen(&mut self, fen: &str) {
+        self.fen = fen.to_string();
+        self.moves = vec![];
+    }
+    pub fn add_moves(&mut self, m: BitBoardMove) {
+        self.moves.push(m);
+    }
+}
+
 // Actor definition
 pub struct Game {
     configuration: configuration::Configuration,
     best_move: Option<LongAlgebricNotationMove>,
+    history: History,
 }
 impl Game {
     pub fn new() -> Self {
         Game {
             configuration: configuration::Configuration::default(),
             best_move: None,
+            history: History::default(),
         }
     }
     pub fn configuration(&self) -> &configuration::Configuration {
         &self.configuration
+    }
+
+    pub fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
+        let mut result: Result<(), String> = Ok(());
+        if let Some(position) = self.configuration.opt_position() {
+            let mut bit_position = bitboard::BitPosition::from(position);
+            for m in valid_moves {
+                let color = bit_position.bit_position_status().player_turn();
+                match check_move(color, m, &bit_position) {
+                    Err(err) => {
+                        result = Err(err);
+                        break;
+                    }
+                    Ok(b_move) => {
+                        bit_position = bit_position.move_piece(&b_move);
+                        self.configuration.update_position(bit_position.to());
+                        self.history.add_moves(b_move);
+                    }
+                }
+            }
+        } else {
+            result = Err("moves ignored since no position has been defined".to_string());
+        }
+        result
     }
 }
 impl Actor for Game {
@@ -82,6 +138,7 @@ impl Handler<UciCommand> for Game {
             UciCommand::InitPosition => {
                 let position = fen::Position::build_initial_position();
                 self.configuration.update_position(position);
+                self.history.init();
             }
             UciCommand::Wtime(time) => {
                 let mut params = self.configuration().parameters().clone();
@@ -103,8 +160,9 @@ impl Handler<UciCommand> for Game {
                 params.set_time_per_move_in_ms(time);
                 self.configuration.update_parameters(params);
             }
-            UciCommand::UpdatePosition(position) => {
+            UciCommand::UpdatePosition(fen, position) => {
                 self.configuration.update_position(position);
+                self.history.set_fen(&fen);
             }
             UciCommand::SearchMoves(search_moves) => {
                 let mut params = self.configuration().parameters().clone();
@@ -112,24 +170,7 @@ impl Handler<UciCommand> for Game {
                 self.configuration.update_parameters(params);
             }
             UciCommand::ValidMoves(valid_moves) => {
-                if let Some(position) = self.configuration.opt_position() {
-                    let mut bit_position = bitboard::BitPosition::from(position);
-                    for m in valid_moves {
-                        let color = bit_position.bit_position_status().player_turn();
-                        match check_move(color, m, &bit_position) {
-                            Err(err) => {
-                                result = Err(err);
-                                break;
-                            }
-                            Ok(b_move) => {
-                                bit_position = bit_position.move_piece(&b_move);
-                                self.configuration.update_position(bit_position.to());
-                            }
-                        }
-                    }
-                } else {
-                    result = Err("moves ignored since no position has been defined".to_string());
-                }
+                result = self.play_moves(valid_moves);
             }
             UciCommand::Stop => match self.configuration.opt_position() {
                 None => {
@@ -161,6 +202,7 @@ fn check_move(
         (square::Square::Empty, _) => Err(format!("empty start square {}", m.start())),
         (square::Square::NonEmpty(piece), square::Square::Empty) => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
+            println!("check level2 for {:?}", m.cast());
             check_move_level2(b_move, bitboard_position)
         },
         (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion())),

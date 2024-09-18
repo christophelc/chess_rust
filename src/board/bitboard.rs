@@ -3,7 +3,7 @@ pub mod piece_move;
 use super::{
     coord,
     fen::{Position, PositionStatus},
-    square::{self, TypePiecePromotion},
+    square::{self, Switch, TypePiecePromotion},
     ChessBoard,
 };
 use piece_move::table;
@@ -84,6 +84,7 @@ impl BitBoardMove {
     ) -> Vec<Self> {
         let bit_boards = bit_boards_white_and_black.bit_board(&color);
         let b_to: u64 = 1u64 << to;
+        println!("{:?} pawns\n{}", color, bit_boards.pawns());
         let mut capture: Option<TypePiece> = None;
         if bit_boards.rooks().value() & b_to == 1 {
             capture = Some(TypePiece::Rook);
@@ -295,9 +296,11 @@ impl BitBoardsWhiteAndBlack {
         if b_move.capture.is_some() {
             mask_remove = 1u64 << b_move.end;
         } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
+            println!("en_passant {:?}", b_move);
             // en passant
             mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
         };
+        println!("{}", BitBoard(mask_remove));
         let new_bitboards = match b_move.color {
             square::Color::White => BitBoardsWhiteAndBlack {
                 bit_board_white: self.bit_board_white.move_piece(

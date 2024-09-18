@@ -52,9 +52,9 @@ impl LongAlgebricNotationMove {
 
 fn index_to_string(index: u8) -> String {
     assert!(index < 64, "index '{}' should be < 64", index);
-    let row = index / 8;
+    let row = index / 8 + 1;
     let col = index % 8;
-    format!("{}{}", col, row)
+    format!("{}{}", (col + b'a') as char, row)
 }
 
 fn square_to_index(square: &str) -> u8 {
