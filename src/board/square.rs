@@ -1,11 +1,38 @@
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TypePiece {
-    Rook,
-    Knight,
-    Bishop,
-    Queen,
-    King,
-    Pawn,
+    Rook = 0,
+    Knight = 1,
+    Bishop = 2,
+    Queen = 3,
+    King = 4,
+    Pawn = 5,
+}
+impl TypePiece {
+    pub fn equals(&self, p: TypePiecePromotion) -> bool {
+        *self as u8 == p as u8
+    }
+}
+
+// no clear way to define subset of enum
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum TypePiecePromotion {
+    Rook = 0,
+    Knight = 1,
+    Bishop = 2,
+    Queen = 3,
+}
+impl TypePiecePromotion {
+    // not perfect but better than implementing tryfrom inside TypePiece
+    // only used for san notation
+    pub fn as_type_piece(&self) -> TypePiece {
+        match *self as u8 {
+            0 => TypePiece::Rook,
+            1 => TypePiece::Knight,
+            2 => TypePiece::Bishop,
+            3 => TypePiece::Queen,
+            _ => panic!("Dead code")
+        }
+    }
 }
 
 pub trait Switch {

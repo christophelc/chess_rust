@@ -1750,7 +1750,7 @@ mod tests {
             .iter()
             .filter(|m| m.type_piece() == TypePiece::Pawn)
             .collect();
-        let new_pieces: Vec<TypePiece> =
+        let new_pieces: Vec<square::TypePiecePromotion> =
             promotion_moves.iter().flat_map(|p| p.promotion()).collect();
         assert_eq!(new_pieces.len(), 4);
         let promotion_move = promotion_moves.get(0).unwrap();

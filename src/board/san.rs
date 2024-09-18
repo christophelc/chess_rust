@@ -1,4 +1,4 @@
-use super::{bitboard, square::TypePiece};
+use super::{bitboard, square};
 
 #[derive(Clone)]
 pub enum Lang {
@@ -32,15 +32,15 @@ fn as_str(row: u8, col: u8, capture: String) -> String {
     format!("{}{}{}", capture, col_as_char(col), (row + 1))
 }
 
-fn piece_to_char(type_piece: TypePiece, lang: &Lang) -> Option<char> {
+fn piece_to_char(type_piece: square::TypePiece, lang: &Lang) -> Option<char> {
     let language = lang.clone() as usize;
     match type_piece {
-        TypePiece::Rook => Some(SAN_ROOK[language]),
-        TypePiece::Bishop => Some(SAN_BISHOP[language]),
-        TypePiece::Knight => Some(SAN_KNIGHT[language]),
-        TypePiece::Queen => Some(SAN_QUEEN[language]),
-        TypePiece::King => Some(SAN_KING[language]),
-        TypePiece::Pawn => None,
+        square::TypePiece::Rook => Some(SAN_ROOK[language]),
+        square::TypePiece::Bishop => Some(SAN_BISHOP[language]),
+        square::TypePiece::Knight => Some(SAN_KNIGHT[language]),
+        square::TypePiece::Queen => Some(SAN_QUEEN[language]),
+        square::TypePiece::King => Some(SAN_KING[language]),
+        square::TypePiece::Pawn => None,
     }
 }
 
@@ -69,7 +69,7 @@ pub fn san_to_str(
     let col = to % 8;
     let capture_as_str =
         if move_to_translate.capture().is_some() || move_to_translate.is_capture_en_passant() {
-            if move_to_translate.type_piece() == TypePiece::Pawn {
+            if move_to_translate.type_piece() == square::TypePiece::Pawn {
                 format!("{}x", col_as_char(move_to_translate.start() % 8))
             } else {
                 "x".to_string()
@@ -80,7 +80,7 @@ pub fn san_to_str(
     let to_as_str = as_str(row, col, capture_as_str);
     let piece_char: Option<char> = piece_to_char(move_to_translate.type_piece(), lang);
     let piece_as_str = piece_char.map_or(String::new(), |c| c.to_ascii_uppercase().to_string());
-    let str = if move_to_translate.type_piece() != TypePiece::Pawn {
+    let str = if move_to_translate.type_piece() != square::TypePiece::Pawn {
         if let Some(another_move) = moves_to.first().clone() {
             let row_2 = another_move.end() / 8;
             let col_2 = another_move.end() % 8;
@@ -96,7 +96,7 @@ pub fn san_to_str(
         }
     } else {
         let promotion = if let Some(new_piece) = move_to_translate.promotion() {
-            format!("={}", piece_to_char(new_piece, lang).unwrap())
+            format!("={}", piece_to_char(new_piece.as_type_piece(), lang).unwrap())
         } else {
             "".to_string()
         };
@@ -109,7 +109,7 @@ mod tests {
     use crate::board::{
         bitboard,
         san::{san_to_str, Lang},
-        square::{self, TypePiece},
+        square::{self, TypePiecePromotion},
     };
 
     #[test]
@@ -118,8 +118,8 @@ mod tests {
         let type_piece = square::TypePiece::Pawn;
         let start = 13;
         let end = 20;
-        let capture: Option<TypePiece> = None;
-        let promotion: Option<TypePiece> = None;
+        let capture: Option<square::TypePiece> = None;
+        let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
@@ -133,8 +133,8 @@ mod tests {
         let type_piece = square::TypePiece::Pawn;
         let start = 13;
         let end = 29;
-        let capture: Option<TypePiece> = None;
-        let promotion: Option<TypePiece> = None;
+        let capture: Option<square::TypePiece> = None;
+        let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
@@ -148,8 +148,8 @@ mod tests {
         let type_piece = square::TypePiece::Pawn;
         let start = 48;
         let end = 56;
-        let capture: Option<TypePiece> = None;
-        let promotion: Option<TypePiece> = Some(TypePiece::Queen);
+        let capture: Option<square::TypePiece> = None;
+        let promotion: Option<TypePiecePromotion> = Some(square::TypePiecePromotion::Queen);
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
@@ -162,8 +162,8 @@ mod tests {
         let type_piece = square::TypePiece::Rook;
         let start = 13;
         let end = 29;
-        let capture: Option<TypePiece> = Some(TypePiece::Queen);
-        let promotion: Option<TypePiece> = None;
+        let capture: Option<square::TypePiece> = Some(square::TypePiece::Queen);
+        let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
@@ -176,8 +176,8 @@ mod tests {
         let type_piece = square::TypePiece::King;
         let start = 4;
         let end = 6;
-        let capture: Option<TypePiece> = None;
-        let promotion: Option<TypePiece> = None;
+        let capture: Option<square::TypePiece> = None;
+        let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];
@@ -190,8 +190,8 @@ mod tests {
         let type_piece = square::TypePiece::King;
         let start = 60;
         let end = 58;
-        let capture: Option<TypePiece> = None;
-        let promotion: Option<TypePiece> = None;
+        let capture: Option<square::TypePiece> = None;
+        let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
             bitboard::BitBoardMove::new(color, type_piece, start, end, capture, promotion);
         let moves = vec![move_to_translate];

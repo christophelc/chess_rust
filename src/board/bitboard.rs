@@ -3,7 +3,7 @@ pub mod piece_move;
 use super::{
     coord,
     fen::{Position, PositionStatus},
-    square, ChessBoard,
+    square::{self, TypePiecePromotion}, ChessBoard,
 };
 use piece_move::table;
 use std::{fmt, ops::BitOrAssign};
@@ -21,7 +21,7 @@ pub struct BitBoardMove {
     start: u8,
     end: u8,
     capture: Option<TypePiece>,
-    promotion: Option<TypePiece>,
+    promotion: Option<TypePiecePromotion>,
 }
 impl BitBoardMove {
     pub fn new(
@@ -30,7 +30,7 @@ impl BitBoardMove {
         start: u8,
         end: u8,
         capture: Option<TypePiece>,
-        promotion: Option<TypePiece>,
+        promotion: Option<TypePiecePromotion>,
     ) -> Self {
         BitBoardMove {
             color,
@@ -53,7 +53,7 @@ impl BitBoardMove {
     pub fn capture(&self) -> Option<TypePiece> {
         self.capture
     }
-    pub fn promotion(&self) -> Option<TypePiece> {
+    pub fn promotion(&self) -> Option<TypePiecePromotion> {
         self.promotion
     }
     pub fn is_capture_en_passant(&self) -> bool {
@@ -103,14 +103,14 @@ impl BitBoardMove {
                 || (color == Color::Black && (1u64 << to) & table::MASK_ROW_0 != 0))
         {
             vec![
-                Self::new(color, type_piece, from, to, capture, Some(TypePiece::Rook)),
+                Self::new(color, type_piece, from, to, capture, Some(TypePiecePromotion::Rook)),
                 Self::new(
                     color,
                     type_piece,
                     from,
                     to,
                     capture,
-                    Some(TypePiece::Bishop),
+                    Some(TypePiecePromotion::Bishop),
                 ),
                 Self::new(
                     color,
@@ -118,9 +118,9 @@ impl BitBoardMove {
                     from,
                     to,
                     capture,
-                    Some(TypePiece::Knight),
+                    Some(TypePiecePromotion::Knight),
                 ),
-                Self::new(color, type_piece, from, to, capture, Some(TypePiece::Queen)),
+                Self::new(color, type_piece, from, to, capture, Some(TypePiecePromotion::Queen)),
             ]
         } else {
             vec![Self::new(color, type_piece, from, to, capture, None)]
@@ -511,7 +511,7 @@ impl BitBoards {
         type_piece: square::TypePiece,
         from: u8,
         to: u8,
-        promotion: Option<TypePiece>,
+        promotion: Option<TypePiecePromotion>,
     ) -> BitBoards {
         let (
             mask,
@@ -521,12 +521,10 @@ impl BitBoards {
             mask_promotion_queen,
         ) = match promotion {
             None => (1u64 << from | 1u64 << to, 0u64, 0u64, 0u64, 0u64),
-            Some(TypePiece::Rook) => (1u64 << from, 1u64 << to, 0u64, 0u64, 0u64),
-            Some(TypePiece::Bishop) => (1u64 << from, 0u64, 1u64 << to, 0u64, 0u64),
-            Some(TypePiece::Knight) => (1u64 << from, 0u64, 0u64, 1u64 << to, 0u64),
-            Some(TypePiece::Queen) => (1u64 << from, 0u64, 0u64, 0u64, 1u64 << to),
-            // TODO: create a type piece for promotion
-            _ => panic!("Pawn promotion can only be Rook, Bishop, Knight, Queen"),
+            Some(TypePiecePromotion::Rook) => (1u64 << from, 1u64 << to, 0u64, 0u64, 0u64),
+            Some(TypePiecePromotion::Bishop) => (1u64 << from, 0u64, 1u64 << to, 0u64, 0u64),
+            Some(TypePiecePromotion::Knight) => (1u64 << from, 0u64, 0u64, 1u64 << to, 0u64),
+            Some(TypePiecePromotion::Queen) => (1u64 << from, 0u64, 0u64, 0u64, 1u64 << to),
         };
         let bitboards = match type_piece {
             TypePiece::Rook => BitBoards {
@@ -556,24 +554,23 @@ impl BitBoards {
         };
         match promotion {
             None => bitboards,
-            Some(p_type_piece) if p_type_piece == type_piece => bitboards,
-            Some(TypePiece::Rook) => BitBoards {
+            Some(p_type_piece) if type_piece.equals(p_type_piece) => bitboards,
+            Some(TypePiecePromotion::Rook) => BitBoards {
                 rooks: BitBoard::new(bitboards.rooks.value() | mask_promotion_rook),
                 ..bitboards
             },
-            Some(TypePiece::Bishop) => BitBoards {
+            Some(TypePiecePromotion::Bishop) => BitBoards {
                 bishops: BitBoard::new(bitboards.bishops.value() | mask_promotion_bishop),
                 ..bitboards
             },
-            Some(TypePiece::Knight) => BitBoards {
+            Some(TypePiecePromotion::Knight) => BitBoards {
                 knights: BitBoard::new(bitboards.knights.value() | mask_promotion_knight),
                 ..bitboards
             },
-            Some(TypePiece::Queen) => BitBoards {
+            Some(TypePiecePromotion::Queen) => BitBoards {
                 queens: BitBoard::new(bitboards.queens.value() | mask_promotion_queen),
                 ..bitboards
             },
-            _ => panic!("Pawn promotion can only be Rook, Bishop, Knight, Queen"),
         }
     }
     pub fn rooks(&self) -> &BitBoard {

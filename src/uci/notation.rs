@@ -1,13 +1,13 @@
-use crate::board::square::TypePiece;
+use crate::board::square;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LongAlgebricNotationMove {
     start: u8,
     end: u8,
-    opt_promotion: Option<TypePiece>,
+    opt_promotion: Option<square::TypePiecePromotion>,
 }
 impl LongAlgebricNotationMove {
-    pub fn new(start: u8, end: u8, opt_promotion: Option<TypePiece>) -> Self {
+    pub fn new(start: u8, end: u8, opt_promotion: Option<square::TypePiecePromotion>) -> Self {
         LongAlgebricNotationMove {
             start,
             end,
@@ -45,7 +45,7 @@ impl LongAlgebricNotationMove {
     pub fn end(&self) -> u8 {
         self.end
     }
-    pub fn opt_promotion(&self) -> Option<TypePiece> {
+    pub fn opt_promotion(&self) -> Option<square::TypePiecePromotion> {
         self.opt_promotion
     }
 }
@@ -63,13 +63,13 @@ fn square_to_index(square: &str) -> u8 {
     (row * 8) + col
 }
 
-fn promotion2type_piece(opt_promotion_as_char: Option<char>) -> Result<Option<TypePiece>, String> {
+fn promotion2type_piece(opt_promotion_as_char: Option<char>) -> Result<Option<square::TypePiecePromotion>, String> {
     match opt_promotion_as_char {
         None => Ok(None),
-        Some('q') => Ok(Some(TypePiece::Queen)),
-        Some('r') => Ok(Some(TypePiece::Rook)),
-        Some('n') => Ok(Some(TypePiece::Knight)),
-        Some('b') => Ok(Some(TypePiece::Bishop)),
+        Some('q') => Ok(Some(square::TypePiecePromotion::Queen)),
+        Some('r') => Ok(Some(square::TypePiecePromotion::Rook)),
+        Some('n') => Ok(Some(square::TypePiecePromotion::Knight)),
+        Some('b') => Ok(Some(square::TypePiecePromotion::Bishop)),
         Some(p) => Err(format!(
             "Unknow promotion piece: '{}'. Valid pieces are: q, r, n",
             p
