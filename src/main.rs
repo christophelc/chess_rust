@@ -10,7 +10,6 @@ use piece_move::GenMoves;
 use std::io;
 use uci::command::parser;
 use uci::event;
-use uci::notation::LongAlgebricNotationMove;
 use uci::UciRead;
 use uci::UciReadWrapper;
 
@@ -37,9 +36,9 @@ async fn test(game_actor: &game::GameActor) {
     let configuration = game_actor
         .send(game::GetConfiguration)
         .await
-        .unwrap()
-        .unwrap();
-    let position = configuration.opt_position().unwrap();
+        .expect("actix error")
+        .expect("Error when retrieving configuration");
+    let position = configuration.opt_position().expect("No position defined.");
     println!("{}", position.chessboard());
     println!();
 
@@ -64,22 +63,24 @@ async fn test(game_actor: &game::GameActor) {
 
 async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     let uci_reader = uci::UciReadWrapper::new(stdin);
-    uci::uci_loop(uci_reader, game_actor).await;
+    // we ignore errors (according to uci specifications)
+    let _ = uci::uci_loop(uci_reader, game_actor).await;
 }
 
 async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     // init the game
-    let inputs = vec!["position startpos moves e2e4 d7d5", "quit"];
+    let inputs = vec!["position startpos", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-    uci::uci_loop(uci_reader, game_actor).await;
+    // we don't ignore error in tui mode
+    uci::uci_loop(uci_reader, game_actor).await.unwrap();
     let mut stdin_reader = UciReadWrapper::new(stdin);
     // loop
     loop {
         let configuration = game_actor
             .send(game::GetConfiguration)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("actix error")
+            .expect("Error when retrieving configuration");
         println!("\n{}", configuration.opt_position().unwrap().chessboard());
         let input = stdin_reader.uci_read();
         let input = input.trim();
@@ -88,12 +89,14 @@ async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
             // e2e4 for example
             _ if input.len() == 4 => {
                 let moves = vec![input.to_string()];
-                let long_algebric_moves = event::moves_validation(&moves).expect("invalid move");
-                game_actor
-                    .send(game::PlayMoves(long_algebric_moves))
-                    .await
-                    .unwrap()
-                    .unwrap();
+                match event::moves_validation(&moves) {
+                    Err(err) => println!("Error: {}", err),
+                    Ok(long_algebric_moves) => game_actor
+                        .send(game::PlayMoves(long_algebric_moves))
+                        .await
+                        .unwrap()
+                        .unwrap(),
+                }
             }
             _ => println!("Please enter a move to a format like e2e4"),
         }

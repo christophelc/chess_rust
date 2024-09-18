@@ -202,10 +202,12 @@ fn check_move(
         (square::Square::Empty, _) => Err(format!("empty start square {}", m.start())),
         (square::Square::NonEmpty(piece), square::Square::Empty) => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
-            println!("check level2 for {:?}", m.cast());
             check_move_level2(b_move, bitboard_position)
         },
-        (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => Ok(BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion())),
+        (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => {
+            let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), Some(capture.type_piece()), m.opt_promotion());
+            check_move_level2(b_move, bitboard_position)
+        },
         (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start(), m.end())),
     }
 }
@@ -228,6 +230,61 @@ fn check_move_level2(
     if moves.iter().any(|m| *m == b_move) {
         Ok(b_move)
     } else {
-        Err(format!("The move {:?} is invalid.", b_move))
+        let v: Vec<&BitBoardMove> = moves
+            .iter()
+            .filter(|m| m.start() == b_move.start())
+            .collect();
+        println!("{:?}", v);
+        println!("{:?}", b_move);
+        let possible_moves_for_piece: Vec<String> = moves
+            .iter()
+            .filter(|m| m.start() == b_move.start())
+            .map(|m| {
+                notation::LongAlgebricNotationMove::new(m.start(), m.end(), m.promotion()).cast()
+            })
+            .collect();
+        let invalid_move = notation::LongAlgebricNotationMove::new(
+            b_move.start(),
+            b_move.end(),
+            b_move.promotion(),
+        )
+        .cast();
+        Err(format!(
+            "The move {} is invalid. Valid moves for this piece are: {:?}",
+            invalid_move, possible_moves_for_piece
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use actix::Actor;
+
+    use crate::{game, uci};
+
+    use super::configuration;
+
+    async fn get_configuration(game_actor: &game::GameActor) -> configuration::Configuration {
+        let result = game_actor.send(game::GetConfiguration).await.unwrap();
+        result.unwrap()
+    }
+
+    #[actix::test]
+    async fn test_game_capture_en_passant() {
+        let inputs = vec!["position startpos moves e2e4 d7d5 e4d5 e7e5 d5e6", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        // unwrap() is the test
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        let configuration = get_configuration(&game_actor).await;
+        assert!(configuration.opt_position().is_some());
+    }
+    #[actix::test]
+    async fn test_game_pawn_move_invalid() {
+        let inputs = vec!["position startpos moves e2e4 e7e5 e4e5", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        let r = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(r.is_err());
     }
 }

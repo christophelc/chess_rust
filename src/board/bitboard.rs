@@ -82,22 +82,21 @@ impl BitBoardMove {
         to: u8,
         bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
     ) -> Vec<Self> {
-        let bit_boards = bit_boards_white_and_black.bit_board(&color);
+        let bit_boards_opponent = bit_boards_white_and_black.bit_board(&color.switch());
         let b_to: u64 = 1u64 << to;
-        println!("{:?} pawns\n{}", color, bit_boards.pawns());
         let mut capture: Option<TypePiece> = None;
-        if bit_boards.rooks().value() & b_to == 1 {
+        if bit_boards_opponent.rooks().value() & b_to != 0 {
             capture = Some(TypePiece::Rook);
-        } else if bit_boards.bishops().value() & b_to == 1 {
+        } else if bit_boards_opponent.bishops().value() & b_to != 0 {
             capture = Some(TypePiece::Bishop);
-        } else if bit_boards.knights().value() & b_to == 1 {
+        } else if bit_boards_opponent.knights().value() & b_to != 0 {
             capture = Some(TypePiece::Knight);
-        } else if bit_boards.queens().value() & b_to == 1 {
+        } else if bit_boards_opponent.queens().value() & b_to != 0 {
             capture = Some(TypePiece::Queen);
-        } else if bit_boards.pawns().value() & b_to == 1 {
+        } else if bit_boards_opponent.pawns().value() & b_to != 0 {
             capture = Some(TypePiece::Pawn);
         // should not be possible except in Blitz
-        } else if bit_boards.king().value() & b_to == 1 {
+        } else if bit_boards_opponent.king().value() & b_to != 0 {
             capture = Some(TypePiece::King);
         }
         if type_piece == TypePiece::Pawn
@@ -156,12 +155,13 @@ fn pos2index(u: u64) -> u8 {
 
 impl BitPosition {
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitPosition {
+        let bit_boards_white_and_black = self.bit_boards_white_and_black.move_piece(b_move);
         let bit_board_pawn_opponent = match b_move.color {
-            Color::White => self.bit_boards_white_and_black.bit_board_black.pawns,
-            Color::Black => self.bit_boards_white_and_black.bit_board_white.pawns,
+            Color::White => bit_boards_white_and_black.bit_board_black.pawns,
+            Color::Black => bit_boards_white_and_black.bit_board_white.pawns,
         };
         BitPosition {
-            bit_boards_white_and_black: self.bit_boards_white_and_black.move_piece(b_move),
+            bit_boards_white_and_black,
             bit_position_status: update_status(
                 b_move,
                 &bit_board_pawn_opponent,
@@ -209,20 +209,13 @@ fn update_status(
         TypePiece::King => bit_position_status.disable_castling(b_move.color),
         TypePiece::Pawn => {
             let mut capture_en_passant: Option<i8> = None;
-            if b_move.start + 16 == b_move.end {
-                if bit_board_pawn_opponent.value()
-                    & (1u64 << (b_move.start + 7) | 1u64 << (b_move.start + 9))
-                    != 0
-                {
-                    capture_en_passant = Some((b_move.start + 8) as i8);
-                }
-            } else if b_move.end + 16 == b_move.start
-                && bit_board_pawn_opponent.value()
-                    & (1u64 << (b_move.end + 7) | 1u64 << (b_move.end + 9))
-                    != 0
+            let dir: i8 = if b_move.color == Color::White { 8 } else { -8 };
+            if b_move.start as i8 + dir + dir == b_move.end as i8
+                && (bit_board_pawn_opponent.value() & (1u64 << (b_move.end + 1)) != 0
+                    || bit_board_pawn_opponent.value() & (1u64 << (b_move.end - 1)) != 0)
             {
-                capture_en_passant = Some((b_move.end + 8) as i8);
-            };
+                capture_en_passant = Some(b_move.start as i8 + dir);
+            }
             bit_position_status.set_pawn_en_passant(capture_en_passant);
         }
         _ => {}
@@ -296,11 +289,9 @@ impl BitBoardsWhiteAndBlack {
         if b_move.capture.is_some() {
             mask_remove = 1u64 << b_move.end;
         } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
-            println!("en_passant {:?}", b_move);
             // en passant
             mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
         };
-        println!("{}", BitBoard(mask_remove));
         let new_bitboards = match b_move.color {
             square::Color::White => BitBoardsWhiteAndBlack {
                 bit_board_white: self.bit_board_white.move_piece(

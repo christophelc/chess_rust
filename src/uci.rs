@@ -20,16 +20,28 @@ fn best_move_action(
     res
 }
 
-pub async fn uci_loop<T: UciRead>(mut uci_reader: T, game_actor: &game::GameActor) {
+pub async fn uci_loop<T: UciRead>(
+    mut uci_reader: T,
+    game_actor: &game::GameActor,
+) -> Result<(), Vec<String>> {
     let mut stdout = io::stdout();
+    let mut errors: Vec<String> = vec![];
 
     loop {
         let input = uci_reader.uci_read();
         let parser = parser::InputParser::new(&input);
         let command = parser.parse_input().expect("Invalid command");
-        if execute_command(game_actor, command, &mut stdout, true).await {
+        let r = execute_command(game_actor, command, &mut stdout, true).await;
+        if let Some(error) = r.clone().err() {
+            errors.extend(error);
+        } else if r.unwrap() {
             break;
         }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
     }
 }
 
@@ -101,7 +113,9 @@ mod tests {
         let input = "position startpos";
         let mut stdout = io::stdout();
         let (game_actor, command) = init(input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true)
+            .await
+            .unwrap();
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
@@ -115,7 +129,9 @@ mod tests {
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let mut stdout = io::stdout();
         let (game_actor, command) = init(input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true)
+            .await
+            .unwrap();
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
@@ -130,7 +146,9 @@ mod tests {
         let input = format!("position fen {}", fen::FEN_START_POSITION);
         let mut stdout = io::stdout();
         let (game_actor, command) = init(&input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true)
+            .await
+            .unwrap();
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
@@ -146,7 +164,9 @@ mod tests {
         );
         let mut stdout = io::stdout();
         let (game_actor, command) = init(&input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true)
+            .await
+            .unwrap();
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
@@ -163,22 +183,17 @@ mod tests {
         );
         let mut stdout = io::stdout();
         let (game_actor, command) = init(&input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
-        assert!(!is_quit);
-        let configuration = get_configuration(&game_actor).await;
-        assert!(configuration.opt_position().is_some());
-        // The knight is still in g1
-        let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
-        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
-            .expect("Failed to encode position");
-        assert_eq!(fen, fen_str);
+        let r = execute_command(&game_actor, command, &mut stdout, true).await;
+        assert!(r.is_err())
     }
     #[actix::test]
     async fn test_uci_input_default_parameters() {
         let input = "position startpos";
         let mut stdout = io::stdout();
         let (game_actor, command) = init(&input).await;
-        let is_quit = execute_command(&game_actor, command, &mut stdout, true).await;
+        let is_quit = execute_command(&game_actor, command, &mut stdout, true)
+            .await
+            .unwrap();
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
@@ -194,7 +209,7 @@ mod tests {
         ];
         let uci_reader = UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = Game::start(Game::new());
-        uci_loop(uci_reader, &game_actor).await;
+        uci_loop(uci_reader, &game_actor).await.unwrap();
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
         let expected =
@@ -208,8 +223,9 @@ pub async fn execute_command(
     command: command::Command,
     stdout: &mut Stdout,
     show_errors: bool,
-) -> bool {
+) -> Result<bool, Vec<String>> {
     let mut is_quit = false;
+    let mut errors: Vec<String> = vec![];
     let events = command.handle_command();
     for event in &events {
         // pdate the configuration
@@ -226,14 +242,17 @@ pub async fn execute_command(
                 }
             }
             Err(err) => {
+                let error_as_str = format!("{:?}{}", err.event(), err.error());
                 if show_errors {
-                    _ = configuration::write_err(
-                        stdout,
-                        format!("{:?}{}", err.event(), err.error()),
-                    )
+                    _ = configuration::write_err(stdout, error_as_str.clone())
                 }
+                errors.push(error_as_str);
             }
         }
     }
-    is_quit
+    if errors.is_empty() {
+        Ok(is_quit)
+    } else {
+        Err(errors)
+    }
 }
