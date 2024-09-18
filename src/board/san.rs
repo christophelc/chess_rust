@@ -12,13 +12,13 @@ const SAN_QUEEN: [char; 2] = ['D', 'Q'];
 const SAN_KING: [char; 2] = ['R', 'K'];
 
 #[derive(Debug)]
-pub struct SAN {
+pub struct San {
     info: String,
 }
 
-impl SAN {
+impl San {
     pub fn new(info: String) -> Self {
-        SAN { info }
+        San { info }
     }
     pub fn info(&self) -> &String {
         &self.info
@@ -49,11 +49,11 @@ pub fn san_to_str(
     move_to_translate: &bitboard::BitBoardMove,
     moves: &Vec<bitboard::BitBoardMove>,
     lang: &Lang,
-) -> SAN {
+) -> San {
     let to = move_to_translate.end();
     match move_to_translate.check_castle() {
-        Some(bitboard::Castle::ShortCastle) => return SAN::new("o-o".to_string()),
-        Some(bitboard::Castle::LongCastle) => return SAN::new("o-o-o".to_string()),
+        Some(bitboard::Castle::ShortCastle) => return San::new("o-o".to_string()),
+        Some(bitboard::Castle::LongCastle) => return San::new("o-o-o".to_string()),
         None => {}
     };
     // look for a move that have the same destination for the same type_piece
@@ -81,7 +81,7 @@ pub fn san_to_str(
     let piece_char: Option<char> = piece_to_char(move_to_translate.type_piece(), lang);
     let piece_as_str = piece_char.map_or(String::new(), |c| c.to_ascii_uppercase().to_string());
     let str = if move_to_translate.type_piece() != square::TypePiece::Pawn {
-        if let Some(another_move) = moves_to.first().clone() {
+        if let Some(another_move) = moves_to.first() {
             let row_2 = another_move.end() / 8;
             let col_2 = another_move.end() % 8;
             if row_2 == row {
@@ -96,13 +96,16 @@ pub fn san_to_str(
         }
     } else {
         let promotion = if let Some(new_piece) = move_to_translate.promotion() {
-            format!("={}", piece_to_char(new_piece.as_type_piece(), lang).unwrap())
+            format!(
+                "={}",
+                piece_to_char(new_piece.as_type_piece(), lang).unwrap()
+            )
         } else {
             "".to_string()
         };
         format!("{}{}{}", piece_as_str, to_as_str, promotion)
     };
-    SAN::new(str)
+    San::new(str)
 }
 
 mod tests {

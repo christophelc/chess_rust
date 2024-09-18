@@ -3,7 +3,8 @@ pub mod piece_move;
 use super::{
     coord,
     fen::{Position, PositionStatus},
-    square::{self, TypePiecePromotion}, ChessBoard,
+    square::{self, TypePiecePromotion},
+    ChessBoard,
 };
 use piece_move::table;
 use std::{fmt, ops::BitOrAssign};
@@ -103,7 +104,14 @@ impl BitBoardMove {
                 || (color == Color::Black && (1u64 << to) & table::MASK_ROW_0 != 0))
         {
             vec![
-                Self::new(color, type_piece, from, to, capture, Some(TypePiecePromotion::Rook)),
+                Self::new(
+                    color,
+                    type_piece,
+                    from,
+                    to,
+                    capture,
+                    Some(TypePiecePromotion::Rook),
+                ),
                 Self::new(
                     color,
                     type_piece,
@@ -120,7 +128,14 @@ impl BitBoardMove {
                     capture,
                     Some(TypePiecePromotion::Knight),
                 ),
-                Self::new(color, type_piece, from, to, capture, Some(TypePiecePromotion::Queen)),
+                Self::new(
+                    color,
+                    type_piece,
+                    from,
+                    to,
+                    capture,
+                    Some(TypePiecePromotion::Queen),
+                ),
             ]
         } else {
             vec![Self::new(color, type_piece, from, to, capture, None)]
@@ -145,7 +160,7 @@ impl BitPosition {
             Color::Black => self.bit_boards_white_and_black.bit_board_white.pawns,
         };
         BitPosition {
-            bit_boards_white_and_black: self.bit_boards_white_and_black.move_piece(&b_move),
+            bit_boards_white_and_black: self.bit_boards_white_and_black.move_piece(b_move),
             bit_position_status: update_status(
                 b_move,
                 &bit_board_pawn_opponent,
@@ -179,7 +194,7 @@ fn update_status(
     bit_board_pawn_opponent: &BitBoard,
     bit_position_status: BitPositionStatus,
 ) -> BitPositionStatus {
-    let mut bit_position_status = bit_position_status.clone();
+    let mut bit_position_status = bit_position_status;
     // move of a rook
     match b_move.type_piece {
         TypePiece::Rook => {
@@ -200,13 +215,12 @@ fn update_status(
                 {
                     capture_en_passant = Some((b_move.start + 8) as i8);
                 }
-            } else if b_move.end + 16 == b_move.start {
-                if bit_board_pawn_opponent.value()
+            } else if b_move.end + 16 == b_move.start
+                && bit_board_pawn_opponent.value()
                     & (1u64 << (b_move.end + 7) | 1u64 << (b_move.end + 9))
                     != 0
-                {
-                    capture_en_passant = Some((b_move.end + 8) as i8);
-                }
+            {
+                capture_en_passant = Some((b_move.end + 8) as i8);
             };
             bit_position_status.set_pawn_en_passant(capture_en_passant);
         }
@@ -280,10 +294,8 @@ impl BitBoardsWhiteAndBlack {
         let mut mask_remove: u64 = 0;
         if b_move.capture.is_some() {
             mask_remove = 1u64 << b_move.end;
-        } else {
-            if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
-                mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
-            };
+        } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
+            mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
         };
         let new_bitboards = match b_move.color {
             square::Color::White => BitBoardsWhiteAndBlack {
@@ -405,7 +417,7 @@ impl Iterator for BitIterator {
         let bb = self.bitboard.value();
         if bb != 0 {
             let lsb = self.bitboard.index();
-            self.bitboard = BitBoard(bb & bb - 1);
+            self.bitboard = BitBoard(bb & (bb - 1));
             Some(lsb)
         } else {
             None
@@ -438,7 +450,7 @@ impl BitBoard {
                 let index = i * 8 + j;
                 let bit = (self.0 >> index) & 1;
                 if bit == 1 {
-                    coords.push(coord::Coord::from((j + ('A' as u8)) as char, i + 1).unwrap())
+                    coords.push(coord::Coord::from((j + b'A') as char, i + 1).unwrap())
                 }
             }
         }
@@ -602,14 +614,14 @@ impl BitBoards {
         )
     }
     pub fn list_boards(&self) -> Vec<(square::TypePiece, &BitBoard)> {
-        let mut boards = Vec::new();
-        boards.push((square::TypePiece::Rook, &self.rooks));
-        boards.push((square::TypePiece::Bishop, &self.bishops));
-        boards.push((square::TypePiece::Knight, &self.knights));
-        boards.push((square::TypePiece::King, &self.king));
-        boards.push((square::TypePiece::Queen, &self.queens));
-        boards.push((square::TypePiece::Pawn, &self.pawns));
-        boards
+        vec![
+            (square::TypePiece::Rook, &self.rooks),
+            (square::TypePiece::Bishop, &self.bishops),
+            (square::TypePiece::Knight, &self.knights),
+            (square::TypePiece::King, &self.king),
+            (square::TypePiece::Queen, &self.queens),
+            (square::TypePiece::Pawn, &self.pawns),
+        ]
     }
 }
 impl fmt::Display for BitBoards {
@@ -840,8 +852,8 @@ impl BitPositionStatus {
     }
     pub fn set_pawn_en_passant(&mut self, value: Option<i8>) {
         self.pawn_en_passant = match value {
-            Some(square) if square >= 0 && square <= 63 => square, // Only valid squares (0-63) are allowed
-            _ => -1,                                               // If None or invalid square
+            Some(square) if (0..64).contains(&square) => square, // Only valid squares (0-63) are allowed
+            _ => -1,                                             // If None or invalid square
         };
     }
 
@@ -895,9 +907,7 @@ fn encode_pawn_en_passant(maybe_coord: Option<coord::Coord>) -> Option<i8> {
 }
 
 fn decode_pawn_en_passant(maybe_index: Option<u8>) -> Option<coord::Coord> {
-    maybe_index.map_or(None, |index| {
-        coord::Coord::from((index % 8 + 65) as char, index / 8 + 1).ok()
-    })
+    maybe_index.and_then(|index| coord::Coord::from((index % 8 + 65) as char, index / 8 + 1).ok())
 }
 
 use square::Color;
@@ -1086,7 +1096,7 @@ mod tests {
         let chessboard = bit_position.to();
         let position = Position::build(chessboard, PositionStatus::new());
         let fen_str =
-            fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");
+            fen::Fen::encode(&position).expect("Error when decoding position to FEN format.");
         let expected_fen = "7k/8/p7/4b3/3Q4/8/P1P4P/R7 w - - 0 0";
         assert_eq!(fen_str, expected_fen);
     }
@@ -1135,7 +1145,7 @@ mod tests {
     #[test]
     fn test_promotion() {
         let fen = "7k/8/8/8/8/8/8/7K w KQ - 0 1";
-        let position = fen::FEN::decode(fen).expect("Failed to decode FEN");
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
         let bit_board_position = BitPosition::from(position);
         let color = square::Color::White;
 

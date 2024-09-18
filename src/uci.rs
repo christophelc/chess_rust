@@ -27,7 +27,7 @@ pub async fn uci_loop<T: UciRead>(mut uci_reader: T, game_actor: &game::GameActo
         let input = uci_reader.uci_read();
         let parser = parser::InputParser::new(&input);
         let command = parser.parse_input().expect("Invalid command");
-        if execute_command(&game_actor, command, &mut stdout, true).await {
+        if execute_command(game_actor, command, &mut stdout, true).await {
             break;
         }
     }
@@ -105,7 +105,7 @@ mod tests {
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
-        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen::FEN_START_POSITION);
     }
@@ -120,7 +120,7 @@ mod tests {
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
         let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
-        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen_str);
     }
@@ -134,7 +134,7 @@ mod tests {
         assert!(!is_quit);
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
-        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen::FEN_START_POSITION);
     }
@@ -151,7 +151,7 @@ mod tests {
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
         let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
-        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen_str);
     }
@@ -169,7 +169,7 @@ mod tests {
         assert!(configuration.opt_position().is_some());
         // The knight is still in g1
         let fen_str = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
-        let fen = fen::FEN::encode(&configuration.opt_position().unwrap())
+        let fen = fen::Fen::encode(&configuration.opt_position().unwrap())
             .expect("Failed to encode position");
         assert_eq!(fen, fen_str);
     }
@@ -213,7 +213,7 @@ pub async fn execute_command(
     let events = command.handle_command();
     for event in &events {
         // pdate the configuration
-        let uci_result = event.handle_event(&game_actor, stdout).await;
+        let uci_result = event.handle_event(game_actor, stdout).await;
         // quit, stop and show best move or continue
         match uci_result {
             Ok(UciResult::Continue) => {}

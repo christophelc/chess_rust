@@ -58,12 +58,15 @@ fn index_to_string(index: u8) -> String {
 }
 
 fn square_to_index(square: &str) -> u8 {
-    let col = square.chars().nth(0).unwrap() as u8 - 'a' as u8; // file 'a'-'h' -> 0-7
-    let row = square.chars().nth(1).unwrap().to_digit(10).unwrap() as u8 - 1; // rank '1'-'8' -> 0-7
+    let mut iter = square.chars();
+    let col = iter.next().unwrap() as u8 - b'a'; // file 'a'-'h' -> 0-7
+    let row = iter.next().unwrap().to_digit(10).unwrap() as u8 - 1; // rank '1'-'8' -> 0-7
     (row * 8) + col
 }
 
-fn promotion2type_piece(opt_promotion_as_char: Option<char>) -> Result<Option<square::TypePiecePromotion>, String> {
+fn promotion2type_piece(
+    opt_promotion_as_char: Option<char>,
+) -> Result<Option<square::TypePiecePromotion>, String> {
     match opt_promotion_as_char {
         None => Ok(None),
         Some('q') => Ok(Some(square::TypePiecePromotion::Queen)),

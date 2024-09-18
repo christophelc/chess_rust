@@ -184,7 +184,7 @@ mod tests {
         let (x0, y0) = (col - distance_min, row + distance_min);
         let mut diag: u64 = 0;
         for i in 0..=cmp::min(7 - x0, y0) {
-            diag |= 1u64 << x0 + i + (y0 - i) * 8;
+            diag |= 1u64 << (x0 + i + (y0 - i) * 8);
         }
         diag
     }
@@ -196,7 +196,7 @@ mod tests {
         let (x0, y0) = (col - distance_min, row - distance_min);
         let mut diag: u64 = 0;
         for i in 0..=cmp::min(7 - x0, 7 - y0) {
-            diag |= 1u64 << x0 + i + (y0 + i) * 8;
+            diag |= 1u64 << (x0 + i + (y0 + i) * 8);
         }
         diag
     }

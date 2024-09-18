@@ -32,7 +32,7 @@ impl Configuration {
     }
 
     pub fn opt_position(&self) -> Option<Position> {
-        self.opt_position.clone()
+        self.opt_position
     }
     pub fn parameters(&self) -> &parameters::Parameters {
         &self.parameters

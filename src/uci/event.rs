@@ -65,7 +65,7 @@ impl Event {
                 let _ = (*game).send(game::UciCommand::InitPosition).await;
             }
             Event::Fen(fen) => {
-                let position = fen::FEN::decode(fen).expect("Failed to decode FEN");
+                let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
                 let _ = (*game)
                     .send(game::UciCommand::UpdatePosition(position))
                     .await;
@@ -118,7 +118,7 @@ fn moves_validation(
     let mut valid_moves: Vec<notation::LongAlgebricNotationMove> = vec![];
     let mut errors: Vec<String> = vec![];
     for m in moves {
-        match notation::LongAlgebricNotationMove::build_from_str(&m) {
+        match notation::LongAlgebricNotationMove::build_from_str(m) {
             Ok(valid_move) => valid_moves.push(valid_move),
             Err(err) => errors.push(err),
         }

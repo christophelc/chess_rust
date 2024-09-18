@@ -30,7 +30,7 @@ impl TypePiecePromotion {
             1 => TypePiece::Knight,
             2 => TypePiece::Bishop,
             3 => TypePiece::Queen,
-            _ => panic!("Dead code")
+            _ => panic!("Dead code"),
         }
     }
 }

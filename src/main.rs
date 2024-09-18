@@ -20,7 +20,7 @@ fn fen() {
     println!("chessboard generated from initial position encoded with FEN");
     let position: fen::Position = fen::Position::build_initial_position();
     println!("{}", position.chessboard());
-    let fen_str = fen::FEN::encode(&position).expect("Error when decoding position to FEN format.");
+    let fen_str = fen::Fen::encode(&position).expect("Error when decoding position to FEN format.");
     println!("Encode initial position to FEN position:");
     println!("{}", fen_str);
 }
@@ -29,9 +29,9 @@ async fn test(game_actor: &game::GameActor) {
     let mut stdout = io::stdout();
     println!("Inital position with move e4");
     let input = "position startpos moves e2e4 ";
-    let parser = parser::InputParser::new(&input);
+    let parser = parser::InputParser::new(input);
     let command = parser.parse_input().expect("Invalid command");
-    let _ = uci::execute_command(&game_actor, command, &mut stdout, true).await;
+    let _ = uci::execute_command(game_actor, command, &mut stdout, true).await;
     let configuration = game_actor
         .send(game::GetConfiguration)
         .await
@@ -45,7 +45,7 @@ async fn test(game_actor: &game::GameActor) {
     let bit_position = BitPosition::from(position);
     let moves = bit_position.bit_boards_white_and_black().gen_moves_for_all(
         &board::square::Color::White,
-        piece_move::CheckStatus::NoCheck,
+        piece_move::CheckStatus::None,
         &None,
         bit_position.bit_position_status(),
     );
@@ -62,7 +62,7 @@ async fn test(game_actor: &game::GameActor) {
 
 async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     let uci_reader = uci::UciReadWrapper::new(stdin);
-    uci::uci_loop(uci_reader, &game_actor).await;
+    uci::uci_loop(uci_reader, game_actor).await;
 }
 
 async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
@@ -91,7 +91,7 @@ async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
                     .unwrap()
                     .unwrap();
                 let position = configuration.opt_position().unwrap();
-                let fen = fen::FEN::encode(&position).unwrap();
+                let fen = fen::Fen::encode(&position).unwrap();
                 // prepare the command by adding move to the last known position
                 let uci_command = format!("position fen {} moves {}", fen, input);
                 let inputs: Vec<&str> = vec![&uci_command, "quit"];

@@ -16,7 +16,7 @@ impl fmt::Display for Coord {
 
 impl Coord {
     pub fn get_x(&self) -> usize {
-        (self.col as u8 - 'A' as u8) as usize
+        (self.col as u8 - b'A') as usize
     }
     pub fn get_y(&self) -> usize {
         (self.row - 1) as usize
@@ -32,10 +32,7 @@ impl Coord {
         }
     }
     fn is_valid_chess_square(col: char, row: u8) -> bool {
-        match col {
-            'A'..='H' | 'a'..='h' if row >= 1 && row <= 8 => true,
-            _ => false,
-        }
+        matches!(col, 'A'..='H' | 'a'..='h' if (1..=8).contains(&row))
     }
 }
 

@@ -109,7 +109,7 @@ impl Position {
 
     pub fn build_initial_position() -> Self {
         let fen_str = FEN_START_POSITION;
-        return FEN::decode(fen_str).expect("Failed to decode FEN");
+        Fen::decode(fen_str).expect("Failed to decode FEN")
     }
 
     // getters
@@ -160,9 +160,9 @@ pub trait EncodeUserInput {
     fn encode(position: &Position) -> Result<String, FenError>;
 }
 
-pub(crate) struct FEN;
+pub(crate) struct Fen;
 
-impl EncodeUserInput for FEN {
+impl EncodeUserInput for Fen {
     fn decode(fen: &str) -> Result<Position, FenError> {
         let parts: Vec<&str> = fen.split_whitespace().collect();
         if parts.len() != 6 {
@@ -522,15 +522,15 @@ mod tests {
             },
         };
 
-        let fen = FEN::encode(&position).expect("Failed to encode position");
+        let fen = Fen::encode(&position).expect("Failed to encode position");
         assert_eq!(fen, FEN_START_POSITION);
     }
 
     #[test]
     fn test_decode_encode_symmetry() {
         let fen = FEN_START_POSITION;
-        let position = FEN::decode(fen).expect("Failed to decode FEN");
-        let encoded_fen = FEN::encode(&position).expect("Failed to encode position");
+        let position = Fen::decode(fen).expect("Failed to decode FEN");
+        let encoded_fen = Fen::encode(&position).expect("Failed to encode position");
 
         assert_eq!(fen, encoded_fen);
     }
@@ -538,7 +538,7 @@ mod tests {
     #[test]
     fn test_decode_invalid_fen() {
         let invalid_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPP/RNBQKBNR w KQkq - 0 1"; // Missing a pawn in the last row
-        let result = FEN::decode(invalid_fen);
+        let result = Fen::decode(invalid_fen);
 
         assert!(result.is_err());
     }
@@ -559,7 +559,7 @@ mod tests {
             },
         };
 
-        let fen = FEN::encode(&empty_position).expect("Failed to encode position");
+        let fen = Fen::encode(&empty_position).expect("Failed to encode position");
         assert_eq!(fen, "8/8/8/8/8/8/8/8 w - - 0 1");
     }
 }
@@ -570,7 +570,7 @@ use coord::Coord;
 #[test]
 fn test_decode_en_passant() {
     let fen = "8/8/8/8/4p3/8/3P4/8 w - e6 0 1"; // White pawn at d2 moved to d4, black pawn on e5 can capture en passant
-    let position = FEN::decode(fen).expect("Failed to decode FEN");
+    let position = Fen::decode(fen).expect("Failed to decode FEN");
 
     // Check if en passant is set correctly
     let expected_coord = Coord::from('e', 6).expect("Failed to create Coord");
@@ -593,7 +593,7 @@ fn test_encode_en_passant() {
         },
     };
 
-    let fen = FEN::encode(&position).expect("Failed to encode position");
+    let fen = Fen::encode(&position).expect("Failed to encode position");
     assert!(
         fen.contains("E6"),
         "Expected en passant square 'e6' not found in encoded FEN"
