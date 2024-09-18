@@ -11,8 +11,8 @@ use std::{fmt, ops::BitOrAssign};
 
 #[derive(Debug)]
 pub enum Castle {
-    ShortCastle,
-    LongCastle,
+    Short,
+    Long,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -67,10 +67,10 @@ impl BitBoardMove {
         if self.type_piece() == TypePiece::King {
             let delta_col = (self.end as i8) - (self.start as i8);
             if delta_col == 2 {
-                castle = Some(Castle::ShortCastle);
+                castle = Some(Castle::Short);
             };
             if delta_col == -2 {
-                castle = Some(Castle::LongCastle);
+                castle = Some(Castle::Long);
             }
         }
         castle
@@ -295,6 +295,7 @@ impl BitBoardsWhiteAndBlack {
         if b_move.capture.is_some() {
             mask_remove = 1u64 << b_move.end;
         } else if b_move.type_piece == TypePiece::Pawn && b_move.start % 8 != b_move.end % 8 {
+            // en passant
             mask_remove = 1u64 << (b_move.start - b_move.start % 8 + b_move.end % 8);
         };
         let new_bitboards = match b_move.color {
@@ -328,7 +329,7 @@ impl BitBoardsWhiteAndBlack {
             },
         };
         match b_move.check_castle() {
-            Some(Castle::ShortCastle) => {
+            Some(Castle::Short) => {
                 let b_move = BitBoardMove {
                     type_piece: TypePiece::Rook,
                     start: b_move.start() + 3,
@@ -337,7 +338,7 @@ impl BitBoardsWhiteAndBlack {
                 };
                 new_bitboards.move_piece(&b_move)
             }
-            Some(Castle::LongCastle) => {
+            Some(Castle::Long) => {
                 let b_move = BitBoardMove {
                     type_piece: TypePiece::Rook,
                     start: b_move.start() - 4,
@@ -674,11 +675,11 @@ impl BitPositionStatus {
     const MASK_CASTLING_QUEENSIDE_WHITE: u64 = 0x0E;
     const MASK_CASTLING_KINGSIDE_BLACK_1: u8 = 61;
     const MASK_CASTLING_KINGSIDE_BLACK_2: u8 = 62;
-    const MASK_CASTLING_KINGSIDE_BLACK: u64 = 0x60000000000000;
+    const MASK_CASTLING_KINGSIDE_BLACK: u64 = 0x6000000000000000;
     const MASK_CASTLING_QUEENSIDE_BLACK_1: u8 = 57;
     const MASK_CASTLING_QUEENSIDE_BLACK_2: u8 = 58;
     const MASK_CASTLING_QUEENSIDE_BLACK_3: u8 = 59;
-    const MASK_CASTLING_QUEENSIDE_BLACK: u64 = 0x0E000000000000;
+    const MASK_CASTLING_QUEENSIDE_BLACK: u64 = 0x0E00000000000000;
 
     pub fn new() -> Self {
         BitPositionStatus {

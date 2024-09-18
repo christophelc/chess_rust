@@ -67,7 +67,8 @@ async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
 
 async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
     // init the game
-    let inputs = vec!["position startpos", "quit"];
+    // "position startpos moves e2e4 e7e5 g1f3 g8f6 f1c4 f8c5",
+    let inputs = vec!["position startpos moves", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
     uci::uci_loop(uci_reader, game_actor).await;
     let mut stdin_reader = UciReadWrapper::new(stdin);

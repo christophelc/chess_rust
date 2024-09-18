@@ -52,8 +52,8 @@ pub fn san_to_str(
 ) -> San {
     let to = move_to_translate.end();
     match move_to_translate.check_castle() {
-        Some(bitboard::Castle::ShortCastle) => return San::new("o-o".to_string()),
-        Some(bitboard::Castle::LongCastle) => return San::new("o-o-o".to_string()),
+        Some(bitboard::Castle::Short) => return San::new("o-o".to_string()),
+        Some(bitboard::Castle::Long) => return San::new("o-o-o".to_string()),
         None => {}
     };
     // look for a move that have the same destination for the same type_piece
