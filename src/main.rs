@@ -91,11 +91,15 @@ async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
                 let moves = vec![input.to_string()];
                 match event::moves_validation(&moves) {
                     Err(err) => println!("Error: {}", err),
-                    Ok(long_algebric_moves) => game_actor
-                        .send(game::PlayMoves(long_algebric_moves))
-                        .await
-                        .unwrap()
-                        .unwrap(),
+                    Ok(long_algebric_moves) => {
+                        let result = game_actor
+                            .send(game::PlayMoves(long_algebric_moves))
+                            .await
+                            .unwrap();
+                        if let Some(err) = result.err() {
+                            println!("Move error: {}", err);
+                        }
+                    }
                 }
             }
             _ => println!("Please enter a move to a format like e2e4"),

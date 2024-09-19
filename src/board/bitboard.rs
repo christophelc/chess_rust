@@ -236,7 +236,7 @@ fn update_status(
     bit_position_status
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BitBoardsWhiteAndBlack {
     bit_board_white: BitBoards,
     bit_board_black: BitBoards,
@@ -301,8 +301,8 @@ impl BitBoardsWhiteAndBlack {
                     b_move.promotion,
                 ),
                 bit_board_black: if mask_remove != 0 {
-                    self.bit_board_black
-                        .remove_piece(b_move.type_piece, mask_remove)
+                    let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
+                    self.bit_board_black.remove_piece(capture, mask_remove)
                 } else {
                     self.bit_board_black
                 },
@@ -315,8 +315,8 @@ impl BitBoardsWhiteAndBlack {
                     b_move.promotion,
                 ),
                 bit_board_white: if mask_remove != 0 {
-                    self.bit_board_white
-                        .remove_piece(b_move.type_piece, mask_remove)
+                    let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
+                    self.bit_board_white.remove_piece(capture, mask_remove)
                 } else {
                     self.bit_board_white
                 },
@@ -474,7 +474,7 @@ impl BitOrAssign<u64> for BitBoard {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BitBoards {
     rooks: BitBoard,
     bishops: BitBoard,

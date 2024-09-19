@@ -1,11 +1,19 @@
 pub mod configuration;
 pub mod parameters;
 
-use crate::board::bitboard::piece_move::GenMoves;
+use crate::board::bitboard::piece_move::{CheckStatus, GenMoves};
 use crate::board::bitboard::BitBoardMove;
 use crate::board::{bitboard, fen, square};
 use crate::uci::notation::{self, LongAlgebricNotationMove};
 use actix::prelude::*;
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub enum EndGame {
+    #[default]
+    None,
+    Pat,
+    Mat,
+}
 
 #[derive(Message)]
 #[rtype(result = "Option<LongAlgebricNotationMove>")]
@@ -16,6 +24,30 @@ impl Handler<GetBestMove> for Game {
 
     fn handle(&mut self, _msg: GetBestMove, _ctx: &mut Self::Context) -> Self::Result {
         self.best_move
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<History, ()>")]
+pub struct GetHistory;
+
+impl Handler<GetHistory> for Game {
+    type Result = Result<History, ()>;
+
+    fn handle(&mut self, _msg: GetHistory, _ctx: &mut Self::Context) -> Self::Result {
+        Ok(self.history().clone())
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<EndGame, ()>")]
+pub struct GetEndGame;
+
+impl Handler<GetEndGame> for Game {
+    type Result = Result<EndGame, ()>;
+
+    fn handle(&mut self, _msg: GetEndGame, _ctx: &mut Self::Context) -> Self::Result {
+        Ok(self.end_game().clone())
     }
 }
 
@@ -60,7 +92,7 @@ pub enum UciCommand {
 
 pub type GameActor = Addr<Game>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct History {
     fen: String,
     moves: Vec<BitBoardMove>,
@@ -79,21 +111,54 @@ impl History {
 }
 
 // Actor definition
+#[derive(Default)]
 pub struct Game {
     configuration: configuration::Configuration,
     best_move: Option<LongAlgebricNotationMove>,
     history: History,
+    // once a move is played, we update moves for the next player
+    moves: Vec<BitBoardMove>,
+    end_game: EndGame,
 }
 impl Game {
     pub fn new() -> Self {
-        Game {
-            configuration: configuration::Configuration::default(),
-            best_move: None,
-            history: History::default(),
-        }
+        let mut game = Game::default();
+        game.update_moves();
+        game
     }
     pub fn configuration(&self) -> &configuration::Configuration {
         &self.configuration
+    }
+
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    pub fn end_game(&self) -> EndGame {
+        self.end_game.clone()
+    }
+
+    pub fn update_moves(&mut self) {
+        if let Some(position) = self.configuration.opt_position() {
+            let bitboard_position = bitboard::BitPosition::from(position);
+            let color = bitboard_position.bit_position_status().player_turn();
+            let bit_position_status = bitboard_position.bit_position_status();
+            let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
+            let check_status = bit_boards_white_and_black.check_status(&color);
+            let capture_en_passant = bit_position_status.pawn_en_passant();
+            self.moves = bit_boards_white_and_black.gen_moves_for_all(
+                &color,
+                check_status,
+                &capture_en_passant,
+                bit_position_status,
+            );
+            if self.moves.is_empty() {
+                match check_status {
+                    CheckStatus::None => self.end_game = EndGame::Pat,
+                    _ => self.end_game = EndGame::Mat,
+                }
+            }
+        }
     }
 
     pub fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
@@ -108,9 +173,15 @@ impl Game {
                         break;
                     }
                     Ok(b_move) => {
+                        println!("play: {:?}", b_move);
                         bit_position = bit_position.move_piece(&b_move);
                         self.configuration.update_position(bit_position.to());
                         self.history.add_moves(b_move);
+                        println!(
+                            "{}",
+                            self.configuration.opt_position().unwrap().chessboard()
+                        );
+                        self.update_moves();
                     }
                 }
             }
@@ -162,6 +233,7 @@ impl Handler<UciCommand> for Game {
             }
             UciCommand::UpdatePosition(fen, position) => {
                 self.configuration.update_position(position);
+                self.update_moves();
                 self.history.set_fen(&fen);
             }
             UciCommand::SearchMoves(search_moves) => {
@@ -219,7 +291,7 @@ fn check_move_level2(
     let color = bitboard_position.bit_position_status().player_turn();
     let bit_position_status = bitboard_position.bit_position_status();
     let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
-    let check_status = bit_boards_white_and_black.check_status(&color, bit_position_status);
+    let check_status = bit_boards_white_and_black.check_status(&color);
     let capture_en_passant = bit_position_status.pawn_en_passant();
     let moves = bit_boards_white_and_black.gen_moves_for_all(
         &color,
@@ -230,12 +302,6 @@ fn check_move_level2(
     if moves.iter().any(|m| *m == b_move) {
         Ok(b_move)
     } else {
-        let v: Vec<&BitBoardMove> = moves
-            .iter()
-            .filter(|m| m.start() == b_move.start())
-            .collect();
-        println!("{:?}", v);
-        println!("{:?}", b_move);
         let possible_moves_for_piece: Vec<String> = moves
             .iter()
             .filter(|m| m.start() == b_move.start())
@@ -286,5 +352,39 @@ mod tests {
         let game_actor = game::Game::start(game::Game::new());
         let r = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(r.is_err());
+    }
+
+    #[actix::test]
+    async fn test_game_mat() {
+        let inputs = vec![
+            "position startpos moves e2e4 e7e5 f1c4 a7a6 d1f3 a6a5 f3f7",
+            "quit",
+        ];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::Mat)
+    }
+    #[actix::test]
+    async fn test_game_pat_white_first() {
+        let inputs = vec![
+            "position fen k7/7R/1R6/8/8/8/8/7K w - - 0 1 moves h1g1",
+            "quit",
+        ];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::Pat)
+    }
+    #[actix::test]
+    async fn test_game_pat_black_first() {
+        let inputs = vec!["position fen k7/7R/1R6/8/8/8/8/7K b - - 0 1", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::Pat)
     }
 }
