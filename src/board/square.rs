@@ -8,6 +8,14 @@ pub enum TypePiece {
     Pawn = 5,
 }
 impl TypePiece {
+    pub const ALL: [TypePiece; 6] = [
+        TypePiece::Pawn,
+        TypePiece::Rook,
+        TypePiece::Knight,
+        TypePiece::Bishop,
+        TypePiece::Queen,
+        TypePiece::King,
+    ];
     pub fn equals(&self, p: TypePiecePromotion) -> bool {
         *self as u8 == p as u8
     }

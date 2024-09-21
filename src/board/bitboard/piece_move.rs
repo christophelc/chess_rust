@@ -5,12 +5,12 @@ use table::table_rook;
 use super::BitBoard;
 use super::BitBoardMove;
 use super::BitBoardsWhiteAndBlack;
-use super::BitPositionStatus;
 use crate::board::square::Switch;
 use crate::board::{
     bitboard,
     square::{self, TypePiece},
 };
+use std::ops::BitOrAssign;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CheckStatus {
@@ -83,6 +83,304 @@ impl Attackers {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct RooksBitBoard {
+    bitboard: BitBoard,
+}
+impl RooksBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        RooksBitBoard {
+            bitboard
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        RooksBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        RooksBitBoard {
+            bitboard: self.bitboard.switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        _color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        bit_board_opponent: &bitboard::BitBoards,
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            if let Some(moves_for_piece) = gen_moves_for_rook(
+                false,
+                lsb,
+                &bit_board.concat_bit_boards(),
+                &bit_board_opponent.concat_bit_boards(),
+            ) {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct BishopsBitBoard {
+    bitboard: BitBoard,
+}
+impl BishopsBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        BishopsBitBoard {
+            bitboard
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        BishopsBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        BishopsBitBoard {
+            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        _color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        bit_board_opponent: &bitboard::BitBoards,
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            if let Some(moves_for_piece) = gen_moves_for_bishop(
+                false,
+                lsb,
+                &bit_board.concat_bit_boards(),
+                &bit_board_opponent.concat_bit_boards(),
+            ) {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct KnightsBitBoard {
+    bitboard: BitBoard,
+}
+impl KnightsBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        KnightsBitBoard {
+            bitboard
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        KnightsBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        KnightsBitBoard {
+            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        _color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        _bit_board_opponent: &bitboard::BitBoards,
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            if let Some(moves_for_piece) = gen_moves_for_knight(lsb, &bit_board.concat_bit_boards())
+            {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct KingBitBoard {
+    bitboard: BitBoard,
+}
+impl KingBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        KingBitBoard {
+            bitboard,
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        KingBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        KingBitBoard {
+            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        bit_board_opponent: &bitboard::BitBoards,
+        can_castle_king_side: Option<(u8, u8)>,
+        can_castle_queen_side: Option<(u8, u8, u8)>,    
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            let bit_moves = gen_moves_for_king_except_castle(lsb, &bit_board.concat_bit_boards())
+                | gen_moves_for_king_castle(
+                    color,
+                    bit_board,
+                    bit_board_opponent,
+                    can_castle_king_side,
+                    can_castle_queen_side,
+                );
+            if let Some(moves_for_piece) = moves_non_empty(
+                TypePiece::King,
+                lsb,
+                bit_moves,
+                &bit_board.concat_bit_boards(),
+            ) {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct QueensBitBoard {
+    bitboard: BitBoard,
+}
+impl QueensBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        QueensBitBoard {
+            bitboard
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        QueensBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        QueensBitBoard {
+            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        _color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        bit_board_opponent: &bitboard::BitBoards,
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            if let Some(moves_for_piece) = gen_moves_for_queen(
+                lsb,
+                &bit_board.concat_bit_boards(),
+                &bit_board_opponent.concat_bit_boards(),
+            ) {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct PawnsBitBoard {
+    bitboard: BitBoard,
+}
+impl PawnsBitBoard {
+    pub fn new(bitboard: BitBoard) -> Self {
+        PawnsBitBoard {
+            bitboard,
+        }
+    }
+    pub fn bitboard(&self) -> &BitBoard {
+        &self.bitboard
+    }
+    pub fn remove(&self, mask_remove: u64) -> Self {
+        PawnsBitBoard {
+            bitboard: self.bitboard.remove(mask_remove),
+        }
+    }
+    pub fn switch(&self, mask_switch: u64, mask_promotion: u64) -> Self {
+        PawnsBitBoard {
+            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
+        }
+    }
+    pub fn gen_moves_no_check(
+        &self,
+        color: &square::Color,
+        bit_board: &bitboard::BitBoards,
+        bit_board_opponent: &bitboard::BitBoards,
+        capture_en_passant: &Option<u8>,        
+    ) -> Vec<PieceMoves> {
+        let mut moves = vec![];
+        for lsb in self.bitboard.iter() {
+            if let Some(moves_for_piece) = gen_moves_for_pawn(
+                lsb,
+                color,
+                &bit_board.concat_bit_boards(),
+                &bit_board_opponent.concat_bit_boards(),
+                capture_en_passant,
+            ) {
+                moves.push(moves_for_piece);
+            }
+        }
+        moves
+    }
+}
+
+impl BitOrAssign<u64> for RooksBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+impl BitOrAssign<u64> for BishopsBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+impl BitOrAssign<u64> for KnightsBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+impl BitOrAssign<u64> for KingBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+impl BitOrAssign<u64> for QueensBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+impl BitOrAssign<u64> for PawnsBitBoard {
+    fn bitor_assign(&mut self, rhs: u64) {
+        self.bitboard |= rhs;
+    }
+}
+
 pub trait GenMoves {
     fn gen_moves_for_all(
         &self,
@@ -147,7 +445,7 @@ fn gen_moves_for_all_simple_check(
         bit_board,
     );
     let moves_king = {
-        let index = bit_board.king().index();
+        let index = bit_board.king().bitboard().index();
         let moves_bitboard =
             gen_moves_for_king_except_castle(index, &bit_board.concat_bit_boards());
         moves_non_empty(
@@ -188,19 +486,36 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
                 let can_castle_queen_side = bit_position_status
                     .can_castle_queen_side(bit_board.concat_bit_boards().value(), color);
                 let mut moves_all: Vec<PieceMoves> = vec![];
-                for (type_piece, bit_board_type_piece) in bit_board.list_boards() {
-                    let moves = gen_moves_no_check(
-                        &type_piece,
-                        color,
-                        bit_board_type_piece,
-                        bit_board,
-                        bit_board_opponent,
-                        capture_en_passant,
-                        can_castle_king_side,
-                        can_castle_queen_side,
-                    );
-                    moves_all.extend(moves);
-                }
+                let moves =
+                    bit_board
+                        .rooks
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                moves_all.extend(moves);
+                let moves =
+                    bit_board
+                        .bishops
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                moves_all.extend(moves);
+                let moves =
+                    bit_board
+                        .knights
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                moves_all.extend(moves);
+                let moves =
+                    bit_board
+                        .king
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent, can_castle_king_side, can_castle_queen_side);
+                moves_all.extend(moves);
+                let moves =
+                    bit_board
+                        .queens
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                moves_all.extend(moves);
+                let moves =
+                    bit_board
+                        .pawns
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent, capture_en_passant);
+                moves_all.extend(moves);
                 moves_all
             }
             CheckStatus::Simple {
@@ -214,7 +529,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
                 bit_board_opponent,
             ),
             CheckStatus::Double => {
-                let index = bit_board.king().index();
+                let index = bit_board.king().bitboard.index();
                 let moves = gen_moves_for_king_except_castle(
                     index,
                     &bit_board_opponent.concat_bit_boards(),
@@ -254,7 +569,7 @@ fn check_status(
         ),
     };
 
-    let king_index = bit_board.king().index();
+    let king_index = bit_board.king().bitboard.index();
     let attackers = attackers(true, king_index, color, bit_board, bit_board_opponent);
     match (
         sign(attackers.rooks),
@@ -299,41 +614,26 @@ fn attackers(
 ) -> Attackers {
     let piece_bit_board = BitBoard::new(1u64 << piece_index);
     // Generate piece moves as if it were a rook, bishop, knight, pawn
-    let piece_as_rook = gen_moves_no_check(
-        &square::TypePiece::Rook,
+    let piece_as_rook = RooksBitBoard::new(piece_bit_board).gen_moves_no_check(
         color,
-        &piece_bit_board,
         bit_board,
         bit_board_opponent,
-        &None,
-        None, // not needed
-        None, // not needed
     )
     .first()
     .map(|m| m.moves().value())
     .unwrap_or(0);
-    let piece_as_bishop = gen_moves_no_check(
-        &square::TypePiece::Bishop,
+    let piece_as_bishop = BishopsBitBoard::new(piece_bit_board).gen_moves_no_check(
         color,
-        &piece_bit_board,
         bit_board,
         bit_board_opponent,
-        &None,
-        None, // not needed
-        None, // not needed
     )
     .first()
     .map(|m| m.moves().value())
     .unwrap_or(0);
-    let piece_as_knight = gen_moves_no_check(
-        &square::TypePiece::Knight,
+    let piece_as_knight = KnightsBitBoard::new(piece_bit_board).gen_moves_no_check(
         color,
-        &piece_bit_board,
         bit_board,
         bit_board_opponent,
-        &None,
-        None, // not needed
-        None, // not needed
     )
     .first()
     .map(|m| m.moves().value())
@@ -342,18 +642,18 @@ fn attackers(
         gen_pawn_squares_attacked(piece_index, color, &bit_board_opponent.concat_bit_boards());
 
     // Intersect piece moves with rooks, bishops, knights, pawns bitboards of the opposite color
-    let rook_attackers = piece_as_rook & bit_board_opponent.rooks().value();
-    let bishop_attackers = piece_as_bishop & bit_board_opponent.bishops().value();
+    let rook_attackers = piece_as_rook & bit_board_opponent.rooks().bitboard().value();
+    let bishop_attackers = piece_as_bishop & bit_board_opponent.bishops().bitboard().value();
     let queen_attackers: u64 =
-        (piece_as_rook | piece_as_bishop) & bit_board_opponent.queens().value();
-    let knight_attackers: u64 = piece_as_knight & bit_board_opponent.knights().value();
-    let pawn_attackers: u64 = piece_as_pawn & bit_board_opponent.pawns().value();
+        (piece_as_rook | piece_as_bishop) & bit_board_opponent.queens().bitboard().value();
+    let knight_attackers: u64 = piece_as_knight & bit_board_opponent.knights().bitboard().value();
+    let pawn_attackers: u64 = piece_as_pawn & bit_board_opponent.pawns().bitboard().value();
     // generate moves for king to capture piece_index except when computing check status
     let king_attackers = if is_type_piece_king {
         0
     } else {
         gen_moves_for_king_except_castle(piece_index, &bit_board.concat_bit_boards())
-            & bit_board.king().value()
+            & bit_board.king().bitboard().value()
     };
     Attackers {
         rooks: rook_attackers,
@@ -365,96 +665,8 @@ fn attackers(
     }
 }
 
-/// generate all moves except castle
-fn gen_moves_no_check(
-    type_piece: &TypePiece,
-    color: &square::Color,
-    bit_board_type_piece: &bitboard::BitBoard,
-    bit_board: &bitboard::BitBoards,
-    bit_board_opponent: &bitboard::BitBoards,
-    capture_en_passant: &Option<u8>,
-    can_castle_king_side: Option<(u8, u8)>,
-    can_castle_queen_side: Option<(u8, u8, u8)>,
-) -> Vec<PieceMoves> {
-    let mut moves = vec![];
-    let mut bb = bit_board_type_piece.value();
-    while bb != 0 {
-        let lsb = bitboard::pos2index(bb);
-        if let Some(moves_for_piece) = gen_moves_for_piece(
-            type_piece,
-            color,
-            lsb,
-            bit_board,
-            bit_board_opponent,
-            capture_en_passant,
-            can_castle_king_side,
-            can_castle_queen_side,
-        ) {
-            moves.push(moves_for_piece);
-        }
-        bb &= bb - 1; // Remove lsb
-    }
-    moves
-}
-
 fn sign(u: u64) -> bool {
     u != 0
-}
-
-/// generate moves for one piece
-fn gen_moves_for_piece(
-    type_piece: &TypePiece,
-    color: &square::Color,
-    index: u8,
-    bit_board: &bitboard::BitBoards, // color for piece at index
-    bit_board_opponent: &bitboard::BitBoards, // opponent color
-    capture_en_passant: &Option<u8>,
-    can_castle_king_side: Option<(u8, u8)>,
-    can_castle_queen_side: Option<(u8, u8, u8)>,
-) -> Option<PieceMoves> {
-    match *type_piece {
-        square::TypePiece::Rook => gen_moves_for_rook(
-            false,
-            index,
-            &bit_board.concat_bit_boards(),
-            &bit_board_opponent.concat_bit_boards(),
-        ),
-        square::TypePiece::Bishop => gen_moves_for_bishop(
-            false,
-            index,
-            &bit_board.concat_bit_boards(),
-            &bit_board_opponent.concat_bit_boards(),
-        ),
-        square::TypePiece::Knight => gen_moves_for_knight(index, &bit_board.concat_bit_boards()),
-        square::TypePiece::King => {
-            let moves = gen_moves_for_king_except_castle(index, &bit_board.concat_bit_boards())
-                | gen_moves_for_king_castle(
-                    color,
-                    bit_board,
-                    bit_board_opponent,
-                    can_castle_king_side,
-                    can_castle_queen_side,
-                );
-            moves_non_empty(
-                TypePiece::King,
-                index,
-                moves,
-                &bit_board.concat_bit_boards(),
-            )
-        }
-        square::TypePiece::Queen => gen_moves_for_queen(
-            index,
-            &bit_board.concat_bit_boards(),
-            &bit_board_opponent.concat_bit_boards(),
-        ),
-        square::TypePiece::Pawn => gen_moves_for_pawn(
-            index,
-            color,
-            &bit_board.concat_bit_boards(),
-            &bit_board_opponent.concat_bit_boards(),
-            capture_en_passant,
-        ),
-    }
 }
 
 fn moves_non_empty(
@@ -1532,13 +1744,10 @@ mod tests {
             .bit_boards_white_and_black
             .bit_board(&color.switch());
         let white_king_bit_board = bit_board.king();
-        let moves = gen_moves_no_check(
-            &square::TypePiece::King,
+        let moves = KingBitBoard::new(white_king_bit_board.bitboard).gen_moves_no_check(
             &board::square::Color::White,
-            &white_king_bit_board,
             bit_board,
             bit_board_opponent,
-            &None,
             bit_position
                 .bit_position_status()
                 .can_castle_king_side(bit_board.concat_bit_boards().value(), color),
