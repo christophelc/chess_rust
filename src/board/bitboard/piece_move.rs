@@ -718,27 +718,8 @@ fn gen_moves_for_king_except_castle(index: bitboard::BitIndex, bit_board: &bitbo
 }
 
 fn gen_moves_for_knight(index: bitboard::BitIndex, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
-    let deltas: [(i8, i8); 8] = [
-        (-1, -2),
-        (-1, 2),
-        (1, -2),
-        (1, 2),
-        (-2, -1),
-        (-2, 1),
-        (2, -1),
-        (2, 1),
-    ];
-    let row: i8 = index.row() as i8;
-    let col: i8 = index.col() as i8;
-    let mut moves_bitboard = BitBoard::default();
-    for (dx, dy) in deltas {
-        let x = col + dx;
-        let y = row + dy;
-        if (0..8).contains(&x) && (0..8).contains(&y) {
-            moves_bitboard |= bitboard::BitIndex((x + y * 8) as u8).bitboard()
-        }
-    }
-    moves_non_empty(TypePiece::Knight, index, moves_bitboard, bit_board)
+    let moves_bitboard = table::table_knight::knight_moves(index.value());
+    moves_non_empty(TypePiece::Knight, index, BitBoard(moves_bitboard), bit_board)    
 }
 
 fn gen_moves_for_rook_horizontal(index: bitboard::BitIndex, blockers_h: BitBoard, mask_h: BitBoard) -> BitBoard {
