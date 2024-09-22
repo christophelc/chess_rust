@@ -65,12 +65,12 @@ pub fn san_to_str(
                 && m.type_piece() == move_to_translate.type_piece()
         })
         .collect();
-    let row = to / 8;
-    let col = to % 8;
+    let row = to.row();
+    let col = to.col();
     let capture_as_str =
         if move_to_translate.capture().is_some() || move_to_translate.is_capture_en_passant() {
             if move_to_translate.type_piece() == square::TypePiece::Pawn {
-                format!("{}x", col_as_char(move_to_translate.start() % 8))
+                format!("{}x", col_as_char(move_to_translate.start().col()))
             } else {
                 "x".to_string()
             }
@@ -82,8 +82,8 @@ pub fn san_to_str(
     let piece_as_str = piece_char.map_or(String::new(), |c| c.to_ascii_uppercase().to_string());
     let str = if move_to_translate.type_piece() != square::TypePiece::Pawn {
         if let Some(another_move) = moves_to.first() {
-            let row_2 = another_move.end() / 8;
-            let col_2 = another_move.end() % 8;
+            let row_2 = another_move.end().row();
+            let col_2 = another_move.end().col();
             if row_2 == row {
                 // We have to specify the column or the row to remove any ambiguity
                 format!("{}{}{}", piece_as_str, col_as_char(col_2), to_as_str)
@@ -119,8 +119,8 @@ mod tests {
     fn test_san_pawn_capture() {
         let color = square::Color::White;
         let type_piece = square::TypePiece::Pawn;
-        let start = 13;
-        let end = 20;
+        let start = bitboard::BitIndex::new(13);
+        let end = bitboard::BitIndex::new(20);
         let capture: Option<square::TypePiece> = None;
         let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
@@ -134,8 +134,8 @@ mod tests {
     fn test_san_pawn_2x() {
         let color = square::Color::White;
         let type_piece = square::TypePiece::Pawn;
-        let start = 13;
-        let end = 29;
+        let start = bitboard::BitIndex::new(13);
+        let end = bitboard::BitIndex::new(29);
         let capture: Option<square::TypePiece> = None;
         let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
@@ -149,8 +149,8 @@ mod tests {
     fn test_san_pawn_promotion() {
         let color = square::Color::White;
         let type_piece = square::TypePiece::Pawn;
-        let start = 48;
-        let end = 56;
+        let start = bitboard::BitIndex::new(48);
+        let end = bitboard::BitIndex::new(56);
         let capture: Option<square::TypePiece> = None;
         let promotion: Option<TypePiecePromotion> = Some(square::TypePiecePromotion::Queen);
         let move_to_translate =
@@ -163,8 +163,8 @@ mod tests {
     fn test_san_rook_capture() {
         let color = square::Color::White;
         let type_piece = square::TypePiece::Rook;
-        let start = 13;
-        let end = 29;
+        let start = bitboard::BitIndex::new(13);
+        let end = bitboard::BitIndex::new(29);
         let capture: Option<square::TypePiece> = Some(square::TypePiece::Queen);
         let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
@@ -177,8 +177,8 @@ mod tests {
     fn test_san_short_castle() {
         let color = square::Color::White;
         let type_piece = square::TypePiece::King;
-        let start = 4;
-        let end = 6;
+        let start = bitboard::BitIndex::new(4);
+        let end = bitboard::BitIndex::new(6);
         let capture: Option<square::TypePiece> = None;
         let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =
@@ -191,8 +191,8 @@ mod tests {
     fn test_san_long_castle() {
         let color = square::Color::Black;
         let type_piece = square::TypePiece::King;
-        let start = 60;
-        let end = 58;
+        let start = bitboard::BitIndex::new(60);
+        let end = bitboard::BitIndex::new(58);
         let capture: Option<square::TypePiece> = None;
         let promotion: Option<square::TypePiecePromotion> = None;
         let move_to_translate =

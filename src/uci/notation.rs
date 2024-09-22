@@ -1,13 +1,13 @@
-use crate::board::square;
+use crate::board::{bitboard, square};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LongAlgebricNotationMove {
-    start: u8,
-    end: u8,
+    start: bitboard::BitIndex,
+    end: bitboard::BitIndex,
     opt_promotion: Option<square::TypePiecePromotion>,
 }
 impl LongAlgebricNotationMove {
-    pub fn new(start: u8, end: u8, opt_promotion: Option<square::TypePiecePromotion>) -> Self {
+    pub fn new(start: bitboard::BitIndex, end: bitboard::BitIndex, opt_promotion: Option<square::TypePiecePromotion>) -> Self {
         LongAlgebricNotationMove {
             start,
             end,
@@ -22,7 +22,7 @@ impl LongAlgebricNotationMove {
             let from_index = square_to_index(from_square);
             let to_index = square_to_index(to_square);
             let opt_promotion = promotion2type_piece(move_str.chars().nth(4))?;
-            if from_index < 64 && to_index < 64 {
+            if from_index.value() < 64 && to_index.value() < 64 {
                 result = Ok(LongAlgebricNotationMove::new(
                     from_index,
                     to_index,
@@ -39,10 +39,10 @@ impl LongAlgebricNotationMove {
             index_to_string(self.end)
         )
     }
-    pub fn start(&self) -> u8 {
+    pub fn start(&self) -> bitboard::BitIndex {
         self.start
     }
-    pub fn end(&self) -> u8 {
+    pub fn end(&self) -> bitboard::BitIndex {
         self.end
     }
     pub fn opt_promotion(&self) -> Option<square::TypePiecePromotion> {
@@ -50,18 +50,18 @@ impl LongAlgebricNotationMove {
     }
 }
 
-fn index_to_string(index: u8) -> String {
-    assert!(index < 64, "index '{}' should be < 64", index);
-    let row = index / 8 + 1;
-    let col = index % 8;
+fn index_to_string(index: bitboard::BitIndex) -> String {
+    assert!(index.value() < 64, "index '{}' should be < 64", index.value());
+    let row = index.row() + 1;
+    let col = index.col();
     format!("{}{}", (col + b'a') as char, row)
 }
 
-fn square_to_index(square: &str) -> u8 {
+fn square_to_index(square: &str) -> bitboard::BitIndex {
     let mut iter = square.chars();
     let col = iter.next().unwrap() as u8 - b'a'; // file 'a'-'h' -> 0-7
     let row = iter.next().unwrap().to_digit(10).unwrap() as u8 - 1; // rank '1'-'8' -> 0-7
-    (row * 8) + col
+    bitboard::BitIndex::new((row * 8) + col)
 }
 
 fn promotion2type_piece(

@@ -161,6 +161,13 @@ impl Game {
         }
     }
 
+    #[allow(dead_code)]
+    fn show(&self) {
+        println!(
+            "{}",
+            self.configuration.opt_position().unwrap().chessboard()
+        );
+    }
     pub fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
         let mut result: Result<(), String> = Ok(());
         if let Some(position) = self.configuration.opt_position() {
@@ -173,14 +180,11 @@ impl Game {
                         break;
                     }
                     Ok(b_move) => {
-                        println!("play: {:?}", b_move);
+                        //println!("play: {:?}", b_move);
                         bit_position = bit_position.move_piece(&b_move);
                         self.configuration.update_position(bit_position.to());
                         self.history.add_moves(b_move);
-                        println!(
-                            "{}",
-                            self.configuration.opt_position().unwrap().chessboard()
-                        );
+                        //self.show();
                         self.update_moves();
                     }
                 }
@@ -271,7 +275,7 @@ fn check_move(
     let start_square = bit_boards_white_and_black.peek(m.start());
     let end_square = bit_boards_white_and_black.peek(m.end());
     match (start_square, end_square) {
-        (square::Square::Empty, _) => Err(format!("empty start square {}", m.start())),
+        (square::Square::Empty, _) => Err(format!("empty start square {}", m.start().value())),
         (square::Square::NonEmpty(piece), square::Square::Empty) => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
             check_move_level2(b_move, bitboard_position)
@@ -280,7 +284,7 @@ fn check_move(
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), Some(capture.type_piece()), m.opt_promotion());
             check_move_level2(b_move, bitboard_position)
         },
-        (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start(), m.end())),
+        (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start().value(), m.end().value())),
     }
 }
 
@@ -386,5 +390,14 @@ mod tests {
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Pat)
+    }
+    #[actix::test]
+    async fn test_game_weird() {
+        let inputs = vec!["position startpos moves d2d4 d7d5 b1c3 a7a6 c1f4 a6a5 d1d2 a5a4 e1c1 a4a3 h2h3 a3b2 c1b1 a8a2 h3h4 a2a1 b1b2", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        //let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        //assert_eq!(end_game, game::EndGame::Pat)
     }
 }
