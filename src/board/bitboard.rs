@@ -7,7 +7,9 @@ use super::{
     ChessBoard,
 };
 use piece_move::table;
-use std::{fmt, ops::BitOrAssign, ops::BitOr, ops::BitAnd, ops::BitXor, ops::Not, ops::Shl, ops::Shr};
+use std::{
+    fmt, ops::BitAnd, ops::BitOr, ops::BitOrAssign, ops::BitXor, ops::Not, ops::Shl, ops::Shr,
+};
 
 #[derive(Debug)]
 pub enum Castle {
@@ -100,8 +102,10 @@ impl BitBoardMove {
             capture = Some(TypePiece::King);
         }
         if type_piece == TypePiece::Pawn
-            && ((color == Color::White && (end.bitboard() & BitBoard(table::MASK_ROW_7)).non_empty())
-                || (color == Color::Black && (end.bitboard() & BitBoard(table::MASK_ROW_0)).non_empty()))
+            && ((color == Color::White
+                && (end.bitboard() & BitBoard(table::MASK_ROW_7)).non_empty())
+                || (color == Color::Black
+                    && (end.bitboard() & BitBoard(table::MASK_ROW_0)).non_empty()))
         {
             vec![
                 Self::new(
@@ -157,14 +161,8 @@ impl BitPosition {
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitPosition {
         let bit_boards_white_and_black = self.bit_boards_white_and_black.move_piece(b_move);
         let bit_board_pawn_opponent = match b_move.color {
-            Color::White => *bit_boards_white_and_black
-                .bit_board_black
-                .pawns
-                .bitboard(),
-            Color::Black => *bit_boards_white_and_black
-                .bit_board_white
-                .pawns
-                .bitboard(),
+            Color::White => *bit_boards_white_and_black.bit_board_black.pawns.bitboard(),
+            Color::Black => *bit_boards_white_and_black.bit_board_white.pawns.bitboard(),
         };
         BitPosition {
             bit_boards_white_and_black,
@@ -218,7 +216,7 @@ fn update_status(
             let dir: i8 = if b_move.color == Color::White { 8 } else { -8 };
             if b_move.start.0 as i8 + dir + dir == b_move.end.0 as i8
                 && (*bit_board_pawn_opponent & b_move.end.right().bitboard()).non_empty()
-                    || (*bit_board_pawn_opponent & b_move.end.left().bitboard()).non_empty()
+                || (*bit_board_pawn_opponent & b_move.end.left().bitboard()).non_empty()
             {
                 capture_en_passant = Some(b_move.start.0 as i8 + dir);
             }
@@ -289,6 +287,24 @@ impl BitBoardsWhiteAndBlack {
             square = Square::build_piece(TypePiece::Pawn, Color::Black)
         };
         square
+    }
+    pub fn remove_piece(
+        self,
+        color: &square::Color,
+        type_piece: TypePiece,
+        index: BitIndex,
+    ) -> BitBoardsWhiteAndBlack {
+        let mask_remove = index.bitboard();
+        match color {
+            square::Color::White => BitBoardsWhiteAndBlack {
+                bit_board_white: self.bit_board_white.remove_piece(type_piece, mask_remove),
+                ..self
+            },
+            square::Color::Black => BitBoardsWhiteAndBlack {
+                bit_board_black: self.bit_board_black.remove_piece(type_piece, mask_remove),
+                ..self
+            },
+        }
     }
     pub fn move_piece(self, b_move: &BitBoardMove) -> BitBoardsWhiteAndBlack {
         let mut mask_remove = BitBoard::default();
@@ -406,6 +422,15 @@ impl BitBoardsWhiteAndBlack {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Direction {
+    BishopTopLeftBottomRight,
+    BishopBottomLeftTopRight,
+    RookHorizontal,
+    RookVertical,
+    None,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
 pub struct BitIndex(u8);
 impl BitIndex {
@@ -415,9 +440,19 @@ impl BitIndex {
     pub fn new(index: u8) -> Self {
         BitIndex(index)
     }
-    #[cfg(test)]    
+    #[cfg(test)]
     pub fn union(indexes: Vec<u8>) -> Vec<Self> {
         indexes.iter().map(|idx| Self::new(*idx)).collect()
+    }
+    pub fn direction(&self, to: BitIndex) -> Direction {
+        let index = (to.0 as i8 - self.0 as i8).abs();
+        match index {
+            _ if index % 7 == 0 => Direction::BishopTopLeftBottomRight,
+            _ if index % 9 == 0 => Direction::BishopBottomLeftTopRight,
+            _ if index % 8 == 0 => Direction::RookVertical,
+            _ if to.row() == self.row() => Direction::RookHorizontal,
+            _ => Direction::None,
+        }
     }
     pub fn first_col(&self) -> BitIndex {
         BitIndex(self.0 - self.col())
@@ -439,7 +474,7 @@ impl BitIndex {
     }
     pub fn downx2(&self) -> BitIndex {
         BitIndex(self.0 - 16)
-    }    
+    }
     pub fn row(&self) -> u8 {
         self.0 / 8
     }
@@ -502,7 +537,8 @@ impl BitBoard {
 
     #[cfg(test)]
     fn build(vec: Vec<BitIndex>) -> Self {
-        vec.into_iter().fold(Self::default(), |acc, index| acc | index.bitboard())
+        vec.into_iter()
+            .fold(Self::default(), |acc, index| acc | index.bitboard())
     }
 
     fn list_non_empty_squares(&self) -> Vec<coord::Coord> {
@@ -599,7 +635,6 @@ impl Not for BitBoard {
     }
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct BitBoards {
     rooks: piece_move::RooksBitBoard,
@@ -653,11 +688,41 @@ impl BitBoards {
             mask_promotion_knight,
             mask_promotion_queen,
         ) = match promotion {
-            None => (start.bitboard() | end.bitboard(), BitBoard::default(), BitBoard::default(), BitBoard::default(), BitBoard::default()),
-            Some(TypePiecePromotion::Rook) => (start.bitboard(), end.bitboard(), BitBoard::default(), BitBoard::default(), BitBoard::default()),
-            Some(TypePiecePromotion::Bishop) => (start.bitboard(), BitBoard::default(), end.bitboard(), BitBoard::default(), BitBoard::default()),
-            Some(TypePiecePromotion::Knight) => (start.bitboard(), BitBoard::default(), BitBoard::default(), end.bitboard(), BitBoard::default()),
-            Some(TypePiecePromotion::Queen) => (start.bitboard(), BitBoard::default(), BitBoard::default(), BitBoard::default(), end.bitboard()),
+            None => (
+                start.bitboard() | end.bitboard(),
+                BitBoard::default(),
+                BitBoard::default(),
+                BitBoard::default(),
+                BitBoard::default(),
+            ),
+            Some(TypePiecePromotion::Rook) => (
+                start.bitboard(),
+                end.bitboard(),
+                BitBoard::default(),
+                BitBoard::default(),
+                BitBoard::default(),
+            ),
+            Some(TypePiecePromotion::Bishop) => (
+                start.bitboard(),
+                BitBoard::default(),
+                end.bitboard(),
+                BitBoard::default(),
+                BitBoard::default(),
+            ),
+            Some(TypePiecePromotion::Knight) => (
+                start.bitboard(),
+                BitBoard::default(),
+                BitBoard::default(),
+                end.bitboard(),
+                BitBoard::default(),
+            ),
+            Some(TypePiecePromotion::Queen) => (
+                start.bitboard(),
+                BitBoard::default(),
+                BitBoard::default(),
+                BitBoard::default(),
+                end.bitboard(),
+            ),
         };
         let bitboards = match type_piece {
             TypePiece::Rook => BitBoards {
@@ -689,19 +754,27 @@ impl BitBoards {
             None => bitboards,
             Some(p_type_piece) if type_piece.equals(p_type_piece) => bitboards,
             Some(TypePiecePromotion::Rook) => BitBoards {
-                rooks: bitboards.rooks.switch(BitBoard::default(), mask_promotion_rook),
+                rooks: bitboards
+                    .rooks
+                    .switch(BitBoard::default(), mask_promotion_rook),
                 ..bitboards
             },
             Some(TypePiecePromotion::Bishop) => BitBoards {
-                bishops: bitboards.bishops.switch(BitBoard::default(), mask_promotion_bishop),
+                bishops: bitboards
+                    .bishops
+                    .switch(BitBoard::default(), mask_promotion_bishop),
                 ..bitboards
             },
             Some(TypePiecePromotion::Knight) => BitBoards {
-                knights: bitboards.knights.switch(BitBoard::default(), mask_promotion_knight),
+                knights: bitboards
+                    .knights
+                    .switch(BitBoard::default(), mask_promotion_knight),
                 ..bitboards
             },
             Some(TypePiecePromotion::Queen) => BitBoards {
-                queens: bitboards.queens.switch(BitBoard::default(), mask_promotion_queen),
+                queens: bitboards
+                    .queens
+                    .switch(BitBoard::default(), mask_promotion_queen),
                 ..bitboards
             },
         }
@@ -843,7 +916,11 @@ impl BitPositionStatus {
             }
         }
     }
-    pub fn can_castle_king_side(&self, bit_board: BitBoard, color: &square::Color) -> Option<(BitIndex, BitIndex)> {
+    pub fn can_castle_king_side(
+        &self,
+        bit_board: BitBoard,
+        color: &square::Color,
+    ) -> Option<(BitIndex, BitIndex)> {
         match color {
             square::Color::White => {
                 if self.castling_white_king_side()
@@ -1028,7 +1105,8 @@ fn encode_pawn_en_passant(maybe_coord: Option<coord::Coord>) -> Option<i8> {
 }
 
 fn decode_pawn_en_passant(maybe_index: Option<BitIndex>) -> Option<coord::Coord> {
-    maybe_index.and_then(|index| coord::Coord::from((index.col() + 65) as char, index.row() + 1).ok())
+    maybe_index
+        .and_then(|index| coord::Coord::from((index.col() + 65) as char, index.row() + 1).ok())
 }
 
 use square::Color;
@@ -1104,15 +1182,27 @@ mod tests {
         let bit_position = BitBoardsWhiteAndBlack::from(empty_board);
 
         assert_eq!(*bit_position.bit_board_white.rooks.bitboard(), BitBoard(0));
-        assert_eq!(*bit_position.bit_board_white.bishops.bitboard(), BitBoard(0));
-        assert_eq!(*bit_position.bit_board_white.knights.bitboard(), BitBoard(0));
+        assert_eq!(
+            *bit_position.bit_board_white.bishops.bitboard(),
+            BitBoard(0)
+        );
+        assert_eq!(
+            *bit_position.bit_board_white.knights.bitboard(),
+            BitBoard(0)
+        );
         assert_eq!(*bit_position.bit_board_white.king.bitboard(), BitBoard(0));
         assert_eq!(*bit_position.bit_board_white.queens.bitboard(), BitBoard(0));
         assert_eq!(*bit_position.bit_board_white.pawns.bitboard(), BitBoard(0));
 
         assert_eq!(*bit_position.bit_board_black.rooks.bitboard(), BitBoard(0));
-        assert_eq!(*bit_position.bit_board_black.bishops.bitboard(), BitBoard(0));
-        assert_eq!(*bit_position.bit_board_black.knights.bitboard(), BitBoard(0));
+        assert_eq!(
+            *bit_position.bit_board_black.bishops.bitboard(),
+            BitBoard(0)
+        );
+        assert_eq!(
+            *bit_position.bit_board_black.knights.bitboard(),
+            BitBoard(0)
+        );
         assert_eq!(*bit_position.bit_board_black.king.bitboard(), BitBoard(0));
         assert_eq!(*bit_position.bit_board_black.queens.bitboard(), BitBoard(0));
         assert_eq!(*bit_position.bit_board_black.pawns.bitboard(), BitBoard(0));
@@ -1159,10 +1249,22 @@ mod tests {
             square::Color::White,
         );
         let bit_position = BitBoardsWhiteAndBlack::from(mixed_board);
-        assert_eq!(*bit_position.bit_board_white.rooks.bitboard(), BitIndex(0).bitboard()); // Index 0
-        assert_eq!(*bit_position.bit_board_white.queens.bitboard(), BitIndex(27).bitboard()); // Index 27 (3 * 8 + 3)
-        assert_eq!(*bit_position.bit_board_black.king.bitboard(), BitIndex(63).bitboard()); // Index 63 (7 * 8 + 7)
-        assert_eq!(*bit_position.bit_board_black.bishops.bitboard(), BitIndex(36).bitboard()); // Index 36 (4 * 8 + 4)
+        assert_eq!(
+            *bit_position.bit_board_white.rooks.bitboard(),
+            BitIndex(0).bitboard()
+        ); // Index 0
+        assert_eq!(
+            *bit_position.bit_board_white.queens.bitboard(),
+            BitIndex(27).bitboard()
+        ); // Index 27 (3 * 8 + 3)
+        assert_eq!(
+            *bit_position.bit_board_black.king.bitboard(),
+            BitIndex(63).bitboard()
+        ); // Index 63 (7 * 8 + 7)
+        assert_eq!(
+            *bit_position.bit_board_black.bishops.bitboard(),
+            BitIndex(36).bitboard()
+        ); // Index 36 (4 * 8 + 4)
         assert_eq!(
             *bit_position.bit_board_white.pawns.bitboard(),
             BitBoard::build(BitIndex::union(vec![8, 10, 15]))
@@ -1200,7 +1302,9 @@ mod tests {
             bishops: piece_move::BishopsBitBoard::default(),
             queens: piece_move::QueensBitBoard::new(BitIndex(27).bitboard()),
             king: piece_move::KingBitBoard::new(BitIndex(0).bitboard()),
-            pawns: piece_move::PawnsBitBoard::new(BitBoard::build(BitIndex::union(vec![8, 10, 15]))),
+            pawns: piece_move::PawnsBitBoard::new(BitBoard::build(BitIndex::union(vec![
+                8, 10, 15,
+            ]))),
         };
         let bit_board_black = BitBoards {
             rooks: piece_move::RooksBitBoard::default(),
@@ -1208,8 +1312,7 @@ mod tests {
             bishops: piece_move::BishopsBitBoard::new(BitIndex(36).bitboard()),
             queens: piece_move::QueensBitBoard::default(),
             king: piece_move::KingBitBoard::new(BitIndex(63).bitboard()),
-            pawns: piece_move::PawnsBitBoard::new(
-                BitIndex(40).bitboard()),
+            pawns: piece_move::PawnsBitBoard::new(BitIndex(40).bitboard()),
         };
         let bit_position = BitBoardsWhiteAndBlack {
             bit_board_white,

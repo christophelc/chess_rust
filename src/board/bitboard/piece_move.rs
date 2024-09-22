@@ -22,7 +22,10 @@ pub enum CheckStatus {
     None,
 }
 impl CheckStatus {
-    pub fn build_simple_check(attacker: square::TypePiece, attacker_index: bitboard::BitIndex) -> CheckStatus {
+    pub fn build_simple_check(
+        attacker: square::TypePiece,
+        attacker_index: bitboard::BitIndex,
+    ) -> CheckStatus {
         if attacker_index.0 < 64 {
             CheckStatus::Simple {
                 attacker,
@@ -89,9 +92,7 @@ pub struct RooksBitBoard {
 }
 impl RooksBitBoard {
     pub fn new(bitboard: BitBoard) -> Self {
-        RooksBitBoard {
-            bitboard
-        }
+        RooksBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -133,9 +134,7 @@ pub struct BishopsBitBoard {
 }
 impl BishopsBitBoard {
     pub fn new(bitboard: BitBoard) -> Self {
-        BishopsBitBoard {
-            bitboard
-        }
+        BishopsBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -176,9 +175,7 @@ pub struct KnightsBitBoard {
 }
 impl KnightsBitBoard {
     pub fn new(bitboard: BitBoard) -> Self {
-        KnightsBitBoard {
-            bitboard
-        }
+        KnightsBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -214,11 +211,9 @@ pub struct KingBitBoard {
     bitboard: BitBoard,
 }
 impl KingBitBoard {
-    #[cfg(test)]    
+    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
-        KingBitBoard {
-            bitboard,
-        }
+        KingBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -239,7 +234,7 @@ impl KingBitBoard {
         bit_board: &bitboard::BitBoards,
         bit_board_opponent: &bitboard::BitBoards,
         can_castle_king_side: Option<(bitboard::BitIndex, bitboard::BitIndex)>,
-        can_castle_queen_side: Option<(bitboard::BitIndex, bitboard::BitIndex, bitboard::BitIndex)>,    
+        can_castle_queen_side: Option<(bitboard::BitIndex, bitboard::BitIndex, bitboard::BitIndex)>,
     ) -> Vec<PieceMoves> {
         let mut moves = vec![];
         for lsb in self.bitboard.iter() {
@@ -268,11 +263,9 @@ pub struct QueensBitBoard {
     bitboard: BitBoard,
 }
 impl QueensBitBoard {
-    #[cfg(test)]    
+    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
-        QueensBitBoard {
-            bitboard
-        }
+        QueensBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -311,11 +304,9 @@ pub struct PawnsBitBoard {
     bitboard: BitBoard,
 }
 impl PawnsBitBoard {
-    #[cfg(test)]    
+    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
-        PawnsBitBoard {
-            bitboard,
-        }
+        PawnsBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
@@ -335,7 +326,7 @@ impl PawnsBitBoard {
         color: &square::Color,
         bit_board: &bitboard::BitBoards,
         bit_board_opponent: &bitboard::BitBoards,
-        capture_en_passant: &Option<bitboard::BitIndex>,        
+        capture_en_passant: &Option<bitboard::BitIndex>,
     ) -> Vec<PieceMoves> {
         let mut moves = vec![];
         for lsb in self.bitboard.iter() {
@@ -412,27 +403,97 @@ fn moves2bitboard_moves(
                 bit_boards_white_and_black,
             );
             // check that destination square for king are free of attackers
-            if piece_moves.type_piece() == TypePiece::King {
-                let bitboard_move: Vec<&BitBoardMove> = bitboard_move
-                    .iter()
-                    .filter(|b_move| {
-                        // simulate the move
-                        let updated_board =
-                            (*bit_boards_white_and_black).clone().move_piece(b_move);
-                        check_status(&color, &updated_board) == CheckStatus::None
-                    })
-                    .collect();
-                bitboard_moves.extend(bitboard_move);
-            } else {
-                bitboard_moves.extend(bitboard_move);
+            match piece_moves.type_piece() {
+                TypePiece::King => {
+                    let bitboard_move: Vec<&BitBoardMove> = bitboard_move
+                        .iter()
+                        .filter(|b_move| {
+                            // simulate the move
+                            let updated_board =
+                                (*bit_boards_white_and_black).clone().move_piece(b_move);
+                            check_status(&color, &updated_board) == CheckStatus::None
+                        })
+                        .collect();
+                    bitboard_moves.extend(bitboard_move);
+                }
+                type_piece => {
+                    if !control_discover_king(
+                        &color,
+                        type_piece,
+                        piece_moves.index(),
+                        to,
+                        bit_boards_white_and_black,
+                    ) {
+                        bitboard_moves.extend(bitboard_move);
+                    }
+                }
             }
         }
     }
     bitboard_moves
 }
 
+// Check that the moves does not discover King
+fn control_discover_king(
+    color: &square::Color,
+    type_piece: TypePiece,
+    p_start: bitboard::BitIndex,
+    p_end: bitboard::BitIndex,
+    bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
+) -> bool {
+    let k = bit_boards_white_and_black
+        .bit_board(color)
+        .king()
+        .bitboard()
+        .index();
+    match (k.direction(p_start), p_start.direction(p_end)) {
+        (bitboard::Direction::None, _) => false,
+        (dir1, dir2) if dir1 == dir2 => false,
+        (bitboard::Direction::BishopBottomLeftTopRight, _)
+        | (bitboard::Direction::BishopTopLeftBottomRight, _) => {
+            // remove P
+            let bb = bit_boards_white_and_black
+                .clone()
+                .remove_piece(color, type_piece, p_start);
+            let bit_board = bb.bit_board(color);
+            let bit_board_opponent = bb.bit_board(&color.switch());
+            // generate king moves as Bishop
+            let moves = BishopsBitBoard::new(k.bitboard()).gen_moves_no_check(
+                color,
+                bit_board,
+                bit_board_opponent,
+            );
+            // result: intersect with opponent Bishop / Q
+            let opponent_bishops_queens =
+                *bit_board_opponent.bishops().bitboard() | *bit_board_opponent.queens().bitboard();
+            moves
+                .iter()
+                .any(|m| (m.moves & opponent_bishops_queens).non_empty())
+        }
+        (bitboard::Direction::RookVertical, _) | (bitboard::Direction::RookHorizontal, _) => {
+            // remove P
+            let bb = bit_boards_white_and_black
+                .clone()
+                .remove_piece(color, type_piece, p_start);
+            let bit_board = bb.bit_board(color);
+            let bit_board_opponent = bb.bit_board(&color.switch());
+            // generate king moves as Bishop
+            let moves = BishopsBitBoard::new(k.bitboard()).gen_moves_no_check(
+                color,
+                bit_board,
+                bit_board_opponent,
+            );
+            // result: intersect with opponent Bishop / Q
+            let opponent_rooks_queens =
+                *bit_board_opponent.rooks().bitboard() | *bit_board_opponent.queens().bitboard();
+            moves
+                .iter()
+                .any(|m| (m.moves & opponent_rooks_queens).non_empty())
+        }
+    }
+}
+
 // Generate move for king in case of simple check
-// we don't check if the square destinations are free of attacks
 fn gen_moves_for_all_simple_check(
     color: &square::Color,
     attacker: TypePiece,
@@ -440,34 +501,124 @@ fn gen_moves_for_all_simple_check(
     bit_board: &bitboard::BitBoards,
     bit_board_opponent: &bitboard::BitBoards,
 ) -> Vec<PieceMoves> {
-    let attackers = attackers(
+    assert!(attacker_index.bitboard().non_empty());
+    let attackers_opponent_check = attackers(
         attacker == square::TypePiece::King,
         attacker_index,
         &color.switch(),
         bit_board_opponent,
         bit_board,
     );
+    let king_index = bit_board.king().bitboard().index();
     let moves_king = {
-        let index = bit_board.king().bitboard().index();
         let moves_bitboard =
-            gen_moves_for_king_except_castle(index, &bit_board.concat_bit_boards());
+            gen_moves_for_king_except_castle(king_index, &bit_board.concat_bit_boards());
         moves_non_empty(
             TypePiece::King,
-            index,
+            king_index,
             moves_bitboard,
             &bit_board.concat_bit_boards(),
         )
     };
     let mut moves: Vec<PieceMoves> = moves_king.into_iter().collect();
     // capture attacker to remove check
-    for attacker in attackers.iter() {
-        if attacker.1.non_empty() {
-            moves.push(PieceMoves {
-                type_piece: attacker.0,
-                index: attacker.1.index(),
-                moves: attacker_index.bitboard(),
-            });
+    let (type_piece, bit_board_attacker_of_opponent) =
+        attackers_opponent_check.iter().next().unwrap();
+    if bit_board_attacker_of_opponent.non_empty() {
+        moves.push(PieceMoves {
+            type_piece,
+            index: bit_board_attacker_of_opponent.index(),
+            moves: attacker_index.bitboard(),
+        })
+    }
+    match king_index.direction(attacker_index) {
+        bitboard::Direction::RookHorizontal | bitboard::Direction::RookVertical => {
+            // generate moves for king seen as a rook
+            let maybe_king_as_rook_moves = RooksBitBoard::new(*bit_board.king().bitboard())
+                .gen_moves_no_check(color, bit_board, bit_board_opponent);
+            // generate moves for attacking rook as if the same color as the king
+            let maybe_rook_moves = RooksBitBoard::new(attacker_index.bitboard())
+                .gen_moves_no_check(color, bit_board, bit_board_opponent);
+            // compute the mask: intersection of the moves
+            if let (Some(king_as_rook_moves), Some(rook_moves)) =
+                (maybe_king_as_rook_moves.first(), maybe_rook_moves.first())
+            {
+                let mask = *king_as_rook_moves.moves() & *rook_moves.moves();
+                // generate moves for R, B, Q, K
+                let rook_moves =
+                    bit_board
+                        .rooks()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let bishop_moves =
+                    bit_board
+                        .bishops()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let queen_moves =
+                    bit_board
+                        .queens()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let knight_moves =
+                    bit_board
+                        .knights()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                // and intersect with mask
+                let iter = rook_moves.into_iter().chain(
+                    bishop_moves
+                        .into_iter()
+                        .chain(queen_moves.into_iter().chain(knight_moves)),
+                );
+                let moves_blocking_check: Vec<PieceMoves> = iter
+                    .filter(|m| (m.moves & mask).non_empty())
+                    .map(|m| m.and_moves(mask))
+                    .collect();
+                moves.extend(moves_blocking_check);
+            }
         }
+        bitboard::Direction::BishopBottomLeftTopRight
+        | bitboard::Direction::BishopTopLeftBottomRight => {
+            // generate moves for king seen as a bishop
+            let maybe_king_as_bishop_moves = BishopsBitBoard::new(*bit_board.king().bitboard())
+                .gen_moves_no_check(color, bit_board, bit_board_opponent);
+            // generate moves for attacking rook as if the same color as the king
+            let maybe_bishop_moves = BishopsBitBoard::new(attacker_index.bitboard())
+                .gen_moves_no_check(color, bit_board, bit_board_opponent);
+            // compute the mask: intersection of the moves
+            if let (Some(king_as_bishop_moves), Some(bishop_moves)) = (
+                maybe_king_as_bishop_moves.first(),
+                maybe_bishop_moves.first(),
+            ) {
+                let mask = *king_as_bishop_moves.moves() & *bishop_moves.moves();
+                // generate moves for R, B, Q, K
+                let rook_moves =
+                    bit_board
+                        .rooks()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let bishop_moves =
+                    bit_board
+                        .bishops()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let queen_moves =
+                    bit_board
+                        .queens()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let knight_moves =
+                    bit_board
+                        .knights()
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                // and intersect with mask
+                let iter = rook_moves.into_iter().chain(
+                    bishop_moves
+                        .into_iter()
+                        .chain(queen_moves.into_iter().chain(knight_moves)),
+                );
+                let moves_blocking_check: Vec<PieceMoves> = iter
+                    .filter(|m| (m.moves & mask).non_empty())
+                    .map(|m| m.and_moves(mask))
+                    .collect();
+                moves.extend(moves_blocking_check);
+            }
+        }
+        _ => {}
     }
     moves
 }
@@ -484,10 +635,10 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         let bit_board_opponent = self.bit_board(&color.switch());
         let moves_all = match check_status {
             CheckStatus::None => {
-                let can_castle_king_side = bit_position_status
-                    .can_castle_king_side(bit_board.concat_bit_boards(), color);
-                let can_castle_queen_side = bit_position_status
-                    .can_castle_queen_side(bit_board.concat_bit_boards(), color);
+                let can_castle_king_side =
+                    bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), color);
+                let can_castle_queen_side =
+                    bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), color);
                 let mut moves_all: Vec<PieceMoves> = vec![];
                 let moves =
                     bit_board
@@ -504,20 +655,25 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
                         .knights
                         .gen_moves_no_check(color, bit_board, bit_board_opponent);
                 moves_all.extend(moves);
-                let moves =
-                    bit_board
-                        .king
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent, can_castle_king_side, can_castle_queen_side);
+                let moves = bit_board.king.gen_moves_no_check(
+                    color,
+                    bit_board,
+                    bit_board_opponent,
+                    can_castle_king_side,
+                    can_castle_queen_side,
+                );
                 moves_all.extend(moves);
                 let moves =
                     bit_board
                         .queens
                         .gen_moves_no_check(color, bit_board, bit_board_opponent);
                 moves_all.extend(moves);
-                let moves =
-                    bit_board
-                        .pawns
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent, capture_en_passant);
+                let moves = bit_board.pawns.gen_moves_no_check(
+                    color,
+                    bit_board,
+                    bit_board_opponent,
+                    capture_en_passant,
+                );
                 moves_all.extend(moves);
                 moves_all
             }
@@ -586,17 +742,15 @@ fn check_status(
         (true, false, false, false, false, false) => {
             CheckStatus::build_simple_check(TypePiece::Rook, attackers.rooks.index())
         }
-        (false, true, false, false, false, false) => CheckStatus::build_simple_check(
-            TypePiece::Bishop,
-            attackers.bishops.index(),
-        ),
+        (false, true, false, false, false, false) => {
+            CheckStatus::build_simple_check(TypePiece::Bishop, attackers.bishops.index())
+        }
         (false, false, true, false, false, false) => {
             CheckStatus::build_simple_check(TypePiece::Queen, attackers.queens.index())
         }
-        (false, false, false, true, false, false) => CheckStatus::build_simple_check(
-            TypePiece::Knight,
-            attackers.knights.index(),
-        ),
+        (false, false, false, true, false, false) => {
+            CheckStatus::build_simple_check(TypePiece::Knight, attackers.knights.index())
+        }
         (false, false, false, false, true, false) => {
             CheckStatus::build_simple_check(TypePiece::Pawn, attackers.pawns.index())
         }
@@ -623,28 +777,25 @@ fn attackers(
         bit_board,
         bit_board_opponent,
     );
-    let piece_as_rook = piece_as_rook
-    .first()
-    .map(|m| m.moves())
-    .unwrap_or(&bb_zero);
+    let piece_as_rook = piece_as_rook.first().map(|m| m.moves()).unwrap_or(&bb_zero);
     let piece_as_bishop = BishopsBitBoard::new(piece_bit_board).gen_moves_no_check(
         color,
         bit_board,
         bit_board_opponent,
     );
     let piece_as_bishop = piece_as_bishop
-    .first()
-    .map(|m| m.moves())
-    .unwrap_or(&bb_zero);
+        .first()
+        .map(|m| m.moves())
+        .unwrap_or(&bb_zero);
     let piece_as_knight = KnightsBitBoard::new(piece_bit_board).gen_moves_no_check(
         color,
         bit_board,
         bit_board_opponent,
     );
     let piece_as_knight = piece_as_knight
-    .first()
-    .map(|m| m.moves())
-    .unwrap_or(&bb_zero);
+        .first()
+        .map(|m| m.moves())
+        .unwrap_or(&bb_zero);
     let piece_as_pawn =
         gen_pawn_squares_attacked(piece_index, color, &bit_board_opponent.concat_bit_boards());
 
@@ -712,26 +863,43 @@ fn gen_moves_for_king_castle(
     };
     move_short_castle | move_long_castle
 }
-fn gen_moves_for_king_except_castle(index: bitboard::BitIndex, bit_board: &bitboard::BitBoard) -> BitBoard {
+fn gen_moves_for_king_except_castle(
+    index: bitboard::BitIndex,
+    bit_board: &bitboard::BitBoard,
+) -> BitBoard {
     let moves_bitboard = table::table_king::king_moves(index.value());
-    BitBoard(moves_bitboard & !bit_board.value())    
+    BitBoard(moves_bitboard & !bit_board.value())
 }
 
-fn gen_moves_for_knight(index: bitboard::BitIndex, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
+fn gen_moves_for_knight(
+    index: bitboard::BitIndex,
+    bit_board: &bitboard::BitBoard,
+) -> Option<PieceMoves> {
     let moves_bitboard = table::table_knight::knight_moves(index.value());
-    moves_non_empty(TypePiece::Knight, index, BitBoard(moves_bitboard), bit_board)    
+    moves_non_empty(
+        TypePiece::Knight,
+        index,
+        BitBoard(moves_bitboard),
+        bit_board,
+    )
 }
 
-fn gen_moves_for_rook_horizontal(index: bitboard::BitIndex, blockers_h: BitBoard, mask_h: BitBoard) -> BitBoard {
+fn gen_moves_for_rook_horizontal(index: bitboard::BitIndex, blockers_h: BitBoard) -> BitBoard {
+    let mask_h = BitBoard::new(255) << index.first_col();
     let blockers_h = blockers_h & mask_h;
-    let col = index.col() % 8;
+    let col = index.col();
     let index_col_a = index.first_col();
-    let blockers_first_row = (blockers_h << index_col_a).0 as u8;
+    let blockers_first_row = (blockers_h >> index_col_a).0 as u8;
     BitBoard(table_rook::table_rook_h(col, blockers_first_row) as u64) << index_col_a
 }
 
-fn gen_moves_for_rook_vertical(index: bitboard::BitIndex, blockers_v: BitBoard, mask_v: BitBoard) -> BitBoard {
-    BitBoard::new(table::table_rook::table_rook_v(index.value(), blockers_v.value(), mask_v.value()))
+fn gen_moves_for_rook_vertical(index: bitboard::BitIndex, blockers_v: BitBoard) -> BitBoard {
+    let mask_v = BitBoard(table::MASK_COL_A) << index.col();
+    BitBoard::new(table::table_rook::table_rook_v(
+        index.value(),
+        blockers_v.value(),
+        mask_v.value(),
+    ))
 }
 
 fn gen_moves_for_rook(
@@ -740,12 +908,9 @@ fn gen_moves_for_rook(
     bit_board: &bitboard::BitBoard,
     bit_board_opponent: &bitboard::BitBoard,
 ) -> Option<PieceMoves> {
-    let mask_h = BitBoard::new(255) << index.first_col();
-    let mask_v = BitBoard(table::MASK_COL_A) << index.col();
     let blockers = *bit_board | *bit_board_opponent;
-
-    let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers, mask_h);
-    let moves_vertical = gen_moves_for_rook_vertical(index, blockers, mask_v);
+    let moves_horizontal = gen_moves_for_rook_horizontal(index, blockers);
+    let moves_vertical = gen_moves_for_rook_vertical(index, blockers);
     let moves_bitboard = moves_horizontal | moves_vertical;
     let type_piece = if is_queen {
         TypePiece::Queen
@@ -880,7 +1045,8 @@ fn gen_pawn_non_attacker_moves(
             }
             // capture en passant
             if let Some(en_passant_idx) = capture_en_passant {
-                if index.down().right() == *en_passant_idx || index.down().left() == *en_passant_idx {
+                if index.down().right() == *en_passant_idx || index.down().left() == *en_passant_idx
+                {
                     moves |= en_passant_idx.bitboard();
                 }
             }
@@ -934,6 +1100,12 @@ impl PieceMoves {
     }
     pub fn moves(&self) -> &bitboard::BitBoard {
         &self.moves
+    }
+    pub fn and_moves(&self, mask: BitBoard) -> Self {
+        PieceMoves {
+            moves: self.moves & mask,
+            ..*self
+        }
     }
 }
 
@@ -1071,7 +1243,9 @@ mod tests {
     #[test]
     fn test_king_blocked_by_friendly_pieces() {
         let king_position = bitboard::BitIndex(27); // Center of the board
-        let bit_board = BitBoard::build(bitboard::BitIndex::union(vec![18,  19, 20, 26, 28, 34, 35, 36]));
+        let bit_board = BitBoard::build(bitboard::BitIndex::union(vec![
+            18, 19, 20, 26, 28, 34, 35, 36,
+        ]));
         let result = gen_moves_for_king_except_castle(king_position, &bit_board);
         assert!(result.empty()); // Expect no moves available
     }
@@ -1128,7 +1302,8 @@ mod tests {
         let king_position = bitboard::BitIndex(62); // G8
         let bit_board = BitBoard::default();
         let result = gen_moves_for_king_except_castle(king_position, &bit_board);
-        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![61, 63, 53, 54, 55])); // Moves: F8, H8, F7, G7, H7
+        let expected_moves =
+            bitboard::BitBoard::build(bitboard::BitIndex::union(vec![61, 63, 53, 54, 55])); // Moves: F8, H8, F7, G7, H7
         assert_eq!(result, expected_moves);
     }
 
@@ -1142,8 +1317,9 @@ mod tests {
 
         let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Moves from d4 are to e2, f3, f5, e6, c6, b5, b3, c2 (calculating their respective bit positions)
-        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![10,
-            12, 17, 21, 33, 37, 42, 44]));
+        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![
+            10, 12, 17, 21, 33, 37, 42, 44,
+        ]));
         assert_eq!(moves.moves().0, expected_moves.0);
     }
 
@@ -1172,12 +1348,13 @@ mod tests {
     #[test]
     fn knight_moves_with_blockages() {
         let knight_index = bitboard::BitIndex(27); // d4 again for center moves
-                                 // Block e6 and c2 with own pieces
+                                                   // Block e6 and c2 with own pieces
         let own_pieces = BitBoard::build(bitboard::BitIndex::union(vec![17, 44])); // Block e6 and b3
 
         let moves = gen_moves_for_knight(knight_index, &own_pieces).unwrap();
         // Adjusted for blockages, valid moves are to e2, f3, f5, c6, b5, b3, c2
-        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![ 10, 12, 21, 33, 37, 42]));
+        let expected_moves =
+            bitboard::BitBoard::build(bitboard::BitIndex::union(vec![10, 12, 21, 33, 37, 42]));
         assert_eq!(moves.moves().value(), expected_moves.0);
     }
 
@@ -1189,7 +1366,9 @@ mod tests {
 
         let moves = gen_moves_for_knight(knight_index, &empty_board).unwrap();
         // Includes potential captures, valid moves are e2, f3, f5, e6, c6, b5, b3, c2
-        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![10, 12, 17, 21, 33, 37, 42, 44]));
+        let expected_moves = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![
+            10, 12, 17, 21, 33, 37, 42, 44,
+        ]));
         assert_eq!(moves.moves().0, expected_moves.0); // Includes potential captures
     }
 
@@ -1239,7 +1418,7 @@ mod tests {
     #[test]
     fn test_rook_blockers_to_right() {
         let index = bitboard::BitIndex(17); // Rook on the third row, second column
-        let bit_board = index.bitboard() | bitboard::BitIndex( 23).bitboard();
+        let bit_board = index.bitboard() | bitboard::BitIndex(23).bitboard();
         let bit_board_opponent = bitboard::BitBoard(0);
         let expected = 125 << 16 | (2 | 2 << 8 | 2 << 24 | 2 << 32 | 2 << 40 | 2 << 48 | 2 << 56);
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
@@ -1253,7 +1432,8 @@ mod tests {
     #[test]
     fn test_rook_blockers_to_right2() {
         let index = bitboard::BitIndex(0);
-        let bit_board = index.bitboard() | bitboard::BitBoard::build(bitboard::BitIndex::union(vec![4, 8]));
+        let bit_board =
+            index.bitboard() | bitboard::BitBoard::build(bitboard::BitIndex::union(vec![4, 8]));
         let bit_board_opponent = BitBoard::default();
         let expected = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![1, 2, 3]));
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
@@ -1279,7 +1459,8 @@ mod tests {
     #[test]
     fn test_rook_blockers_on_both_sides() {
         let index = bitboard::BitIndex(18); // Rook on the third row, third column
-        let bit_board = index.bitboard() | bitboard::BitBoard::build(bitboard::BitIndex::union(vec![16, 23]));
+        let bit_board =
+            index.bitboard() | bitboard::BitBoard::build(bitboard::BitIndex::union(vec![16, 23]));
         let bit_board_opponent = bitboard::BitBoard::default();
         let expected = 122 << 16 | (4 | 4 << 8 | 4 << 24 | 4 << 32 | 4 << 40 | 4 << 48 | 4 << 56);
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
@@ -1309,7 +1490,7 @@ mod tests {
         let bit_board = index.bitboard();
         let bit_board_opponent = bitboard::BitBoard::default();
         let expected = BitBoard(254 << 24)
-            | BitBoard::build(bitboard::BitIndex::union(vec![0,  8, 16, 32, 40, 48, 56]));
+            | BitBoard::build(bitboard::BitIndex::union(vec![0, 8, 16, 32, 40, 48, 56]));
         let result = gen_moves_for_rook(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1400,8 +1581,9 @@ mod tests {
         let index = bitboard::BitIndex(20);
         let bit_board = index.bitboard() | bitboard::BitIndex(34).bitboard();
         let bit_board_opponent = bitboard::BitBoard(1u64 << 6);
-        let expected = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![2,
-            6, 11, 13, 27, 29, 38, 47]));
+        let expected = bitboard::BitBoard::build(bitboard::BitIndex::union(vec![
+            2, 6, 11, 13, 27, 29, 38, 47,
+        ]));
         let result = gen_moves_for_bishop(false, index, &bit_board, &bit_board_opponent)
             .unwrap()
             .moves()
@@ -1701,7 +1883,10 @@ mod tests {
                 &None,
                 bit_board_position.bit_position_status(),
             );
-        let mut m: Vec<(u8, u8)> = moves.iter().map(|v| (v.start().value(), v.end().value())).collect();
+        let mut m: Vec<(u8, u8)> = moves
+            .iter()
+            .map(|v| (v.start().value(), v.end().value()))
+            .collect();
         let mut expected = vec![
             (0, 1),
             (0, 2),
@@ -1736,11 +1921,16 @@ mod tests {
         let short_castle_move: Vec<&bitboard::BitBoardMove> = moves
             .iter()
             .filter(|v| {
-                v.type_piece() == TypePiece::King && v.start() < v.end() && v.end().value() - v.start().value() == 2
+                v.type_piece() == TypePiece::King
+                    && v.start() < v.end()
+                    && v.end().value() - v.start().value() == 2
             })
             .collect();
         let short_castle = *short_castle_move.get(0).unwrap();
-        assert_eq!((short_castle.start().value(), short_castle.end().value()), (4u8, 6u8));
+        assert_eq!(
+            (short_castle.start().value(), short_castle.end().value()),
+            (4u8, 6u8)
+        );
         let expected = bitboard::BitBoardMove::new(
             square::Color::White,
             TypePiece::King,

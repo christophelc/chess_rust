@@ -7,7 +7,11 @@ pub struct LongAlgebricNotationMove {
     opt_promotion: Option<square::TypePiecePromotion>,
 }
 impl LongAlgebricNotationMove {
-    pub fn new(start: bitboard::BitIndex, end: bitboard::BitIndex, opt_promotion: Option<square::TypePiecePromotion>) -> Self {
+    pub fn new(
+        start: bitboard::BitIndex,
+        end: bitboard::BitIndex,
+        opt_promotion: Option<square::TypePiecePromotion>,
+    ) -> Self {
         LongAlgebricNotationMove {
             start,
             end,
@@ -51,7 +55,11 @@ impl LongAlgebricNotationMove {
 }
 
 fn index_to_string(index: bitboard::BitIndex) -> String {
-    assert!(index.value() < 64, "index '{}' should be < 64", index.value());
+    assert!(
+        index.value() < 64,
+        "index '{}' should be < 64",
+        index.value()
+    );
     let row = index.row() + 1;
     let col = index.col();
     format!("{}{}", (col + b'a') as char, row)

@@ -1,7 +1,7 @@
 pub mod table_bishop;
-pub mod table_rook;
 pub mod table_king;
 pub mod table_knight;
+pub mod table_rook;
 
 pub const MASK_ROW_0: u64 = 255;
 const MASK_ROW_1: u64 = MASK_ROW_0 << 8;

@@ -184,7 +184,7 @@ impl Game {
                         bit_position = bit_position.move_piece(&b_move);
                         self.configuration.update_position(bit_position.to());
                         self.history.add_moves(b_move);
-                        //self.show();
+                        self.show();
                         self.update_moves();
                     }
                 }
@@ -396,8 +396,48 @@ mod tests {
         let inputs = vec!["position startpos moves d2d4 d7d5 b1c3 a7a6 c1f4 a6a5 d1d2 a5a4 e1c1 a4a3 h2h3 a3b2 c1b1 a8a2 h3h4 a2a1 b1b2", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
-        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
-        //let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
-        //assert_eq!(end_game, game::EndGame::Pat)
+        let result = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(result.is_ok())
+    }
+    #[actix::test]
+    async fn test_game_blocked_pawn_ckeck() {
+        let inputs = vec!["position startpos moves e2e4 e7e5 a2a3 d8h4 f2f3", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        let result = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(result.is_err())
+    }
+    #[actix::test]
+    async fn test_game_block_ckeck() {
+        let inputs = vec![
+            "position startpos moves e2e4 d7d5 e4d5 d8d5 a2a3 d5e5 d1f3",
+            "quit",
+        ];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        let result = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(result.is_err())
+    }
+    #[actix::test]
+    async fn test_game_block_ckeck2() {
+        let inputs = vec![
+            "position startpos moves e2e4 d7d5 e4d5 d8d5 a2a3 d5e5 d1e2",
+            "quit",
+        ];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        let result = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(result.is_ok())
+    }
+    #[actix::test]
+    async fn test_game_escape() {
+        let inputs = vec![
+            "position startpos moves e2e4 c7c5 f1c4 d7d6 d1h5 a7a6 h5f7 e8d7",
+            "quit",
+        ];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        let result = uci::uci_loop(uci_reader, &game_actor).await;
+        assert!(result.is_ok())
     }
 }
