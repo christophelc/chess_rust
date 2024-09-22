@@ -712,40 +712,9 @@ fn gen_moves_for_king_castle(
     };
     move_short_castle | move_long_castle
 }
-// moves generation are not optimized (as a first implementation)
 fn gen_moves_for_king_except_castle(index: bitboard::BitIndex, bit_board: &bitboard::BitBoard) -> BitBoard {
-    let is_row_1 = index.0 < 8;
-    let is_col_a = index.col() == 0;
-    let is_row_8 = index.0 >= 56;
-    let is_col_h = index.col() == 7;
-    let deltas: Vec<i8> = match (is_row_1, is_col_a, is_row_8, is_col_h) {
-        // No edges or corners
-        (false, false, false, false) => vec![-9, -8, -7, -1, 1, 7, 8, 9],
-        // Single edges
-        (false, false, false, true) => vec![-9, -8, -1, 7, 8],
-        (false, false, true, false) => vec![-9, -8, -7, -1, 1],
-        (false, true, false, false) => vec![-8, -7, 1, 8, 9],
-        (true, false, false, false) => vec![-1, 1, 7, 8, 9],
-        // Corners
-        (true, true, false, false) => vec![1, 8, 9],
-        (true, false, false, true) => vec![-1, 7, 8],
-        (false, true, true, false) => vec![-8, -7, 1],
-        (false, false, true, true) => vec![-9, -8, -1],
-        // incompatible conditions: code never reached
-        _ => vec![],
-    };
-    let mut moves_bitboard: u64 = 0;
-    for &delta in deltas.iter() {
-        let new_pos = index.0 as i8 + delta;
-        if (0..64).contains(&new_pos) {
-            // Ensure within board bounds
-            let pos = new_pos as u8;
-            moves_bitboard |= 1u64 << pos;
-        } else {
-            panic!("This code should never be reached.")
-        }
-    }
-    BitBoard(moves_bitboard & !bit_board.value())
+    let moves_bitboard = table::table_king::king_moves(index.value());
+    BitBoard(moves_bitboard & !bit_board.value())    
 }
 
 fn gen_moves_for_knight(index: bitboard::BitIndex, bit_board: &bitboard::BitBoard) -> Option<PieceMoves> {
