@@ -527,6 +527,11 @@ impl BitBoard {
     pub fn empty(&self) -> bool {
         self.0 == 0
     }
+    // contains zero or one piece max
+    pub fn one_bit_set_max(&self) -> bool {
+        let one_bit_set = self.non_empty() && (self.0 & (self.0 - 1)) == 0;
+        one_bit_set || self.empty()
+    }
     pub fn index(&self) -> BitIndex {
         BitIndex::new(pos2index(self.0))
     }

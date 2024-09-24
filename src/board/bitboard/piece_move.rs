@@ -807,12 +807,8 @@ fn attackers(
     let knight_attackers: BitBoard = *piece_as_knight & *bit_board_opponent.knights().bitboard();
     let pawn_attackers: BitBoard = piece_as_pawn & *bit_board_opponent.pawns().bitboard();
     // generate moves for king to capture piece_index except when computing check status
-    let king_attackers = if is_type_piece_king {
-        BitBoard::default()
-    } else {
-        gen_moves_for_king_except_castle(piece_index, &bit_board.concat_bit_boards())
-            & *bit_board.king().bitboard()
-    };
+    let king_attackers = gen_moves_for_king_except_castle(piece_index, &bit_board.concat_bit_boards())
+            & *bit_board_opponent.king().bitboard();
     Attackers {
         rooks: rook_attackers,
         bishops: bishop_attackers,
