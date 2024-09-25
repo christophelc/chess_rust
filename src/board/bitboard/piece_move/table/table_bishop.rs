@@ -169,6 +169,7 @@ pub fn bishop_moves_diag(
     moves_up | moves_down
 }
 
+#[cfg(test)]
 mod tests {
     use std::cmp;
 

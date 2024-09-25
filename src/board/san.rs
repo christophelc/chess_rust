@@ -108,6 +108,7 @@ pub fn san_to_str(
     San::new(str)
 }
 
+#[cfg(test)]
 mod tests {
     use crate::board::{
         bitboard,

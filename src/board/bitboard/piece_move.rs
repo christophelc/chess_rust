@@ -2,6 +2,7 @@ pub mod table;
 use table::table_bishop;
 use table::table_rook;
 
+use super::zobrist;
 use super::BitBoard;
 use super::BitBoardMove;
 use super::BitBoardsWhiteAndBlack;
@@ -410,7 +411,7 @@ fn moves2bitboard_moves(
                         .filter(|b_move| {
                             // simulate the move
                             let updated_board =
-                                (*bit_boards_white_and_black).clone().move_piece(b_move);
+                                (*bit_boards_white_and_black).clone().move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
                             check_status(&color, &updated_board) == CheckStatus::None
                         })
                         .collect();
@@ -496,14 +497,12 @@ fn control_discover_king(
 // Generate move for king in case of simple check
 fn gen_moves_for_all_simple_check(
     color: &square::Color,
-    attacker: TypePiece,
     attacker_index: bitboard::BitIndex,
     bit_board: &bitboard::BitBoards,
     bit_board_opponent: &bitboard::BitBoards,
 ) -> Vec<PieceMoves> {
     assert!(attacker_index.bitboard().non_empty());
     let attackers_opponent_check = attackers(
-        attacker == square::TypePiece::King,
         attacker_index,
         &color.switch(),
         bit_board_opponent,
@@ -678,11 +677,10 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
                 moves_all
             }
             CheckStatus::Simple {
-                attacker,
+                attacker: _,
                 attacker_index,
             } => gen_moves_for_all_simple_check(
                 color,
-                attacker,
                 attacker_index,
                 bit_board,
                 bit_board_opponent,
@@ -729,7 +727,7 @@ fn check_status(
     };
 
     let king_index = bit_board.king().bitboard.index();
-    let attackers = attackers(true, king_index, color, bit_board, bit_board_opponent);
+    let attackers = attackers(king_index, color, bit_board, bit_board_opponent);
     match (
         sign(attackers.rooks),
         sign(attackers.bishops),
@@ -763,7 +761,6 @@ fn check_status(
 
 /// Identify attackers for piece_index for color
 fn attackers(
-    is_type_piece_king: bool,
     piece_index: bitboard::BitIndex,
     color: &square::Color,
     bit_board: &bitboard::BitBoards,
@@ -842,17 +839,17 @@ fn gen_moves_for_king_castle(
 ) -> BitBoard {
     let mut move_short_castle = BitBoard::default();
     if let Some((sq1_idx, sq2_idx)) = can_castle_king_side {
-        if attackers(false, sq1_idx, color, bit_board, bit_board_opponent).is_empty()
-            && attackers(false, sq2_idx, color, bit_board, bit_board_opponent).is_empty()
+        if attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
+            && attackers(sq2_idx, color, bit_board, bit_board_opponent).is_empty()
         {
             move_short_castle = sq2_idx.bitboard();
         };
     };
     let mut move_long_castle = BitBoard::default();
     if let Some((sq1_idx, sq2_idx, sq3_idx)) = can_castle_queen_side {
-        if attackers(false, sq1_idx, color, bit_board, bit_board_opponent).is_empty()
-            && attackers(false, sq2_idx, color, bit_board, bit_board_opponent).is_empty()
-            && attackers(false, sq3_idx, color, bit_board, bit_board_opponent).is_empty()
+        if attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
+            && attackers(sq2_idx, color, bit_board, bit_board_opponent).is_empty()
+            && attackers(sq3_idx, color, bit_board, bit_board_opponent).is_empty()
         {
             move_long_castle = sq2_idx.bitboard();
         };
@@ -1810,7 +1807,7 @@ mod tests {
         let position = board::fen::Fen::decode(fen).expect("Failed to decode FEN");
         let check_status = position.check_status();
         let bit_position = board::bitboard::BitPosition::from(position);
-        let (attacker, attacker_index) = match check_status {
+        let (_attacker, attacker_index) = match check_status {
             CheckStatus::Simple {
                 attacker,
                 attacker_index,
@@ -1819,7 +1816,6 @@ mod tests {
         };
         let moves = gen_moves_for_all_simple_check(
             &board::square::Color::White,
-            attacker,
             attacker_index,
             &bit_position.bit_boards_white_and_black().bit_board_white(),
             bit_position.bit_boards_white_and_black().bit_board_black(),
@@ -1935,9 +1931,11 @@ mod tests {
             None,
             None,
         );
+        let zobrist_table = zobrist::Zobrist::default();
+        let mut hash = zobrist::ZobristHash::default();
         let bit_board_move = *short_castle;
         assert_eq!(bit_board_move, expected);
-        let bit_board_position2 = bit_board_position.move_piece(&bit_board_move);
+        let bit_board_position2 = bit_board_position.move_piece(&bit_board_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
@@ -1966,7 +1964,9 @@ mod tests {
             promotion_moves.iter().flat_map(|p| p.promotion()).collect();
         assert_eq!(new_pieces.len(), 4);
         let promotion_move = promotion_moves.get(0).unwrap();
-        let bit_board_position2 = bit_board_position.move_piece(&promotion_move);
+        let zobrist_table = zobrist::Zobrist::default();
+        let mut hash = zobrist::ZobristHash::default();
+        let bit_board_position2 = bit_board_position.move_piece(&promotion_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
