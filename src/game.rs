@@ -13,11 +13,11 @@ pub enum EndGame {
     None,
     Pat,
     Mat,
-    NoPawnAndCapturex50, // 50 moves rule
-    InsufficientMaterial, // King (+ bishop or knight) vs King (+ bishop or knight)
-    Repetition3x, // 3x the same position
+    NoPawnAndCapturex50,   // 50 moves rule
+    InsufficientMaterial,  // King (+ bishop or knight) vs King (+ bishop or knight)
+    Repetition3x,          // 3x the same position
     TimeOutCannotCheckMat, // Timeout but only a King, King + Bishop or Knight
-    NullAgreement, // Two players agree to end the game
+    NullAgreement,         // Two players agree to end the game
 }
 
 #[derive(Message)]
@@ -130,24 +130,32 @@ pub struct Game {
 impl Game {
     pub fn new() -> Self {
         let mut game = Game::default();
-        game.zobrist_table = game.zobrist_table.init();        
+        game.zobrist_table = game.zobrist_table.init();
         // init moves and game status
         game.update_moves();
         game
     }
     fn add_hash(&mut self, hash: zobrist::ZobristHash) {
-        self.hash_positions.push(hash);        
+        self.hash_positions.push(hash);
     }
-    // buid the hash table    
+    // buid the hash table
     fn init_hash_table(&mut self) {
-        let position = self.configuration.opt_position().expect("Internal error: cannot find a position after init");
+        let position = self
+            .configuration
+            .opt_position()
+            .expect("Internal error: cannot find a position after init");
         let bit_position = bitboard::BitPosition::from(position);
         // init hash positions
-        let hash = zobrist::ZobristHash::zobrist_hash_from_position(&bit_position, &self.zobrist_table);
+        let hash =
+            zobrist::ZobristHash::zobrist_hash_from_position(&bit_position, &self.zobrist_table);
         self.add_hash(hash);
     }
     pub fn last_hash(&self) -> zobrist::ZobristHash {
-        self.hash_positions.list().last().expect("Internal error: No hash position computed").clone()
+        self.hash_positions
+            .list()
+            .last()
+            .expect("Internal error: No hash position computed")
+            .clone()
     }
     pub fn configuration(&self) -> &configuration::Configuration {
         &self.configuration
@@ -164,7 +172,7 @@ impl Game {
     pub fn update_moves(&mut self) {
         if let Some(position) = self.configuration.opt_position() {
             let bitboard_position = bitboard::BitPosition::from(position);
-            let bit_position_status = bitboard_position.bit_position_status();            
+            let bit_position_status = bitboard_position.bit_position_status();
             let color = bit_position_status.player_turn();
             let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
             let check_status = bit_boards_white_and_black.check_status(&color);
@@ -190,15 +198,25 @@ impl Game {
         }
     }
 
-    fn check_insufficient_material(&self, bit_boards_white_and_black: &BitBoardsWhiteAndBlack) -> bool {
+    fn check_insufficient_material(
+        &self,
+        bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
+    ) -> bool {
         let bitboard_white = bit_boards_white_and_black.bit_board_white();
         let bitboard_black = bit_boards_white_and_black.bit_board_black();
-        let white_relevant_pieces = *bitboard_white.rooks().bitboard() | *bitboard_white.queens().bitboard() | *bitboard_white.pawns().bitboard();
-        let black_relevant_pieces = *bitboard_black.rooks().bitboard() | *bitboard_black.queens().bitboard() | *bitboard_black.pawns().bitboard();
+        let white_relevant_pieces = *bitboard_white.rooks().bitboard()
+            | *bitboard_white.queens().bitboard()
+            | *bitboard_white.pawns().bitboard();
+        let black_relevant_pieces = *bitboard_black.rooks().bitboard()
+            | *bitboard_black.queens().bitboard()
+            | *bitboard_black.pawns().bitboard();
         if white_relevant_pieces.empty() && black_relevant_pieces.empty() {
-            let white_other = *bitboard_white.bishops().bitboard() | *bitboard_white.knights().bitboard();
-            let black_other = *bitboard_black.bishops().bitboard() | *bitboard_black.knights().bitboard();            
-            white_other.one_bit_set_max() && black_other.empty() || white_other.empty() && black_other.one_bit_set_max()
+            let white_other =
+                *bitboard_white.bishops().bitboard() | *bitboard_white.knights().bitboard();
+            let black_other =
+                *bitboard_black.bishops().bitboard() | *bitboard_black.knights().bitboard();
+            white_other.one_bit_set_max() && black_other.empty()
+                || white_other.empty() && black_other.one_bit_set_max()
         } else {
             false
         }
@@ -225,11 +243,12 @@ impl Game {
                     Ok(b_move) => {
                         println!("play: {:?}", b_move);
                         let mut hash = self.last_hash();
-                        bit_position = bit_position.move_piece(&b_move, &mut hash, &self.zobrist_table);
+                        bit_position =
+                            bit_position.move_piece(&b_move, &mut hash, &self.zobrist_table);
                         // update hash history
                         self.add_hash(hash);
                         self.configuration.update_position(bit_position.to());
-                        self.init_hash_table();                        
+                        self.init_hash_table();
                         self.history.add_moves(b_move);
                         self.show();
                         self.update_moves();
@@ -285,7 +304,7 @@ impl Handler<UciCommand> for Game {
             }
             UciCommand::UpdatePosition(fen, position) => {
                 self.configuration.update_position(position);
-                self.init_hash_table();                
+                self.init_hash_table();
                 self.update_moves();
                 self.history.set_fen(&fen);
             }
@@ -494,7 +513,8 @@ mod tests {
     #[actix::test]
     async fn test_game_king_close_to_king() {
         let inputs = vec![
-            "position fen r7/8/8/4k3/8/4K3/8/7R w - - 0 1 moves e3e4", "quit"
+            "position fen r7/8/8/4k3/8/4K3/8/7R w - - 0 1 moves e3e4",
+            "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
@@ -503,9 +523,7 @@ mod tests {
     }
     #[actix::test]
     async fn test_game_rule_insufficient_material() {
-        let inputs = vec![
-            "position fen k7/8/8/8/8/8/8/7K b - - 0 1", "quit"
-        ];
+        let inputs = vec!["position fen k7/8/8/8/8/8/8/7K b - - 0 1", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
@@ -517,29 +535,34 @@ mod tests {
         // f5e5 -> forbidden => review attackers() ?
         let seq1x10 = "h1g1 a8b8 g1f1 b8c8 f1e1 c8d8 e1d1 d8e8 d1c1 e8f8 c1b1 f8g8 b1b2 g8g7 b2c2 g7f7 c2d2 f7e7 d2e2 e7d7";
         let seq2x10 = "e2f2 d7c7 f2g2 c7b7 g2h2 b7a7 h3h4 a6a5 h2h3 a7a6 h3g3 a6b6 g3f3 b6c6 f3e3 c6d6 e3d3 d6e6 d3c3 e6f6";
-        let seq3x10 = "c3b3 f6g6 b3b4 g6g5 b4c4 g5f5 c4d4 f5e6 d4e4 e6d6 e4d4 d6c6 d4c4 c6b6 c4b4 b6a6 b4b3 a6a7 b3b2 a7b7";        
+        let seq3x10 = "c3b3 f6g6 b3b4 g6g5 b4c4 g5f5 c4d4 f5e6 d4e4 e6d6 e4d4 d6c6 d4c4 c6b6 c4b4 b6a6 b4b3 a6a7 b3b2 a7b7";
         let seq4x10 = "b2c2 b7c7 c2d2 c7d7 d2e2 d7e7 e2f2 e7f7 f2g2 f7g7 g2f2 g7g8 f2e2 g8f8 e2d2 f8e8 d2c2 e8d8 c2b2 d8c8";
         let seq5x10 = "b2b1 c8b8 b1c1 b8a8 c1d1 a8a7 d1e1 a7b7 e1f1 b7c7 f1g1 c7d7 g1h1 d7e7 h1h2 e7e6 h2g2 e6e5 g2f2 e5f5";
-        let movesx50 = format!("{} {} {} {} {}", seq1x10, seq2x10, seq3x10, seq4x10, seq5x10);
-        let fen = format!("position fen k7/8/r7/8/8/7R/8/7K w - - 0 1 moves {}", movesx50);
+        let movesx50 = format!(
+            "{} {} {} {} {}",
+            seq1x10, seq2x10, seq3x10, seq4x10, seq5x10
+        );
+        let fen = format!(
+            "position fen k7/8/r7/8/8/7R/8/7K w - - 0 1 moves {}",
+            movesx50
+        );
         let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::NoPawnAndCapturex50)
-    }    
-    
+    }
+
     #[actix::test]
     async fn test_game_3x_position() {
         let moves = "h1g1 a8b8 g1h1 b8a8 h1g1 a8b8 g1h1 b8a8";
         let fen = format!("position fen k7/8/r7/8/8/7R/8/7K w - - 0 1 moves {}", moves);
-        let inputs = vec![&fen, "quit"];        
+        let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Repetition3x)
     }
-
 }

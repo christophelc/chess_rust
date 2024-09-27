@@ -406,15 +406,17 @@ fn moves2bitboard_moves(
             // check that destination square for king are free of attackers
             match piece_moves.type_piece() {
                 TypePiece::King => {
-                    let bitboard_move: Vec<&BitBoardMove> = bitboard_move
-                        .iter()
-                        .filter(|b_move| {
-                            // simulate the move
-                            let updated_board =
-                                (*bit_boards_white_and_black).clone().move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
-                            check_status(&color, &updated_board) == CheckStatus::None
-                        })
-                        .collect();
+                    let bitboard_move: Vec<&BitBoardMove> =
+                        bitboard_move
+                            .iter()
+                            .filter(|b_move| {
+                                // simulate the move
+                                let updated_board = (*bit_boards_white_and_black)
+                                    .clone()
+                                    .move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
+                                check_status(&color, &updated_board) == CheckStatus::None
+                            })
+                            .collect();
                     bitboard_moves.extend(bitboard_move);
                 }
                 type_piece => {
@@ -679,12 +681,9 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
             CheckStatus::Simple {
                 attacker: _,
                 attacker_index,
-            } => gen_moves_for_all_simple_check(
-                color,
-                attacker_index,
-                bit_board,
-                bit_board_opponent,
-            ),
+            } => {
+                gen_moves_for_all_simple_check(color, attacker_index, bit_board, bit_board_opponent)
+            }
             CheckStatus::Double => {
                 let index = bit_board.king().bitboard.index();
                 let moves = gen_moves_for_king_except_castle(
@@ -804,7 +803,8 @@ fn attackers(
     let knight_attackers: BitBoard = *piece_as_knight & *bit_board_opponent.knights().bitboard();
     let pawn_attackers: BitBoard = piece_as_pawn & *bit_board_opponent.pawns().bitboard();
     // generate moves for king to capture piece_index except when computing check status
-    let king_attackers = gen_moves_for_king_except_castle(piece_index, &bit_board.concat_bit_boards())
+    let king_attackers =
+        gen_moves_for_king_except_castle(piece_index, &bit_board.concat_bit_boards())
             & *bit_board_opponent.king().bitboard();
     Attackers {
         rooks: rook_attackers,
@@ -1935,7 +1935,8 @@ mod tests {
         let mut hash = zobrist::ZobristHash::default();
         let bit_board_move = *short_castle;
         assert_eq!(bit_board_move, expected);
-        let bit_board_position2 = bit_board_position.move_piece(&bit_board_move, &mut hash, &zobrist_table);
+        let bit_board_position2 =
+            bit_board_position.move_piece(&bit_board_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
@@ -1966,7 +1967,8 @@ mod tests {
         let promotion_move = promotion_moves.get(0).unwrap();
         let zobrist_table = zobrist::Zobrist::default();
         let mut hash = zobrist::ZobristHash::default();
-        let bit_board_position2 = bit_board_position.move_piece(&promotion_move, &mut hash, &zobrist_table);
+        let bit_board_position2 =
+            bit_board_position.move_piece(&promotion_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());

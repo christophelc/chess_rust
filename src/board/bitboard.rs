@@ -12,7 +12,6 @@ use std::{
     fmt, ops::BitAnd, ops::BitOr, ops::BitOrAssign, ops::BitXor, ops::Not, ops::Shl, ops::Shr,
 };
 
-
 #[derive(Debug)]
 pub enum Castle {
     Short,
@@ -152,7 +151,7 @@ impl BitBoardMove {
 pub struct BitPosition {
     bit_boards_white_and_black: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,
-    hash_positions: zobrist::ZobristHistory,    
+    hash_positions: zobrist::ZobristHistory,
 }
 impl PartialEq for BitPosition {
     fn eq(&self, other: &Self) -> bool {
@@ -165,8 +164,15 @@ fn pos2index(u: u64) -> u8 {
 }
 
 impl BitPosition {
-    pub fn move_piece(self, b_move: &BitBoardMove, hash: &mut zobrist::ZobristHash, zobrist_table: &zobrist::Zobrist) -> BitPosition {
-        let bit_boards_white_and_black = self.bit_boards_white_and_black.move_piece(b_move, hash, Some(zobrist_table));
+    pub fn move_piece(
+        self,
+        b_move: &BitBoardMove,
+        hash: &mut zobrist::ZobristHash,
+        zobrist_table: &zobrist::Zobrist,
+    ) -> BitPosition {
+        let bit_boards_white_and_black =
+            self.bit_boards_white_and_black
+                .move_piece(b_move, hash, Some(zobrist_table));
         let bit_board_pawn_opponent = match b_move.color {
             Color::White => *bit_boards_white_and_black.bit_board_black.pawns.bitboard(),
             Color::Black => *bit_boards_white_and_black.bit_board_white.pawns.bitboard(),
@@ -193,7 +199,7 @@ impl BitPosition {
         BitPosition {
             bit_boards_white_and_black: bit_position,
             bit_position_status,
-            hash_positions: zobrist::ZobristHistory::default()
+            hash_positions: zobrist::ZobristHistory::default(),
         }
     }
     pub fn to(&self) -> Position {
@@ -316,7 +322,12 @@ impl BitBoardsWhiteAndBlack {
         }
     }
     // return bitboard and hash to be applied to last hash with xor
-    pub fn move_piece(self, b_move: &BitBoardMove, hash: &mut zobrist::ZobristHash, zobrist_table_opt: Option<&zobrist::Zobrist>) -> BitBoardsWhiteAndBlack {
+    pub fn move_piece(
+        self,
+        b_move: &BitBoardMove,
+        hash: &mut zobrist::ZobristHash,
+        zobrist_table_opt: Option<&zobrist::Zobrist>,
+    ) -> BitBoardsWhiteAndBlack {
         let mut mask_remove = BitBoard::default();
         if let Some(capture) = b_move.capture {
             mask_remove = b_move.end.bitboard();
@@ -328,13 +339,13 @@ impl BitBoardsWhiteAndBlack {
             // en passant
             let square_idx = BitIndex(b_move.start.first_col().0 + b_move.end.col());
             mask_remove = square_idx.bitboard();
-            if let Some(zobrist_table) = zobrist_table_opt {            
+            if let Some(zobrist_table) = zobrist_table_opt {
                 let piece_capture = square::Piece::new(TypePiece::Pawn, b_move.color.switch());
                 *hash = hash.xor_piece(zobrist_table, piece_capture, square_idx.value() as usize);
             }
         };
-        let piece = square::Piece::new(b_move.type_piece, b_move.color);        
-        if let Some(zobrist_table) = zobrist_table_opt {                    
+        let piece = square::Piece::new(b_move.type_piece, b_move.color);
+        if let Some(zobrist_table) = zobrist_table_opt {
             *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);
         }
         let piece = if let Some(promotion) = b_move.promotion {
@@ -342,8 +353,8 @@ impl BitBoardsWhiteAndBlack {
         } else {
             piece
         };
-        if let Some(zobrist_table) = zobrist_table_opt {        
-            *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);        
+        if let Some(zobrist_table) = zobrist_table_opt {
+            *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
         }
         let new_bitboards = match b_move.color {
             square::Color::White => BitBoardsWhiteAndBlack {
@@ -383,10 +394,10 @@ impl BitBoardsWhiteAndBlack {
                     end: b_move.end().left(),
                     ..*b_move
                 };
-                if let Some(zobrist_table) = zobrist_table_opt {                
+                if let Some(zobrist_table) = zobrist_table_opt {
                     let piece = square::Piece::new(b_move.type_piece, b_move.color);
-                    *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);                
-                    *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);                                
+                    *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);
+                    *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
                 }
                 new_bitboards.move_piece(&b_move, hash, zobrist_table_opt)
             }
@@ -397,14 +408,14 @@ impl BitBoardsWhiteAndBlack {
                     end: b_move.end().right(),
                     ..*b_move
                 };
-                if let Some(zobrist_table) = zobrist_table_opt {                
+                if let Some(zobrist_table) = zobrist_table_opt {
                     let piece = square::Piece::new(b_move.type_piece, b_move.color);
-                    *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);                
-                    *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);                  
-                }              
+                    *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);
+                    *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
+                }
                 new_bitboards.move_piece(&b_move, hash, zobrist_table_opt)
             }
-            None => new_bitboards
+            None => new_bitboards,
         }
     }
     pub fn bit_board(&self, color: &Color) -> &BitBoards {

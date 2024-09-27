@@ -69,10 +69,7 @@ pub struct Piece {
 }
 impl Piece {
     pub fn new(type_piece: TypePiece, color: Color) -> Self {
-        Piece {
-            type_piece,
-            color,
-        }
+        Piece { type_piece, color }
     }
     pub fn type_piece(&self) -> TypePiece {
         self.type_piece

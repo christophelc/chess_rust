@@ -1,28 +1,29 @@
 /// Zobrish hash
-
 use rand::Rng;
 use std::fmt;
 
-use crate::board::{bitboard::{self}, square};
+use crate::board::{
+    bitboard::{self},
+    square,
+};
 
 #[derive(Debug)]
 pub struct Zobrist {
     piece_square: [[u64; 64]; 12], // 6 pièces * 2 colors, 64 squares
-    castling_rights: [u64; 4],     
-    en_passant: [u64; 64],        
-    side_to_move: u64,             
+    castling_rights: [u64; 4],
+    en_passant: [u64; 64],
+    side_to_move: u64,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ZobristHistory {
-    hashes: Vec<ZobristHash>,        
+    hashes: Vec<ZobristHash>,
 }
 impl fmt::Display for ZobristHistory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Use the iterator and join the formatted hashes with commas
-        let formatted_hashes: Vec<String> = self.hashes.iter()
-            .map(|hash| format!("{}", hash)) 
-            .collect();
+        let formatted_hashes: Vec<String> =
+            self.hashes.iter().map(|hash| format!("{}", hash)).collect();
         write!(f, "[{}]", formatted_hashes.join(", "))
     }
 }
@@ -60,7 +61,7 @@ impl Default for Zobrist {
 
 impl Zobrist {
     pub fn init(mut self) -> Zobrist {
-        let mut rng = rand::thread_rng();        
+        let mut rng = rand::thread_rng();
         // Generate random values for each piece and square
         for piece in 0..12 {
             for square in 0..64 {
@@ -75,7 +76,7 @@ impl Zobrist {
             self.en_passant[i] = rng.gen();
         }
         // player turn
-        self.side_to_move = rng.gen();        
+        self.side_to_move = rng.gen();
         self
     }
     pub fn new() -> Self {
@@ -87,7 +88,7 @@ fn piece_to_index(piece: square::Piece) -> usize {
     let idx = piece.type_piece() as usize;
     match piece.color() {
         square::Color::White => idx,
-        square::Color::Black => idx + 6
+        square::Color::Black => idx + 6,
     }
 }
 
@@ -101,18 +102,23 @@ impl fmt::Display for ZobristHash {
 }
 
 impl ZobristHash {
-    pub fn zobrist_hash_from_position(bit_position: &bitboard::BitPosition, zobrist: &Zobrist) -> Self {
+    pub fn zobrist_hash_from_position(
+        bit_position: &bitboard::BitPosition,
+        zobrist: &Zobrist,
+    ) -> Self {
         let mut zobrist_hash = ZobristHash::default();
         let bit_boards_white_and_black = bit_position.bit_boards_white_and_black();
         let status = bit_position.bit_position_status();
-    
+
         // Calculer le hash des bitboards
         for square_idx in 0..64 {
-            if let square::Square::NonEmpty(piece) = bit_boards_white_and_black.peek(bitboard::BitIndex::new(square_idx)) {
-                zobrist_hash = zobrist_hash.xor_piece(zobrist, piece, square_idx as usize) 
+            if let square::Square::NonEmpty(piece) =
+                bit_boards_white_and_black.peek(bitboard::BitIndex::new(square_idx))
+            {
+                zobrist_hash = zobrist_hash.xor_piece(zobrist, piece, square_idx as usize)
             }
         }
-    
+
         if status.castling_white_king_side() {
             zobrist_hash = zobrist_hash.xor_castling_white_king_side(zobrist);
         }
@@ -125,48 +131,52 @@ impl ZobristHash {
         if status.castling_black_queen_side() {
             zobrist_hash = zobrist_hash.xor_castling_black_queen_side(zobrist);
         }
-    
+
         if let Some(ep_square) = status.pawn_en_passant() {
             zobrist_hash = zobrist_hash.xor_en_passant(ep_square, zobrist);
         }
-    
+
         if !status.player_turn_white() {
             zobrist_hash = zobrist_hash.xor_player_turn(zobrist)
         }
-    
+
         zobrist_hash
     }
 
-    pub fn xor_piece(&self, zobrist: &Zobrist, piece_add_or_remove: square::Piece, square_idx: usize) -> Self {
+    pub fn xor_piece(
+        &self,
+        zobrist: &Zobrist,
+        piece_add_or_remove: square::Piece,
+        square_idx: usize,
+    ) -> Self {
         let hash = self.0;
-        let piece_index = piece_to_index(piece_add_or_remove);    
-        ZobristHash(hash ^zobrist.piece_square[piece_index][square_idx])
+        let piece_index = piece_to_index(piece_add_or_remove);
+        ZobristHash(hash ^ zobrist.piece_square[piece_index][square_idx])
     }
     pub fn xor_castling_white_king_side(&self, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.castling_rights[0])
     }
     pub fn xor_castling_white_queen_side(&self, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.castling_rights[1])
     }
     pub fn xor_castling_black_king_side(&self, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.castling_rights[2])
     }
     pub fn xor_castling_black_queen_side(&self, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.castling_rights[3])
     }
     pub fn xor_en_passant(&self, ep_square: bitboard::BitIndex, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.en_passant[ep_square.value() as usize])
-    }    
+    }
     pub fn xor_player_turn(&self, zobrist: &Zobrist) -> Self {
-        let hash = self.0;        
+        let hash = self.0;
         ZobristHash(hash ^ zobrist.side_to_move)
-    }        
-
+    }
 }
 
 #[cfg(test)]
@@ -175,10 +185,14 @@ mod tests {
 
     #[test]
     fn test_zobrist_check() {
-        let zobrist = Zobrist::new();       
+        let zobrist = Zobrist::new();
         assert!(zobrist.castling_rights.iter().any(|elem| *elem != 0));
-        assert!(zobrist.en_passant.iter().any(|elem| *elem != 0));        
-        assert_ne!(zobrist.side_to_move, 0);                
-        assert!(zobrist.piece_square.iter().flat_map(|piece| piece.iter()).any(|elem| *elem != 0));
+        assert!(zobrist.en_passant.iter().any(|elem| *elem != 0));
+        assert_ne!(zobrist.side_to_move, 0);
+        assert!(zobrist
+            .piece_square
+            .iter()
+            .flat_map(|piece| piece.iter())
+            .any(|elem| *elem != 0));
     }
 }
