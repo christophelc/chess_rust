@@ -3,7 +3,7 @@ use std::{error::Error, io::Stdout};
 use super::{notation, UciResult};
 use crate::board::fen;
 use crate::board::fen::EncodeUserInput;
-use crate::game;
+use crate::game::{self, engine};
 use std::io::Write;
 
 #[derive(Debug, Clone)]
@@ -11,12 +11,13 @@ pub enum Event {
     Btime(u64),
     Depth(u32),
     Fen(String),
+    StartEngine,
     Moves(Vec<String>),
     Quit,
     SearchMoves(Vec<String>),
     SearchInfinite,
     StartPos,
-    Stop,
+    StopEngine,
     TimePerMoveInMs(u32),
     Write(String),
     Wtime(u64),
@@ -66,9 +67,9 @@ fn game_cast_result(
 }
 
 impl Event {
-    pub async fn handle_event(
+    pub async fn handle_event<T: engine::EngineActor>(
         &self,
-        game: &game::GameActor,
+        game: &game::GameActor<T>,
         stdout: &mut Stdout,
     ) -> Result<UciResult, HandleEventError> {
         match self {
@@ -127,8 +128,12 @@ impl Event {
                 }
                 Err(err) => Err(HandleEventError::new(event.clone(), err.to_string())),
             },
-            Event::Stop => {
-                let r = (*game).send(game::UciCommand::Stop).await;
+            Event::StartEngine => {
+                let r = (*game).send(game::UciCommand::StartEngine).await;
+                game_cast_result(self, r).map(|_| UciResult::BestMove)
+            }
+            Event::StopEngine => {
+                let r = (*game).send(game::UciCommand::StopEngine).await;
                 game_cast_result(self, r).map(|_| UciResult::BestMove)
             }
             Event::Quit => Ok(UciResult::Quit),

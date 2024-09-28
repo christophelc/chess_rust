@@ -93,10 +93,11 @@ impl Command {
                     )));
                     events.push(event::Event::SearchMoves(go.search_moves.clone()));
                 }
+                events.push(event::Event::StartEngine)
             }
             Command::Stop => {
                 events.push(event::Event::Write("Stopping search.".to_string()));
-                events.push(event::Event::Stop);
+                events.push(event::Event::StopEngine);
             }
             Command::Quit => {
                 events.push(event::Event::Write("Exiting engine".to_string()));

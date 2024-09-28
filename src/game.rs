@@ -1,5 +1,7 @@
 pub mod configuration;
+pub mod engine;
 pub mod parameters;
+pub mod player;
 
 use crate::board::bitboard::piece_move::{CheckStatus, GenMoves};
 use crate::board::bitboard::{zobrist, BitBoardMove, BitBoardsWhiteAndBlack};
@@ -24,7 +26,7 @@ pub enum EndGame {
 #[rtype(result = "Option<LongAlgebricNotationMove>")]
 pub struct GetBestMove;
 
-impl Handler<GetBestMove> for Game {
+impl<T: engine::EngineActor> Handler<GetBestMove> for Game<T> {
     type Result = Option<LongAlgebricNotationMove>;
 
     fn handle(&mut self, _msg: GetBestMove, _ctx: &mut Self::Context) -> Self::Result {
@@ -36,7 +38,7 @@ impl Handler<GetBestMove> for Game {
 #[rtype(result = "Result<History, ()>")]
 pub struct GetHistory;
 
-impl Handler<GetHistory> for Game {
+impl<T: engine::EngineActor> Handler<GetHistory> for Game<T> {
     type Result = Result<History, ()>;
 
     fn handle(&mut self, _msg: GetHistory, _ctx: &mut Self::Context) -> Self::Result {
@@ -48,7 +50,7 @@ impl Handler<GetHistory> for Game {
 #[rtype(result = "Result<EndGame, ()>")]
 pub struct GetEndGame;
 
-impl Handler<GetEndGame> for Game {
+impl<T: engine::EngineActor> Handler<GetEndGame> for Game<T> {
     type Result = Result<EndGame, ()>;
 
     fn handle(&mut self, _msg: GetEndGame, _ctx: &mut Self::Context) -> Self::Result {
@@ -60,7 +62,7 @@ impl Handler<GetEndGame> for Game {
 #[rtype(result = "Result<configuration::Configuration, ()>")]
 pub struct GetConfiguration;
 
-impl Handler<GetConfiguration> for Game {
+impl<T: engine::EngineActor> Handler<GetConfiguration> for Game<T> {
     type Result = Result<configuration::Configuration, ()>;
 
     fn handle(&mut self, _msg: GetConfiguration, _ctx: &mut Self::Context) -> Self::Result {
@@ -72,7 +74,7 @@ impl Handler<GetConfiguration> for Game {
 #[rtype(result = "Result<(), String>")]
 pub struct PlayMoves(pub Vec<LongAlgebricNotationMove>);
 
-impl Handler<PlayMoves> for Game {
+impl<T: engine::EngineActor> Handler<PlayMoves> for Game<T> {
     type Result = Result<(), String>;
 
     fn handle(&mut self, msg: PlayMoves, _ctx: &mut Self::Context) -> Self::Result {
@@ -92,10 +94,11 @@ pub enum UciCommand {
     Btime(u64),
     SearchMoves(Vec<notation::LongAlgebricNotationMove>),
     ValidMoves(Vec<notation::LongAlgebricNotationMove>),
-    Stop,
+    StartEngine,
+    StopEngine,
 }
 
-pub type GameActor = Addr<Game>;
+pub type GameActor<T> = Addr<Game<T>>;
 
 #[derive(Debug, Default, Clone)]
 pub struct History {
@@ -117,7 +120,7 @@ impl History {
 
 // Actor definition
 #[derive(Default)]
-pub struct Game {
+pub struct Game<T: engine::EngineActor> {
     configuration: configuration::Configuration,
     best_move: Option<LongAlgebricNotationMove>,
     history: History,
@@ -126,8 +129,10 @@ pub struct Game {
     hash_positions: zobrist::ZobristHistory,
     end_game: EndGame,
     zobrist_table: zobrist::Zobrist,
+    players: player::Players<T>,
 }
-impl Game {
+
+impl<T: engine::EngineActor> Game<T> {
     pub fn new() -> Self {
         let mut game = Game::default();
         game.zobrist_table = game.zobrist_table.init();
@@ -138,7 +143,7 @@ impl Game {
     fn add_hash(&mut self, hash: zobrist::ZobristHash) {
         self.hash_positions.push(hash);
     }
-    // buid the hash table
+    // build the hash table
     fn init_hash_table(&mut self) {
         let position = self
             .configuration
@@ -263,12 +268,19 @@ impl Game {
         }
         result
     }
+
+    pub fn get_players(&self) -> &player::Players<T> {
+        &self.players
+    }
+    pub fn set_players(&mut self, players: player::Players<T>) {
+        self.players = players;
+    }
 }
-impl Actor for Game {
+impl<T: engine::EngineActor> Actor for Game<T> {
     type Context = Context<Self>;
 }
 
-impl Handler<UciCommand> for Game {
+impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
     type Result = Result<(), String>;
 
     fn handle(&mut self, msg: UciCommand, _ctx: &mut Self::Context) -> Self::Result {
@@ -319,7 +331,19 @@ impl Handler<UciCommand> for Game {
             UciCommand::ValidMoves(valid_moves) => {
                 result = self.play_moves(valid_moves);
             }
-            UciCommand::Stop => match self.configuration.opt_position() {
+            UciCommand::StartEngine => {
+                if let Some(position) = self.configuration().opt_position() {
+                    let engine_actor_or_error =
+                        self.players.get_engine(position.status().player_turn());
+                    match engine_actor_or_error {
+                        Ok(engine) => {
+                            engine.go();
+                        }
+                        Err(err) => result = Err(err),
+                    }
+                }
+            }
+            UciCommand::StopEngine => match self.configuration.opt_position() {
                 None => {
                     self.best_move = None;
                     result =
@@ -403,9 +427,11 @@ mod tests {
 
     use crate::{game, uci};
 
-    use super::configuration;
+    use super::{configuration, engine};
 
-    async fn get_configuration(game_actor: &game::GameActor) -> configuration::Configuration {
+    async fn get_configuration<T: engine::EngineActor>(
+        game_actor: &game::GameActor<T>,
+    ) -> configuration::Configuration {
         let result = game_actor.send(game::GetConfiguration).await.unwrap();
         result.unwrap()
     }
@@ -414,7 +440,7 @@ mod tests {
     async fn test_game_capture_en_passant() {
         let inputs = vec!["position startpos moves e2e4 d7d5 e4d5 e7e5 d5e6", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         // unwrap() is the test
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let configuration = get_configuration(&game_actor).await;
@@ -424,7 +450,7 @@ mod tests {
     async fn test_game_pawn_move_invalid() {
         let inputs = vec!["position startpos moves e2e4 e7e5 e4e5", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let r = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(r.is_err());
     }
@@ -436,7 +462,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Mat)
@@ -448,7 +474,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Pat)
@@ -457,7 +483,7 @@ mod tests {
     async fn test_game_pat_black_first() {
         let inputs = vec!["position fen k7/7R/1R6/8/8/8/8/7K b - - 0 1", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Pat)
@@ -466,7 +492,7 @@ mod tests {
     async fn test_game_weird() {
         let inputs = vec!["position startpos moves d2d4 d7d5 b1c3 a7a6 c1f4 a6a5 d1d2 a5a4 e1c1 a4a3 h2h3 a3b2 c1b1 a8a2 h3h4 a2a1 b1b2", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_ok())
     }
@@ -474,7 +500,7 @@ mod tests {
     async fn test_game_blocked_pawn_ckeck() {
         let inputs = vec!["position startpos moves e2e4 e7e5 a2a3 d8h4 f2f3", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_err())
     }
@@ -485,7 +511,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_err())
     }
@@ -496,7 +522,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_ok())
     }
@@ -507,7 +533,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_ok())
     }
@@ -518,7 +544,7 @@ mod tests {
             "quit",
         ];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         let result = uci::uci_loop(uci_reader, &game_actor).await;
         assert!(result.is_err())
     }
@@ -526,7 +552,7 @@ mod tests {
     async fn test_game_rule_insufficient_material() {
         let inputs = vec!["position fen k7/8/8/8/8/8/8/7K b - - 0 1", "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::InsufficientMaterial)
@@ -549,7 +575,7 @@ mod tests {
         );
         let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::NoPawnAndCapturex50)
@@ -561,7 +587,7 @@ mod tests {
         let fen = format!("position fen k7/8/r7/8/8/7R/8/7K w - - 0 1 moves {}", moves);
         let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Repetition3x)
@@ -575,7 +601,7 @@ mod tests {
         );
         let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
-        let game_actor = game::Game::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Repetition3x)

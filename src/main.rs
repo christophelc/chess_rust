@@ -1,19 +1,19 @@
 mod board;
 mod game;
 mod uci;
+use actix::Actor;
 use board::bitboard::piece_move;
 use board::bitboard::BitPosition;
 use board::fen;
 use board::san;
 use fen::EncodeUserInput;
+use game::engine;
 use piece_move::GenMoves;
 use std::io;
 use uci::command::parser;
 use uci::event;
 use uci::UciRead;
 use uci::UciReadWrapper;
-
-use actix::prelude::*;
 
 use std::env;
 
@@ -26,7 +26,7 @@ fn fen() {
     println!("{}", fen_str);
 }
 
-async fn test(game_actor: &game::GameActor) {
+async fn test(game_actor: &game::GameActor<engine::EngineDummy>) {
     let mut stdout = io::stdout();
     println!("Inital position with move e4");
     let input = "position startpos moves e2e4 ";
@@ -61,13 +61,13 @@ async fn test(game_actor: &game::GameActor) {
     println!("{:?}", moves_as_str);
 }
 
-async fn uci_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
+async fn uci_loop(game_actor: &game::GameActor<engine::EngineDummy>, stdin: &mut io::Stdin) {
     let uci_reader = uci::UciReadWrapper::new(stdin);
     // we ignore errors (according to uci specifications)
     let _ = uci::uci_loop(uci_reader, game_actor).await;
 }
 
-async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
+async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin: &mut io::Stdin) {
     // init the game
     let inputs = vec!["position startpos", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
@@ -110,7 +110,7 @@ async fn tui_loop(game_actor: &game::GameActor, stdin: &mut io::Stdin) {
 #[actix::main]
 async fn main() {
     let mut stdin = io::stdin();
-    let game_actor = game::Game::new().start();
+    let game_actor = game::Game::<engine::EngineDummy>::new().start();
 
     let args: Vec<String> = env::args().collect();
     if args.len() <= 1 {
