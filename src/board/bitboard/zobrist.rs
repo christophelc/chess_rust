@@ -28,11 +28,22 @@ impl fmt::Display for ZobristHistory {
     }
 }
 impl ZobristHistory {
-    pub fn check_3x(&self) -> bool {
-        if let Some(hash) = self.hashes.last() {
-            self.hashes.iter().filter(|&h| *h == *hash).count() >= 3
-        } else {
-            false
+    // look for the same position 3x between last position and (last - n_half_moves) position
+    pub fn check_3x(&self, n_half_moves: u16) -> bool {
+        match self.hashes.last() {
+            _ if n_half_moves < 8 => false,
+            Some(hash) => {
+                let len = self.hashes.len();
+                let start_index = len.saturating_sub((n_half_moves + 1) as usize); // Avoids underflow
+                println!("xx {} {} {}", len, n_half_moves, start_index);
+                self.hashes[start_index..]
+                    .iter()
+                    .step_by(2)
+                    .filter(|&h| *h == *hash)
+                    .count()
+                    >= 3
+            }
+            _ => false,
         }
     }
     pub fn list(&self) -> &Vec<ZobristHash> {

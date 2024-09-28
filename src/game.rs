@@ -145,7 +145,8 @@ impl Game {
             .opt_position()
             .expect("Internal error: cannot find a position after init");
         let bit_position = bitboard::BitPosition::from(position);
-        // init hash positions
+        // reset hash from new position
+        self.hash_positions = zobrist::ZobristHistory::default();
         let hash =
             zobrist::ZobristHash::zobrist_hash_from_position(&bit_position, &self.zobrist_table);
         self.add_hash(hash);
@@ -192,7 +193,10 @@ impl Game {
                 self.end_game = EndGame::NoPawnAndCapturex50
             } else if self.check_insufficient_material(bit_boards_white_and_black) {
                 self.end_game = EndGame::InsufficientMaterial
-            } else if self.hash_positions.check_3x() {
+            } else if self
+                .hash_positions
+                .check_3x(bit_position_status.n_half_moves())
+            {
                 self.end_game = EndGame::Repetition3x
             }
         }
@@ -235,7 +239,7 @@ impl Game {
             let mut bit_position = bitboard::BitPosition::from(position);
             for m in valid_moves {
                 let color = bit_position.bit_position_status().player_turn();
-                match check_move(color, m, &bit_position, &self.zobrist_table) {
+                match check_move(color, m, &bit_position) {
                     Err(err) => {
                         result = Err(err);
                         break;
@@ -248,7 +252,6 @@ impl Game {
                         // update hash history
                         self.add_hash(hash);
                         self.configuration.update_position(bit_position.to());
-                        self.init_hash_table();
                         self.history.add_moves(b_move);
                         self.show();
                         self.update_moves();
@@ -338,7 +341,6 @@ fn check_move(
     player_turn: square::Color,
     m: notation::LongAlgebricNotationMove,
     bitboard_position: &bitboard::BitPosition,
-    zobrist_table: &zobrist::Zobrist,
 ) -> Result<BitBoardMove, String> {
     let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
     let start_square = bit_boards_white_and_black.peek(m.start());
@@ -347,11 +349,11 @@ fn check_move(
         (square::Square::Empty, _) => Err(format!("empty start square {}", m.start().value())),
         (square::Square::NonEmpty(piece), square::Square::Empty) => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
-            check_move_level2(b_move, bitboard_position, zobrist_table)
+            check_move_level2(b_move, bitboard_position)
         },
         (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), Some(capture.type_piece()), m.opt_promotion());
-            check_move_level2(b_move, bitboard_position, zobrist_table)
+            check_move_level2(b_move, bitboard_position)
         },
         (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start().value(), m.end().value())),
     }
@@ -360,7 +362,6 @@ fn check_move(
 fn check_move_level2(
     b_move: BitBoardMove,
     bitboard_position: &bitboard::BitPosition,
-    zobrist_table: &zobrist::Zobrist,
 ) -> Result<BitBoardMove, String> {
     let color = bitboard_position.bit_position_status().player_turn();
     let bit_position_status = bitboard_position.bit_position_status();
@@ -558,6 +559,20 @@ mod tests {
     async fn test_game_3x_position() {
         let moves = "h1g1 a8b8 g1h1 b8a8 h1g1 a8b8 g1h1 b8a8";
         let fen = format!("position fen k7/8/r7/8/8/7R/8/7K w - - 0 1 moves {}", moves);
+        let inputs = vec![&fen, "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let game_actor = game::Game::start(game::Game::new());
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::Repetition3x)
+    }
+    #[actix::test]
+    async fn test_game_3x_position_with_pawn() {
+        let moves = "h7h6 h1g1 a8b8 g1h1 b8a8 h1g1 a8b8 g1h1 b8a8";
+        let fen = format!(
+            "position fen k7/7p/r7/8/8/7R/8/7K b - - 0 1 moves {}",
+            moves
+        );
         let inputs = vec![&fen, "quit"];
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let game_actor = game::Game::start(game::Game::new());
