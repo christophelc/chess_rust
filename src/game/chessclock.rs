@@ -21,13 +21,14 @@ impl<T: engine::EngineActor> Clock<T> {
     // Start ticking every second, reducing remaining time
     fn start_ticking(&mut self, ctx: &mut Context<Self>) {
         // Save the handle for the ticking interval so it can be paused later
-        let ticking_handle = ctx.run_interval(Duration::from_secs(1), |clock, _ctx| {
+        let ticking_handle = ctx.run_interval(Duration::from_secs(1), |clock, ctx| {
             if clock.remaining_time > 0 {
                 clock.remaining_time -= 1;
                 println!("Remaining time: {}", clock.remaining_time);
             } else {
+                println!("No remaining time.");
                 clock.game_actor.do_send(TimeOut);
-                _ctx.stop(); // Stop the actor when time is up
+                ctx.stop(); // Stop the actor when time is up
             }
         });
         self.ticking_handle = Some(ticking_handle);
@@ -37,8 +38,8 @@ impl<T: engine::EngineActor> Clock<T> {
 impl<T: engine::EngineActor> Actor for Clock<T> {
     type Context = Context<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        //self.start_ticking(ctx);
+    fn started(&mut self, _ctx: &mut Self::Context) {
+        // we do nothing: we do not start yet the timer
     }
 }
 

@@ -6,6 +6,7 @@ pub mod player;
 
 use crate::board::bitboard::piece_move::{CheckStatus, GenMoves};
 use crate::board::bitboard::{zobrist, BitBoardMove, BitBoardsWhiteAndBlack};
+use crate::board::square::Switch;
 use crate::board::{bitboard, fen, square};
 use crate::uci::notation::{self, LongAlgebricNotationMove};
 use actix::prelude::*;
@@ -20,7 +21,7 @@ pub enum EndGame {
     InsufficientMaterial, // King (+ bishop or knight) vs King (+ bishop or knight)
     Repetition3x,         // 3x the same position
     TimeOutLost(square::Color),
-    TimeOutDrawn,  // Timeout but only a King, King + Bishop or Knight
+    TimeOutDraw,   // Timeout but only a King, King + Bishop or Knight
     NullAgreement, // Two players agree to end the game
 }
 
@@ -34,8 +35,10 @@ impl<T: engine::EngineActor> Handler<chessclock::TimeOut> for Game<T> {
             let bit_position_status = bitboard_position.bit_position_status();
             let color = bit_position_status.player_turn();
             let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
-            if self.check_insufficient_material_for_color(color, bit_boards_white_and_black) {
-                self.end_game = EndGame::TimeOutDrawn
+            if self
+                .check_insufficient_material_for_color(color.switch(), bit_boards_white_and_black)
+            {
+                self.end_game = EndGame::TimeOutDraw
             } else {
                 self.end_game = EndGame::TimeOutLost(color)
             }
@@ -380,7 +383,7 @@ impl<T: engine::EngineActor> Game<T> {
             self.configuration.opt_position().unwrap().chessboard()
         );
     }
-    pub fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
+    fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
         let mut result: Result<(), String> = Ok(());
         if let Some(position) = self.configuration.opt_position() {
             let mut bit_position = bitboard::BitPosition::from(position);
@@ -754,9 +757,8 @@ mod tests {
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Repetition3x)
     }
-    #[actix::test]
-    async fn test_game_clock_lost() {
-        let inputs = vec!["position startpos", "quit"];
+
+    async fn build_game_actor(inputs: Vec<&str>) -> game::GameActor<engine::EngineDummy> {
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let mut game = game::Game::<engine::EngineDummy>::new();
         let engine_player1 = engine::EngineDummy::new();
@@ -772,10 +774,9 @@ mod tests {
         let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         // set the position from uci command
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
-
         // define clocks
-        let white_clock_actor = chessclock::Clock::new(5, game_actor.clone()).start();
-        let black_clock_actor = chessclock::Clock::new(5, game_actor.clone()).start();
+        let white_clock_actor = chessclock::Clock::new(3, game_actor.clone()).start();
+        let black_clock_actor = chessclock::Clock::new(3, game_actor.clone()).start();
         game_actor.do_send(game::SetClocks {
             white_clock_actor_opt: Some(white_clock_actor),
             black_clock_actor_opt: Some(black_clock_actor),
@@ -786,12 +787,40 @@ mod tests {
             remaining_time: 2,
         };
         game_actor.do_send(set_clock_msg);
+
+        game_actor
+    }
+    #[actix::test]
+    async fn test_game_timeout_gameover() {
+        let inputs = vec!["position startpos", "quit"];
+        let game_actor = build_game_actor(inputs).await;
         game_actor.do_send(game::StartOrSwitchClocks);
         actix::clock::sleep(Duration::from_secs(3)).await;
         // Introduce a delay to ensure the TimeOut message is processed
         actix::clock::sleep(std::time::Duration::from_millis(100)).await;
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
-        println!("{:?}", end_game);
         assert_eq!(end_game, game::EndGame::TimeOutLost(square::Color::White))
+    }
+    #[actix::test]
+    async fn test_game_timeout_no_material_gameover() {
+        let inputs = vec!["position fen k7/7p/8/8/8/8/8/7K w - - 0 1", "quit"];
+        let game_actor = build_game_actor(inputs).await;
+        game_actor.do_send(game::StartOrSwitchClocks);
+        actix::clock::sleep(Duration::from_secs(3)).await;
+        // Introduce a delay to ensure the TimeOut message is processed
+        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::TimeOutLost(square::Color::White))
+    }
+    #[actix::test]
+    async fn test_game_opponent_timeout_no_material_draw() {
+        let inputs = vec!["position fen k7/7p/8/8/8/8/8/7K b - - 0 1", "quit"];
+        let game_actor = build_game_actor(inputs).await;
+        game_actor.do_send(game::StartOrSwitchClocks);
+        actix::clock::sleep(Duration::from_secs(4)).await;
+        // Introduce a delay to ensure the TimeOut message is processed
+        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        assert_eq!(end_game, game::EndGame::TimeOutDraw)
     }
 }
