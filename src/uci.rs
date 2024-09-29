@@ -252,8 +252,12 @@ mod tests {
         let mut game = Game::<engine::EngineDummy>::new();
         let engine_player1 = engine::EngineDummy::new();
         let engine_player2 = engine::EngineDummy::new();
-        let player1 = player::Player::Human(Some(Box::new(engine_player1)));
-        let player2 = player::Player::Computer(Box::new(engine_player2));
+        let player1 = player::Player::Human {
+            engine_opt: Some(Box::new(engine_player1)),
+        };
+        let player2 = player::Player::Computer {
+            engine: Box::new(engine_player2),
+        };
         let players = player::Players::new(player1, player2);
         game.set_players(players);
         let game_actor = Game::start(game);

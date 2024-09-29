@@ -1,3 +1,4 @@
+mod chessclock;
 pub mod configuration;
 pub mod engine;
 pub mod parameters;
@@ -14,12 +15,107 @@ pub enum EndGame {
     #[default]
     None,
     Pat,
-    Mat,
-    NoPawnAndCapturex50,   // 50 moves rule
-    InsufficientMaterial,  // King (+ bishop or knight) vs King (+ bishop or knight)
-    Repetition3x,          // 3x the same position
-    TimeOutCannotCheckMat, // Timeout but only a King, King + Bishop or Knight
-    NullAgreement,         // Two players agree to end the game
+    Mat(square::Color),
+    NoPawnAndCapturex50,  // 50 moves rule
+    InsufficientMaterial, // King (+ bishop or knight) vs King (+ bishop or knight)
+    Repetition3x,         // 3x the same position
+    TimeOutLost(square::Color),
+    TimeOutDrawn,  // Timeout but only a King, King + Bishop or Knight
+    NullAgreement, // Two players agree to end the game
+}
+
+impl<T: engine::EngineActor> Handler<chessclock::TimeOut> for Game<T> {
+    type Result = ();
+
+    fn handle(&mut self, _msg: chessclock::TimeOut, _ctx: &mut Context<Self>) {
+        println!("Time is up !");
+        if let Some(position) = self.configuration.opt_position() {
+            let bitboard_position = bitboard::BitPosition::from(position);
+            let bit_position_status = bitboard_position.bit_position_status();
+            let color = bit_position_status.player_turn();
+            let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
+            if self.check_insufficient_material_for_color(color, bit_boards_white_and_black) {
+                self.end_game = EndGame::TimeOutDrawn
+            } else {
+                self.end_game = EndGame::TimeOutLost(color)
+            }
+            println!("set end game: {:?}", self.end_game);
+        } else {
+            panic!("A clock has been started but no position has been set.")
+        }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetClockRemainingTime {
+    color: square::Color,
+    remaining_time: u64,
+}
+
+impl<T: engine::EngineActor> Handler<SetClockRemainingTime> for Game<T> {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetClockRemainingTime, _ctx: &mut Self::Context) -> Self::Result {
+        match msg.color {
+            square::Color::White => self
+                .white_clock_actor_opt
+                .as_mut()
+                .unwrap()
+                .do_send(chessclock::SetRemainingTime::new(msg.remaining_time)),
+            square::Color::Black => self
+                .black_clock_actor_opt
+                .as_mut()
+                .unwrap()
+                .do_send(chessclock::SetRemainingTime::new(msg.remaining_time)),
+        }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct StartOrSwitchClocks;
+
+// Implementing a handler for starting the clocks
+impl<T: engine::EngineActor> Handler<StartOrSwitchClocks> for Game<T> {
+    type Result = ();
+
+    fn handle(&mut self, _msg: StartOrSwitchClocks, _ctx: &mut Context<Self>) {
+        if let Some(position) = self.configuration.opt_position() {
+            let bitboard_position = bitboard::BitPosition::from(position);
+            let bit_position_status = bitboard_position.bit_position_status();
+            let color = bit_position_status.player_turn();
+            if self.white_clock_actor_opt.is_none() || self.black_clock_actor_opt.is_none() {
+                panic!("Cannot start clocks. No clock has been defined.")
+            }
+            match color {
+                square::Color::White => {
+                    println!("Pause black, resume white");
+                    self.black_clock_actor_opt
+                        .as_mut()
+                        .unwrap()
+                        .do_send(chessclock::PauseClock);
+                    self.white_clock_actor_opt
+                        .as_mut()
+                        .unwrap()
+                        .do_send(chessclock::ResumeClock);
+                }
+                square::Color::Black => {
+                    println!("Pause white, resume black");
+                    self.black_clock_actor_opt
+                        .as_mut()
+                        .unwrap()
+                        .do_send(chessclock::ResumeClock);
+                    self.white_clock_actor_opt
+                        .as_mut()
+                        .unwrap()
+                        .do_send(chessclock::PauseClock);
+                }
+            }
+        } else {
+            panic!("Try to start clocks whereas no position has been detected.")
+        }
+    }
 }
 
 #[derive(Message)]
@@ -54,6 +150,7 @@ impl<T: engine::EngineActor> Handler<GetEndGame> for Game<T> {
     type Result = Result<EndGame, ()>;
 
     fn handle(&mut self, _msg: GetEndGame, _ctx: &mut Self::Context) -> Self::Result {
+        println!("end game status");
         Ok(self.end_game().clone())
     }
 }
@@ -98,6 +195,33 @@ pub enum UciCommand {
     StopEngine,
 }
 
+// Message to set the clocks in the Game actor
+#[derive(Message)]
+#[rtype(result = "()")]
+struct SetClocks<T: engine::EngineActor> {
+    white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+    black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+}
+impl<T: engine::EngineActor> Handler<SetClocks<T>> for Game<T> {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetClocks<T>, _ctx: &mut Context<Self>) {
+        // If white clock exists, terminate it before setting a new one
+        if let Some(clock_actor) = &self.white_clock_actor_opt {
+            clock_actor.do_send(chessclock::TerminateClock);
+        }
+
+        // If black clock exists, terminate it before setting a new one
+        if let Some(clock_actor) = &self.black_clock_actor_opt {
+            clock_actor.do_send(chessclock::TerminateClock);
+        }
+
+        // Set the new clock actors from the message
+        self.white_clock_actor_opt = msg.white_clock_actor_opt;
+        self.black_clock_actor_opt = msg.black_clock_actor_opt;
+    }
+}
+
 pub type GameActor<T> = Addr<Game<T>>;
 
 #[derive(Debug, Default, Clone)]
@@ -130,6 +254,8 @@ pub struct Game<T: engine::EngineActor> {
     end_game: EndGame,
     zobrist_table: zobrist::Zobrist,
     players: player::Players<T>,
+    white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+    black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
 }
 
 impl<T: engine::EngineActor> Game<T> {
@@ -192,7 +318,7 @@ impl<T: engine::EngineActor> Game<T> {
             if self.moves.is_empty() {
                 match check_status {
                     CheckStatus::None => self.end_game = EndGame::Pat,
-                    _ => self.end_game = EndGame::Mat,
+                    _ => self.end_game = EndGame::Mat(color),
                 }
             } else if bit_position_status.n_half_moves() >= 100 {
                 self.end_game = EndGame::NoPawnAndCapturex50
@@ -206,7 +332,23 @@ impl<T: engine::EngineActor> Game<T> {
             }
         }
     }
-
+    fn check_insufficient_material_for_color(
+        &self,
+        color: square::Color,
+        bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
+    ) -> bool {
+        let bitboard = bit_boards_white_and_black.bit_board(&color);
+        let relevant_pieces = *bitboard.rooks().bitboard()
+            | *bitboard.queens().bitboard()
+            | *bitboard.pawns().bitboard();
+        // one bishop or knight only
+        if relevant_pieces.empty() {
+            let other = *bitboard.bishops().bitboard() | *bitboard.knights().bitboard();
+            other.one_bit_set_max()
+        } else {
+            false
+        }
+    }
     fn check_insufficient_material(
         &self,
         bit_boards_white_and_black: &BitBoardsWhiteAndBlack,
@@ -423,9 +565,15 @@ fn check_move_level2(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use actix::Actor;
 
-    use crate::{game, uci};
+    use crate::{
+        board::square,
+        game::{self, chessclock, player},
+        uci,
+    };
 
     use super::{configuration, engine};
 
@@ -465,7 +613,7 @@ mod tests {
         let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
-        assert_eq!(end_game, game::EndGame::Mat)
+        assert_eq!(end_game, game::EndGame::Mat(square::Color::Black))
     }
     #[actix::test]
     async fn test_game_pat_white_first() {
@@ -605,5 +753,45 @@ mod tests {
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::Repetition3x)
+    }
+    #[actix::test]
+    async fn test_game_clock_lost() {
+        let inputs = vec!["position startpos", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let mut game = game::Game::<engine::EngineDummy>::new();
+        let engine_player1 = engine::EngineDummy::new();
+        let engine_player2 = engine::EngineDummy::new();
+        let player1 = player::Player::Human {
+            engine_opt: Some(Box::new(engine_player1)),
+        };
+        let player2 = player::Player::Computer {
+            engine: Box::new(engine_player2),
+        };
+        let players = player::Players::new(player1, player2);
+        game.set_players(players);
+        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
+        // set the position from uci command
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+
+        // define clocks
+        let white_clock_actor = chessclock::Clock::new(5, game_actor.clone()).start();
+        let black_clock_actor = chessclock::Clock::new(5, game_actor.clone()).start();
+        game_actor.do_send(game::SetClocks {
+            white_clock_actor_opt: Some(white_clock_actor),
+            black_clock_actor_opt: Some(black_clock_actor),
+        });
+        // send clock to game
+        let set_clock_msg = game::SetClockRemainingTime {
+            color: square::Color::White,
+            remaining_time: 2,
+        };
+        game_actor.do_send(set_clock_msg);
+        game_actor.do_send(game::StartOrSwitchClocks);
+        actix::clock::sleep(Duration::from_secs(3)).await;
+        // Introduce a delay to ensure the TimeOut message is processed
+        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
+        let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
+        println!("{:?}", end_game);
+        assert_eq!(end_game, game::EndGame::TimeOutLost(square::Color::White))
     }
 }
