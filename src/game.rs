@@ -1,4 +1,4 @@
-mod chessclock;
+pub mod chessclock;
 pub mod configuration;
 pub mod engine;
 pub mod parameters;
@@ -46,6 +46,45 @@ impl<T: engine::EngineActor> Handler<chessclock::TimeOut> for Game<T> {
         } else {
             panic!("A clock has been started but no position has been set.")
         }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Option<u64>")]
+pub struct GetClockRemainingTime(square::Color);
+
+#[cfg(test)]
+impl GetClockRemainingTime {
+    pub fn new(color: square::Color) -> Self {
+        GetClockRemainingTime(color)
+    }
+}
+
+impl<T: engine::EngineActor> Handler<GetClockRemainingTime> for Game<T> {
+    type Result = ResponseFuture<Option<u64>>;
+
+    fn handle(&mut self, msg: GetClockRemainingTime, _ctx: &mut Self::Context) -> Self::Result {
+        let white_clock_actor_opt = self.white_clock_actor_opt.clone();
+        let black_clock_actor_opt = self.black_clock_actor_opt.clone();
+        Box::pin(async move {
+            match (msg.0, white_clock_actor_opt, black_clock_actor_opt) {
+                (square::Color::White, Some(white_clock_actor), _) => {
+                    let result = white_clock_actor
+                        .send(chessclock::GetRemainingTime)
+                        .await
+                        .ok()?;
+                    Some(result)
+                }
+                (square::Color::Black, _, Some(black_clock_actor)) => {
+                    let result = black_clock_actor
+                        .send(chessclock::GetRemainingTime)
+                        .await
+                        .ok()?;
+                    Some(result)
+                }
+                _ => None,
+            }
+        })
     }
 }
 
@@ -201,9 +240,20 @@ pub enum UciCommand {
 // Message to set the clocks in the Game actor
 #[derive(Message)]
 #[rtype(result = "()")]
-struct SetClocks<T: engine::EngineActor> {
+pub struct SetClocks<T: engine::EngineActor> {
     white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
     black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+}
+impl<T: engine::EngineActor> SetClocks<T> {
+    pub fn new(
+        white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+        black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
+    ) -> Self {
+        SetClocks {
+            white_clock_actor_opt,
+            black_clock_actor_opt,
+        }
+    }
 }
 impl<T: engine::EngineActor> Handler<SetClocks<T>> for Game<T> {
     type Result = ();
@@ -414,9 +464,6 @@ impl<T: engine::EngineActor> Game<T> {
         result
     }
 
-    pub fn get_players(&self) -> &player::Players<T> {
-        &self.players
-    }
     pub fn set_players(&mut self, players: player::Players<T>) {
         self.players = players;
     }
@@ -432,6 +479,15 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
         let mut result = Ok(());
         match msg {
             UciCommand::Btime(time) => {
+                match &self.white_clock_actor_opt {
+                    None => {
+                        // do nothing
+                    }
+                    Some(white_clock_actor) => {
+                        white_clock_actor.do_send(chessclock::SetRemainingTime::new(time));
+                    }
+                }
+                // for the moment, we memorize the inital parameters
                 let mut params = self.configuration().parameters().clone();
                 params.set_btime(time);
                 self.configuration.update_parameters(params);
@@ -443,6 +499,15 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 self.history.init();
             }
             UciCommand::Wtime(time) => {
+                match &self.white_clock_actor_opt {
+                    None => {
+                        // do nothing
+                    }
+                    Some(white_clock_actor) => {
+                        white_clock_actor.do_send(chessclock::SetRemainingTime::new(time));
+                    }
+                }
+                // for the moment, we memorize the inital parameters
                 let mut params = self.configuration().parameters().clone();
                 params.set_wtime(time);
                 self.configuration.update_parameters(params);

@@ -96,6 +96,18 @@ impl<T: engine::EngineActor> Handler<ResumeClock> for Clock<T> {
 }
 
 #[derive(Message)]
+#[rtype(result = "u64")]
+pub struct GetRemainingTime;
+
+impl<T: engine::EngineActor> Handler<GetRemainingTime> for Clock<T> {
+    type Result = u64;
+
+    fn handle(&mut self, _msg: GetRemainingTime, _ctx: &mut Context<Self>) -> u64 {
+        self.remaining_time
+    }
+}
+
+#[derive(Message)]
 #[rtype(result = "()")]
 pub struct TerminateClock;
 

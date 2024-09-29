@@ -131,7 +131,10 @@ pub async fn execute_command<T: engine::EngineActor>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board::fen::{self, EncodeUserInput};
+    use crate::board::{
+        fen::{self, EncodeUserInput},
+        square,
+    };
     use actix::Actor;
     use game::{parameters, player, Game, GameActor};
     use parser::InputParser;
@@ -261,11 +264,32 @@ mod tests {
         let players = player::Players::new(player1, player2);
         game.set_players(players);
         let game_actor = Game::start(game);
+        // set clocks before executing UCI commands
+        let white_clock_actor = game::chessclock::Clock::new(3, game_actor.clone()).start();
+        let black_clock_actor = game::chessclock::Clock::new(3, game_actor.clone()).start();
+        game_actor.do_send(game::SetClocks::new(
+            Some(white_clock_actor),
+            Some(black_clock_actor),
+        ));
+        // execute UCI commands
         uci_loop(uci_reader, &game_actor).await.unwrap();
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
         let expected =
             parameters::Parameters::new(Some(3), Some(5000), Some(3600000), Some(3600001), vec![]);
-        assert_eq!(*configuration.parameters(), expected)
+        assert_eq!(*configuration.parameters(), expected);
+        // check wtime and btime
+        let remaining_time_white = game_actor
+            .send(game::GetClockRemainingTime::new(square::Color::White))
+            .await
+            .expect("actor error")
+            .expect("Missing data");
+        let remaining_time_black = game_actor
+            .send(game::GetClockRemainingTime::new(square::Color::White))
+            .await
+            .expect("actor error")
+            .expect("Missing data");
+        assert_eq!(remaining_time_white, 3600001);
+        assert_eq!(remaining_time_black, 3600001);
     }
 }

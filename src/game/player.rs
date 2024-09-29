@@ -36,12 +36,6 @@ impl<T: engine::EngineActor> Players<T> {
     pub fn new(white: Player<T>, black: Player<T>) -> Self {
         Players { white, black }
     }
-    pub fn set_white(&mut self, white: Player<T>) {
-        self.white = white;
-    }
-    pub fn set_black(&mut self, black: Player<T>) {
-        self.black = black;
-    }
     pub fn get_player_into(&mut self, color: square::Color) -> &mut Player<T> {
         if color == square::Color::White {
             &mut self.white
