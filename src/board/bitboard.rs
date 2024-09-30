@@ -148,6 +148,7 @@ impl BitBoardMove {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BitPosition {
     bit_boards_white_and_black: BitBoardsWhiteAndBlack,
     bit_position_status: BitPositionStatus,

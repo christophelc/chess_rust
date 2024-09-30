@@ -18,6 +18,9 @@ impl LongAlgebricNotationMove {
             opt_promotion,
         }
     }
+    pub fn build_from_b_move(b_move: bitboard::BitBoardMove) -> Self {
+        LongAlgebricNotationMove::new(b_move.start(), b_move.end(), b_move.promotion())
+    }
     pub fn build_from_str(move_str: &str) -> Result<Self, String> {
         let mut result = Err(format!("Invalid move: {}", move_str));
         if move_str.len() >= 4 && move_str.len() <= 5 {

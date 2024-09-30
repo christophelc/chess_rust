@@ -253,13 +253,13 @@ mod tests {
         ];
         let uci_reader = UciReadVecStringWrapper::new(inputs.as_slice());
         let mut game = Game::<engine::EngineDummy>::new();
-        let engine_player1 = engine::EngineDummy::new();
-        let engine_player2 = engine::EngineDummy::new();
+        let engine_player1 = engine::EngineDummy::default().start();
+        let engine_player2 = engine::EngineDummy::default().start();
         let player1 = player::Player::Human {
-            engine_opt: Some(Box::new(engine_player1)),
+            engine_opt: Some(engine_player1),
         };
         let player2 = player::Player::Computer {
-            engine: Box::new(engine_player2),
+            engine: engine_player2,
         };
         let players = player::Players::new(player1, player2);
         game.set_players(players);

@@ -4,10 +4,10 @@ use super::engine;
 
 pub enum Player<T: engine::EngineActor> {
     Human {
-        engine_opt: Option<Box<T>>, // even if human, we can ask to get a hint to the engine
+        engine_opt: Option<actix::Addr<T>>, // even if human, we can ask to get a hint to the engine
     },
     Computer {
-        engine: Box<T>,
+        engine: actix::Addr<T>,
     },
 }
 impl<T: engine::EngineActor> Default for Player<T> {
@@ -16,7 +16,7 @@ impl<T: engine::EngineActor> Default for Player<T> {
     }
 }
 impl<T: engine::EngineActor> Player<T> {
-    pub fn get_engine(&self) -> Option<&Box<T>> {
+    pub fn get_engine(&self) -> Option<&actix::Addr<T>> {
         match self {
             Player::Human { engine_opt: None } => None,
             Player::Human {
@@ -43,7 +43,7 @@ impl<T: engine::EngineActor> Players<T> {
             &mut self.black
         }
     }
-    pub fn get_engine(&mut self, color: square::Color) -> Result<&Box<T>, String> {
+    pub fn get_engine(&mut self, color: square::Color) -> Result<&actix::Addr<T>, String> {
         let player = self.get_player_into(color);
         match player.get_engine() {
             None => Err(format!("No engine for player {:?}", color)),

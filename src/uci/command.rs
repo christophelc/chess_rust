@@ -100,6 +100,8 @@ impl Command {
                 events.push(event::Event::StopEngine);
             }
             Command::Quit => {
+                events.push(event::Event::Write("Stopping search.".to_string()));
+                events.push(event::Event::StopEngine);
                 events.push(event::Event::Write("Exiting engine".to_string()));
                 events.push(event::Event::Quit);
             }

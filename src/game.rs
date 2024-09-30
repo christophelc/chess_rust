@@ -168,7 +168,7 @@ impl<T: engine::EngineActor> Handler<GetBestMove> for Game<T> {
     type Result = Option<LongAlgebricNotationMove>;
 
     fn handle(&mut self, _msg: GetBestMove, _ctx: &mut Self::Context) -> Self::Result {
-        self.best_move
+        self.best_move_opt
     }
 }
 
@@ -299,7 +299,7 @@ impl History {
 #[derive(Default)]
 pub struct Game<T: engine::EngineActor> {
     configuration: configuration::Configuration,
-    best_move: Option<LongAlgebricNotationMove>,
+    best_move_opt: Option<LongAlgebricNotationMove>,
     history: History,
     // once a move is played, we update moves for the next player
     moves: Vec<BitBoardMove>,
@@ -475,7 +475,7 @@ impl<T: engine::EngineActor> Actor for Game<T> {
 impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, msg: UciCommand, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UciCommand, ctx: &mut Self::Context) -> Self::Result {
         let mut result = Ok(());
         match msg {
             UciCommand::Btime(time) => {
@@ -546,8 +546,16 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                     let engine_actor_or_error =
                         self.players.get_engine(position.status().player_turn());
                     match engine_actor_or_error {
-                        Ok(engine) => {
-                            engine.go();
+                        Ok(engine_actor) => {
+                            let msg = engine::EngineGo::new(bitboard::BitPosition::from(position));
+                            engine_actor
+                                .send(msg)
+                                .into_actor(self)
+                                .map(|result, _act, _ctx| match result {
+                                    Ok(_) => println!("Message sent successfully"),
+                                    Err(e) => println!("Failed to send message: {:?}", e),
+                                })
+                                .wait(ctx); // Wait for the future to complete within the actor context
                         }
                         Err(err) => result = Err(err),
                     }
@@ -555,14 +563,46 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
             }
             UciCommand::StopEngine => match self.configuration.opt_position() {
                 None => {
-                    self.best_move = None;
+                    self.best_move_opt = None;
                     result =
                         Err("No bestmove since no valid position has been entered.".to_string());
                 }
                 Some(_) => {
-                    // TODO: get bestmove from engine
-                    self.best_move =
-                        Some(notation::LongAlgebricNotationMove::build_from_str("e2e4").unwrap());
+                    if let Some(position) = self.configuration().opt_position() {
+                        match self.players.get_engine(position.status().player_turn()) {
+                            Ok(engine_actor) => {
+                                let engine_msg = engine::EngineGetBestMove::default();
+
+                                engine_actor
+                                    .send(engine_msg)
+                                    .into_actor(self)
+                                    .map(move |result: Result<Option<BitBoardMove>, _>, act, _ctx| {
+                                        match result {
+                                            Ok(Some(best_move)) => {
+                                                println!("Best move updated successfully");
+                                                act.best_move_opt = Some(notation::LongAlgebricNotationMove::build_from_b_move(best_move));
+                                            }
+                                            Ok(None) => {
+                                                println!("No move found.");
+                                                act.best_move_opt = None;
+                                            }
+                                            Err(e) => {
+                                                println!("Error sending message to engine: {:?}", e);
+                                                act.best_move_opt = None;
+                                            }
+                                        }
+                                    })
+                                    .wait(ctx); // Wait for the future to complete within the actor context
+                            }
+                            Err(err) => {
+                                println!("Failed to retrieve engine actor: {:?}", err);
+                                self.best_move_opt = None;
+                            }
+                        }
+                    } else {
+                        println!("No position found in configuration.");
+                        self.best_move_opt = None;
+                    }
                 } // Stop engine search
             },
         }
@@ -823,20 +863,20 @@ mod tests {
         assert_eq!(end_game, game::EndGame::Repetition3x)
     }
 
-    async fn build_game_actor(inputs: Vec<&str>) -> game::GameActor<engine::EngineDummy> {
+    pub async fn build_game_actor(inputs: Vec<&str>) -> game::GameActor<engine::EngineDummy> {
         let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
         let mut game = game::Game::<engine::EngineDummy>::new();
-        let engine_player1 = engine::EngineDummy::new();
-        let engine_player2 = engine::EngineDummy::new();
+        let engine_player1 = engine::EngineDummy::default().start();
+        let engine_player2 = engine::EngineDummy::default().start();
         let player1 = player::Player::Human {
-            engine_opt: Some(Box::new(engine_player1)),
+            engine_opt: Some(engine_player1),
         };
         let player2 = player::Player::Computer {
-            engine: Box::new(engine_player2),
+            engine: engine_player2,
         };
         let players = player::Players::new(player1, player2);
         game.set_players(players);
-        let game_actor = game::Game::<engine::EngineDummy>::start(game::Game::new());
+        let game_actor = game::Game::<engine::EngineDummy>::start(game);
         // set the position from uci command
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         // define clocks
