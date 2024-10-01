@@ -1,4 +1,6 @@
 pub mod parser;
+use crate::game::{self, engine};
+
 use super::event;
 use std::error::Error;
 
@@ -28,14 +30,26 @@ pub enum Command {
     Quit, // "quit" command to exit the engine
 }
 impl Command {
-    pub fn handle_command(&self) -> Vec<event::Event> {
+    pub async fn handle_command<T: engine::EngineActor>(
+        &self,
+        game_actor: &game::GameActor<T>,
+    ) -> Vec<event::Event> {
         let mut events: Vec<event::Event> = vec![];
         match self {
-            Command::Uci => events.extend(vec![
-                event::Event::Write("id name RandomEngine".to_string()),
-                event::Event::Write("id author Christophe Le Cam".to_string()),
-                event::Event::Write("uciok".to_string()),
-            ]),
+            Command::Uci => {
+                let msg = game::GetCurrentEngine::default();
+                let result = game_actor.send(msg).await;
+                if let Ok(Some(engine_actor)) = result {
+                    let engine_id_opt = engine_actor.send(engine::EngineGetId::default()).await;
+                    if let Ok(Some(engine_id)) = engine_id_opt {
+                        events.extend(vec![
+                            event::Event::Write(format!("id name {}", engine_id.name())),
+                            event::Event::Write(format!("id author {}", engine_id.author())),
+                            event::Event::Write("uciok".to_string()),
+                        ]);
+                    }
+                }
+            }
             Command::IsReady => events.push(event::Event::Write("readyok".to_string())),
             Command::Position(pos) => {
                 events.push(event::Event::Write("Position received".to_string()));

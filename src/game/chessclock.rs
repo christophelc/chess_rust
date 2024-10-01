@@ -11,6 +11,7 @@ pub struct Clock<T: engine::EngineActor> {
 }
 
 impl<T: engine::EngineActor> Clock<T> {
+    #[cfg(test)]
     pub fn new(starting_time: u64, game_actor: super::GameActor<T>) -> Self {
         Clock {
             remaining_time: starting_time,

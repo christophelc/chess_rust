@@ -172,6 +172,29 @@ impl<T: engine::EngineActor> Handler<GetBestMove> for Game<T> {
     }
 }
 
+#[derive(Default)]
+pub struct GetCurrentEngine<T> {
+    _phantom: std::marker::PhantomData<T>,
+}
+impl<T: engine::EngineActor> Message for GetCurrentEngine<T> {
+    type Result = Option<Addr<T>>;
+}
+
+impl<T: engine::EngineActor> Handler<GetCurrentEngine<T>> for Game<T> {
+    type Result = Option<Addr<T>>;
+
+    fn handle(&mut self, _msg: GetCurrentEngine<T>, _ctx: &mut Self::Context) -> Self::Result {
+        if let Some(position) = self.configuration.opt_position() {
+            let bitboard_position = bitboard::BitPosition::from(position);
+            let bit_position_status = bitboard_position.bit_position_status();
+            let color = bit_position_status.player_turn();
+            self.players.get_player_into(color).get_engine().cloned()
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Message)]
 #[rtype(result = "Result<History, ()>")]
 pub struct GetHistory;
@@ -244,6 +267,7 @@ pub struct SetClocks<T: engine::EngineActor> {
     white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
     black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
 }
+#[cfg(test)]
 impl<T: engine::EngineActor> SetClocks<T> {
     pub fn new(
         white_clock_actor_opt: Option<chessclock::ClockActor<T>>,

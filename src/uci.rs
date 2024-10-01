@@ -97,7 +97,7 @@ pub async fn execute_command<T: engine::EngineActor>(
 ) -> Result<bool, Vec<String>> {
     let mut is_quit = false;
     let mut errors: Vec<String> = vec![];
-    let events = command.handle_command();
+    let events = command.handle_command(game_actor).await;
     for event in &events {
         // pdate the configuration
         let uci_result = event.handle_event(game_actor, stdout).await;

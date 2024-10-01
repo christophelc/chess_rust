@@ -8,6 +8,7 @@ use board::fen;
 use board::san;
 use fen::EncodeUserInput;
 use game::engine;
+use game::player;
 use piece_move::GenMoves;
 use std::io;
 use uci::command::parser;
@@ -110,7 +111,18 @@ async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin
 #[actix::main]
 async fn main() {
     let mut stdin = io::stdin();
-    let game_actor = game::Game::<engine::EngineDummy>::new().start();
+    let mut game = game::Game::<engine::EngineDummy>::new();
+    let engine_player1 = engine::EngineDummy::default().start();
+    let engine_player2 = engine::EngineDummy::default().start();
+    let player1 = player::Player::Human {
+        engine_opt: Some(engine_player1),
+    };
+    let player2 = player::Player::Computer {
+        engine: engine_player2,
+    };
+    let players = player::Players::new(player1, player2);
+    game.set_players(players);
+    let game_actor = game.start();
 
     let args: Vec<String> = env::args().collect();
     if args.len() <= 1 {

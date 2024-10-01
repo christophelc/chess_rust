@@ -10,6 +10,7 @@ pub struct Parameters {
 }
 
 impl Parameters {
+    #[cfg(test)]
     pub fn new(
         opt_depth: Option<u32>,
         opt_time_per_move_in_ms: Option<u32>,

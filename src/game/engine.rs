@@ -1,11 +1,25 @@
 use actix::prelude::*;
-use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 use crate::board::bitboard::piece_move::GenMoves;
 use crate::board::bitboard::{self, BitBoardMove};
 
+pub struct EngineId {
+    name: String,
+    author: String,
+}
+impl EngineId {
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+    pub fn author(&self) -> String {
+        self.author.clone()
+    }
+}
 pub trait Engine {
+    fn id(&self) -> EngineId;
+
     // start thinking
     fn go(&mut self, bit_position: bitboard::BitPosition);
     // stop thinking
@@ -16,8 +30,10 @@ pub trait EngineActor:
     + Engine
     + Default
     + Clone
+    + Send
     + Handler<EngineGo>
     + Handler<EngineGetBestMove>
+    + Handler<EngineGetId>
     + Actor<Context = actix::Context<Self>>
 {
 }
@@ -26,8 +42,10 @@ pub trait EngineActor:
 #[derive(Debug, Clone, Default)]
 pub struct EngineDummy {
     best_move: Option<BitBoardMove>,
-    rng: ThreadRng,
 }
+const DUMMY_ENGINE_ID_NAME: &str = "Random engine";
+const DUMMY_ENGINE_ID_AUTHOR: &str = "Christophe le cam";
+
 pub fn gen_moves(bit_position: bitboard::BitPosition) -> Vec<bitboard::BitBoardMove> {
     let bit_boards_white_and_black = bit_position.bit_boards_white_and_black();
     let bit_position_status = bit_position.bit_position_status();
@@ -47,13 +65,31 @@ impl Actor for EngineDummy {
 }
 impl EngineActor for EngineDummy {}
 impl Engine for EngineDummy {
+    fn id(&self) -> EngineId {
+        EngineId {
+            name: DUMMY_ENGINE_ID_NAME.to_owned(),
+            author: DUMMY_ENGINE_ID_AUTHOR.to_owned(),
+        }
+    }
     fn go(&mut self, bit_position: bitboard::BitPosition) {
         println!("EngineDummy started thinking.");
         let moves = gen_moves(bit_position);
-        self.best_move = moves.choose(&mut self.rng).cloned();
+        let mut rng = thread_rng();
+        self.best_move = moves.choose(&mut rng).cloned();
     }
     fn stop(&self) {
         println!("EngineDummy stopped thinking.");
+    }
+}
+
+#[derive(Message, Default)]
+#[rtype(result = "Option<EngineId>")]
+pub struct EngineGetId {}
+impl Handler<EngineGetId> for EngineDummy {
+    type Result = Option<EngineId>;
+
+    fn handle(&mut self, _msg: EngineGetId, _ctx: &mut Self::Context) -> Self::Result {
+        Some(self.id())
     }
 }
 
@@ -102,10 +138,27 @@ impl Handler<EngineStop> for EngineDummy {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::game::{self, tests::build_game_actor};
+    use crate::game::{self, engine::EngineGetId, tests::build_game_actor};
 
     #[actix::test]
     async fn test_engine_dummy() {
+        let inputs = vec!["position startpos", "go"];
+        let game_actor = build_game_actor(inputs.clone()).await;
+        let msg = game::GetCurrentEngine::default();
+        let result = game_actor.send(msg).await;
+        let mut vec_engine_id: Vec<String> = vec![];
+        if let Ok(Some(engine_actor)) = result {
+            let engine_id_opt = engine_actor.send(EngineGetId::default()).await;
+            if let Ok(Some(engine_id)) = engine_id_opt {
+                vec_engine_id.push(engine_id.name().to_string());
+                vec_engine_id.push(engine_id.author().to_string());
+            }
+        }
+        assert_eq!(vec_engine_id, vec!["Random engine", "Christophe le cam"])
+    }
+
+    #[actix::test]
+    async fn test_engine_dummy_is_random() {
         let mut best_moves = Vec::new();
         let inputs = vec!["position startpos", "go"];
 
