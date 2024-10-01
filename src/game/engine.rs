@@ -32,15 +32,14 @@ pub fn gen_moves(bit_position: bitboard::BitPosition) -> Vec<bitboard::BitBoardM
     let bit_boards_white_and_black = bit_position.bit_boards_white_and_black();
     let bit_position_status = bit_position.bit_position_status();
     let color = &bit_position_status.player_turn();
-    let check_status = bit_boards_white_and_black.check_status(&color);
+    let check_status = bit_boards_white_and_black.check_status(color);
     let capture_en_passant = bit_position_status.pawn_en_passant();
-    let moves = bit_boards_white_and_black.gen_moves_for_all(
+    bit_boards_white_and_black.gen_moves_for_all(
         color,
         check_status,
         &capture_en_passant,
         bit_position_status,
-    );
-    moves
+    )
 }
 
 impl Actor for EngineDummy {

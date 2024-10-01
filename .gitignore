@@ -1,3 +1,6 @@
 /target
 uci-spec.txt
 spec.md
+tarpaulin-report.html
+flamegraph.svg
+perf.data*
