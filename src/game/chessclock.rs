@@ -6,15 +6,17 @@ use super::engine;
 pub type ClockActor<T> = Addr<Clock<T>>;
 pub struct Clock<T: engine::EngineActor> {
     remaining_time: u64,
+    inc_time: u64,
     game_actor: super::GameActor<T>,
     ticking_handle: Option<SpawnHandle>, // Handle to the ticking interval
 }
 
 impl<T: engine::EngineActor> Clock<T> {
     #[cfg(test)]
-    pub fn new(starting_time: u64, game_actor: super::GameActor<T>) -> Self {
+    pub fn new(starting_time: u64, inc_time: u64, game_actor: super::GameActor<T>) -> Self {
         Clock {
             remaining_time: starting_time,
+            inc_time,
             game_actor,
             ticking_handle: None,
         }
@@ -61,6 +63,25 @@ impl<T: engine::EngineActor> Handler<SetRemainingTime> for Clock<T> {
     fn handle(&mut self, msg: SetRemainingTime, _ctx: &mut Context<Self>) {
         self.remaining_time = msg.new_time;
         println!("Clock time set to: {}", self.remaining_time);
+    }
+}
+
+// Define a message to set the remaining time
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetIncTime(u64);
+
+impl SetIncTime {
+    pub fn new(new_inc_time: u64) -> Self {
+        SetIncTime(new_inc_time)
+    }
+}
+impl<T: engine::EngineActor> Handler<SetIncTime> for Clock<T> {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetIncTime, _ctx: &mut Context<Self>) {
+        self.inc_time = msg.0;
+        println!("Clock inc time set to: {}", self.inc_time);
     }
 }
 

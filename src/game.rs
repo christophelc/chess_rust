@@ -250,10 +250,12 @@ pub enum UciCommand {
     InitPosition,
     UpdatePosition(String, fen::Position),
     DepthFinite(u32),
-    TimePerMoveInMs(u32),
+    MaxTimePerMoveInMs(u32),
     SearchInfinite,
     Wtime(u64),
     Btime(u64),
+    WtimeInc(u64),
+    BtimeInc(u64),
     SearchMoves(Vec<notation::LongAlgebricNotationMove>),
     ValidMoves(Vec<notation::LongAlgebricNotationMove>),
     StartEngine,
@@ -503,12 +505,12 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
         let mut result = Ok(());
         match msg {
             UciCommand::Btime(time) => {
-                match &self.white_clock_actor_opt {
+                match &self.black_clock_actor_opt {
                     None => {
                         // do nothing
                     }
-                    Some(white_clock_actor) => {
-                        white_clock_actor.do_send(chessclock::SetRemainingTime::new(time));
+                    Some(clock_actor) => {
+                        clock_actor.do_send(chessclock::SetRemainingTime::new(time));
                     }
                 }
                 // for the moment, we memorize the inital parameters
@@ -516,11 +518,26 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 params.set_btime(time);
                 self.configuration.update_parameters(params);
             }
+            UciCommand::BtimeInc(time_inc) => {
+                match &self.black_clock_actor_opt {
+                    None => {
+                        // do nothing
+                    }
+                    Some(clock_actor) => {
+                        clock_actor.do_send(chessclock::SetIncTime::new(time_inc));
+                    }
+                }
+                // for the moment, we memorize the inital parameters
+                let mut params = self.configuration().parameters().clone();
+                params.set_btime_inc(time_inc);
+                self.configuration.update_parameters(params);
+            }
             UciCommand::InitPosition => {
                 let position = fen::Position::build_initial_position();
                 self.configuration.update_position(position);
                 self.init_hash_table();
                 self.history.init();
+                self.best_move_opt = None;
             }
             UciCommand::Wtime(time) => {
                 match &self.white_clock_actor_opt {
@@ -536,6 +553,20 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 params.set_wtime(time);
                 self.configuration.update_parameters(params);
             }
+            UciCommand::WtimeInc(time_inc) => {
+                match &self.white_clock_actor_opt {
+                    None => {
+                        // do nothing
+                    }
+                    Some(white_clock_actor) => {
+                        white_clock_actor.do_send(chessclock::SetIncTime::new(time_inc));
+                    }
+                }
+                // for the moment, we memorize the inital parameters
+                let mut params = self.configuration().parameters().clone();
+                params.set_btime_inc(time_inc);
+                self.configuration.update_parameters(params);
+            }
             UciCommand::DepthFinite(depth) => {
                 let mut params = self.configuration().parameters().clone();
                 params.set_depth(depth);
@@ -546,7 +577,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 params.set_depth_infinite();
                 self.configuration.update_parameters(params);
             }
-            UciCommand::TimePerMoveInMs(time) => {
+            UciCommand::MaxTimePerMoveInMs(time) => {
                 let mut params = self.configuration().parameters().clone();
                 params.set_time_per_move_in_ms(time);
                 self.configuration.update_parameters(params);
@@ -556,6 +587,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 self.init_hash_table();
                 self.update_moves();
                 self.history.set_fen(&fen);
+                self.best_move_opt = None;                
             }
             UciCommand::SearchMoves(search_moves) => {
                 let mut params = self.configuration().parameters().clone();
@@ -576,7 +608,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                                 .send(msg)
                                 .into_actor(self)
                                 .map(|result, _act, _ctx| match result {
-                                    Ok(_) => println!("Message sent successfully"),
+                                    Ok(_) => {}
                                     Err(e) => println!("Failed to send message: {:?}", e),
                                 })
                                 .wait(ctx); // Wait for the future to complete within the actor context
@@ -904,8 +936,8 @@ mod tests {
         // set the position from uci command
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         // define clocks
-        let white_clock_actor = chessclock::Clock::new(3, game_actor.clone()).start();
-        let black_clock_actor = chessclock::Clock::new(3, game_actor.clone()).start();
+        let white_clock_actor = chessclock::Clock::new(3, 0, game_actor.clone()).start();
+        let black_clock_actor = chessclock::Clock::new(3, 0, game_actor.clone()).start();
         game_actor.do_send(game::SetClocks {
             white_clock_actor_opt: Some(white_clock_actor),
             black_clock_actor_opt: Some(black_clock_actor),

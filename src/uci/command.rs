@@ -23,8 +23,10 @@ impl std::fmt::Display for CommandError {
 #[derive(Debug)]
 pub enum Command {
     Uci,     // "uci" command, no additional data needed
+    Ignore,  // do nothing
     IsReady, // "isready" command, no additional data needed
     Position(PositionStruct),
+    NewGame,
     Go(GoStruct),
     Stop, // "stop" command to stop search
     Quit, // "quit" command to exit the engine
@@ -50,7 +52,12 @@ impl Command {
                     }
                 }
             }
+            Command::Ignore => {}
             Command::IsReady => events.push(event::Event::Write("readyok".to_string())),
+            Command::NewGame => {
+                events.push(event::Event::StartPos);
+                // TODO: reset btime, wtime ?
+            }
             Command::Position(pos) => {
                 events.push(event::Event::Write("Position received".to_string()));
                 if pos.startpos {
@@ -80,9 +87,9 @@ impl Command {
                 }
                 if let Some(time) = go.movetime {
                     events.push(event::Event::Write(
-                        format!("Time for move: {} ms", time).to_string(),
+                        format!("Max time for move: {} ms", time).to_string(),
                     ));
-                    events.push(event::Event::TimePerMoveInMs(time));
+                    events.push(event::Event::MaxTimePerMoveInMs(time));
                 }
                 if go.infinite {
                     events.push(event::Event::Write("Searching indefinitely...".to_string()));
@@ -99,6 +106,18 @@ impl Command {
                         format!("Black time left: {} ms", btime).to_string(),
                     ));
                     events.push(event::Event::Btime(btime));
+                }
+                if let Some(wtime_inc) = go.wtime_inc {
+                    events.push(event::Event::Write(
+                        format!("White time inc: {} ms", wtime_inc).to_string(),
+                    ));
+                    events.push(event::Event::WtimeInc(wtime_inc));
+                }
+                if let Some(btime_inc) = go.btime_inc {
+                    events.push(event::Event::Write(
+                        format!("Black time left: {} ms", btime_inc).to_string(),
+                    ));
+                    events.push(event::Event::Btime(btime_inc));
                 }
                 if !go.search_moves.is_empty() {
                     events.push(event::Event::Write(format!(
@@ -140,5 +159,7 @@ pub struct GoStruct {
     infinite: bool,            // If true, search indefinitely until told to stop
     wtime: Option<u64>,        // White time left,
     btime: Option<u64>,        // Black time left
+    wtime_inc: Option<u64>,    // White time increment per move
+    btime_inc: Option<u64>,    // Black time increment per move
     search_moves: Vec<String>, // Restrict search to this moves only
 }

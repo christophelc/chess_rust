@@ -9,6 +9,7 @@ use std::io::Write;
 #[derive(Debug, Clone)]
 pub enum Event {
     Btime(u64),
+    BtimeInc(u64),
     Depth(u32),
     Fen(String),
     StartEngine,
@@ -18,9 +19,10 @@ pub enum Event {
     SearchInfinite,
     StartPos,
     StopEngine,
-    TimePerMoveInMs(u32),
+    MaxTimePerMoveInMs(u32),
     Write(String),
     Wtime(u64),
+    WtimeInc(u64),
 }
 
 #[derive(Debug)]
@@ -100,9 +102,9 @@ impl Event {
                 let r = (*game_actor).send(game::UciCommand::SearchInfinite).await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
-            Event::TimePerMoveInMs(time) => {
+            Event::MaxTimePerMoveInMs(time) => {
                 let r = (*game_actor)
-                    .send(game::UciCommand::TimePerMoveInMs(*time))
+                    .send(game::UciCommand::MaxTimePerMoveInMs(*time))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
@@ -121,6 +123,18 @@ impl Event {
             }
             Event::Btime(btime) => {
                 let r = (*game_actor).send(game::UciCommand::Btime(*btime)).await;
+                game_cast_result(self, r).map(|_| UciResult::Continue)
+            }
+            Event::WtimeInc(wtime_inc) => {
+                let r = (*game_actor)
+                    .send(game::UciCommand::WtimeInc(*wtime_inc))
+                    .await;
+                game_cast_result(self, r).map(|_| UciResult::Continue)
+            }
+            Event::BtimeInc(btime_inc) => {
+                let r = (*game_actor)
+                    .send(game::UciCommand::BtimeInc(*btime_inc))
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             event @ Event::SearchMoves(search_moves) => match moves_validation(search_moves) {

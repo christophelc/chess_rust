@@ -15,7 +15,7 @@ fn best_move_action(
     stdout: &mut Stdout,
     best_move: notation::LongAlgebricNotationMove,
 ) -> Result<(), io::Error> {
-    let res = writeln!(stdout, "{}", best_move.cast());
+    let res = writeln!(stdout, "bestmove {}", best_move.cast());
     stdout.flush().unwrap();
     res
 }
@@ -265,8 +265,8 @@ mod tests {
         game.set_players(players);
         let game_actor = Game::start(game);
         // set clocks before executing UCI commands
-        let white_clock_actor = game::chessclock::Clock::new(3, game_actor.clone()).start();
-        let black_clock_actor = game::chessclock::Clock::new(3, game_actor.clone()).start();
+        let white_clock_actor = game::chessclock::Clock::new(3, 0, game_actor.clone()).start();
+        let black_clock_actor = game::chessclock::Clock::new(3, 0, game_actor.clone()).start();
         game_actor.do_send(game::SetClocks::new(
             Some(white_clock_actor),
             Some(black_clock_actor),
@@ -275,8 +275,15 @@ mod tests {
         uci_loop(uci_reader, &game_actor).await.unwrap();
         let configuration = get_configuration(&game_actor).await;
         assert!(configuration.opt_position().is_some());
-        let expected =
-            parameters::Parameters::new(Some(3), Some(5000), Some(3600000), Some(3600001), vec![]);
+        let expected = parameters::Parameters::new(
+            Some(3),
+            Some(5000),
+            Some(3600000),
+            Some(3600001),
+            None,
+            None,
+            vec![],
+        );
         assert_eq!(*configuration.parameters(), expected);
         // check wtime and btime
         let remaining_time_white = game_actor
@@ -285,11 +292,11 @@ mod tests {
             .expect("actor error")
             .expect("Missing data");
         let remaining_time_black = game_actor
-            .send(game::GetClockRemainingTime::new(square::Color::White))
+            .send(game::GetClockRemainingTime::new(square::Color::Black))
             .await
             .expect("actor error")
             .expect("Missing data");
-        assert_eq!(remaining_time_white, 3600001);
+        assert_eq!(remaining_time_white, 3600000);
         assert_eq!(remaining_time_black, 3600001);
     }
 }

@@ -6,6 +6,8 @@ pub struct Parameters {
     opt_time_per_move_in_ms: Option<u32>,
     opt_wtime: Option<u64>,
     opt_btime: Option<u64>,
+    opt_wtime_inc: Option<u64>,
+    opt_btime_inc: Option<u64>,
     search_moves: Vec<LongAlgebricNotationMove>,
 }
 
@@ -16,6 +18,8 @@ impl Parameters {
         opt_time_per_move_in_ms: Option<u32>,
         opt_wtime: Option<u64>,
         opt_btime: Option<u64>,
+        opt_wtime_inc: Option<u64>,
+        opt_btime_inc: Option<u64>,
         search_moves: Vec<LongAlgebricNotationMove>,
     ) -> Self {
         Parameters {
@@ -23,6 +27,8 @@ impl Parameters {
             opt_time_per_move_in_ms,
             opt_wtime,
             opt_btime,
+            opt_wtime_inc,
+            opt_btime_inc,
             search_moves,
         }
     }
@@ -40,6 +46,12 @@ impl Parameters {
     }
     pub fn set_btime(&mut self, btime: u64) {
         self.opt_btime = Some(btime);
+    }
+    pub fn set_wtime_inc(&mut self, wtime_inc: u64) {
+        self.opt_wtime_inc = Some(wtime_inc);
+    }
+    pub fn set_btime_inc(&mut self, btime_inc: u64) {
+        self.opt_btime_inc = Some(btime_inc);
     }
     pub fn set_search_moves(&mut self, search_moves: Vec<LongAlgebricNotationMove>) {
         self.search_moves = search_moves;

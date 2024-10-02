@@ -18,14 +18,21 @@ impl<'a> InputParser<'a> {
     pub fn parse_input(&self) -> Result<Command, CommandError> {
         match self.input {
             "uci" => Ok(Command::Uci),
+            "xboard" => {
+                println!("xboard protocol not supported");
+                Ok(Command::Ignore)
+            }
             "isready" => Ok(Command::IsReady),
             cmd if cmd.starts_with("position") => parse_position(cmd.to_string()),
             cmd if cmd.starts_with("go") => parse_go(cmd.to_string()),
+            "ucinewgame" => Ok(Command::NewGame),
             "stop" => Ok(Command::Stop),
             "quit" => Ok(Command::Quit),
-            _ => Err(CommandError::new(
-                format!("Invalid command input: {}", self).to_string(),
-            )),
+            _ => {
+                //Err(CommandError::new(format!("Invalid command input: {}", self).to_string()))
+                println!("Unknown command {}", self.input);
+                Ok(Command::Ignore)
+            }
         }
     }
 }
@@ -85,6 +92,12 @@ fn parse_go(go_command: String) -> Result<Command, CommandError> {
             }
             "btime" => {
                 parsed.btime = Some(go_vec[i + 1].parse().unwrap());
+            }
+            "winc" => {
+                parsed.wtime_inc = Some(go_vec[i + 1].parse().unwrap());
+            }
+            "binc" => {
+                parsed.btime_inc = Some(go_vec[i + 1].parse().unwrap());
             }
             "infinite" => {
                 parsed.infinite = true;

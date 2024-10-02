@@ -127,8 +127,8 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() <= 1 {
         println!("Entering in uci mode");
-        fen();
-        test(&game_actor).await;
+        //fen();
+        //test(&game_actor).await;
         println!("Enter an uci command:");
         uci_loop(&game_actor, &mut stdin).await;
     } else {
