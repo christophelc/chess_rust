@@ -18,6 +18,7 @@ use uci::UciReadWrapper;
 
 use std::env;
 
+#[allow(dead_code)]
 fn fen() {
     println!("chessboard generated from initial position encoded with FEN");
     let position: fen::Position = fen::Position::build_initial_position();
@@ -27,6 +28,7 @@ fn fen() {
     println!("{}", fen_str);
 }
 
+#[allow(dead_code)]
 async fn test(game_actor: &game::GameActor<engine::EngineDummy>) {
     let mut stdout = io::stdout();
     println!("Inital position with move e4");

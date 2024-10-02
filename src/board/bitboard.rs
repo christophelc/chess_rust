@@ -304,7 +304,7 @@ impl BitBoardsWhiteAndBlack {
         };
         square
     }
-    pub fn remove_piece(
+    pub fn xor_piece(
         self,
         color: &square::Color,
         type_piece: TypePiece,
@@ -560,8 +560,8 @@ impl Iterator for BitIterator {
 }
 
 impl BitBoard {
-    pub fn remove(&self, mask_remove: BitBoard) -> BitBoard {
-        *self ^ mask_remove
+    pub fn xor(&self, mask_xor: BitBoard) -> BitBoard {
+        *self ^ mask_xor
     }
     fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
         (*self ^ mask_switch) | mask_promotion
@@ -706,7 +706,7 @@ impl BitBoards {
     pub fn remove_piece(self, type_piece: square::TypePiece, mask_remove: BitBoard) -> BitBoards {
         match type_piece {
             TypePiece::Rook => BitBoards {
-                rooks: self.rooks.remove(mask_remove),
+                rooks: self.rooks.xor(mask_remove),
                 ..self
             },
             TypePiece::Bishop => BitBoards {

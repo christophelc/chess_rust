@@ -6,6 +6,7 @@ use super::zobrist;
 use super::BitBoard;
 use super::BitBoardMove;
 use super::BitBoardsWhiteAndBlack;
+use crate::board::fen;
 use crate::board::square::Switch;
 use crate::board::{
     bitboard,
@@ -98,9 +99,9 @@ impl RooksBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
+    pub fn xor(&self, mask_xor: BitBoard) -> Self {
         RooksBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_xor),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -142,7 +143,7 @@ impl BishopsBitBoard {
     }
     pub fn remove(&self, mask_remove: BitBoard) -> Self {
         BishopsBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_remove),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -183,7 +184,7 @@ impl KnightsBitBoard {
     }
     pub fn remove(&self, mask_remove: BitBoard) -> Self {
         KnightsBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_remove),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -221,7 +222,7 @@ impl KingBitBoard {
     }
     pub fn remove(&self, mask_remove: BitBoard) -> Self {
         KingBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_remove),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -273,7 +274,7 @@ impl QueensBitBoard {
     }
     pub fn remove(&self, mask_remove: BitBoard) -> Self {
         QueensBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_remove),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -314,7 +315,7 @@ impl PawnsBitBoard {
     }
     pub fn remove(&self, mask_remove: BitBoard) -> Self {
         PawnsBitBoard {
-            bitboard: self.bitboard.remove(mask_remove),
+            bitboard: self.bitboard.xor(mask_remove),
         }
     }
     pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
@@ -420,7 +421,7 @@ fn moves2bitboard_moves(
                     bitboard_moves.extend(bitboard_move);
                 }
                 type_piece => {
-                    if !control_discover_king(
+                    if !control_discover_king_no_check(
                         &color,
                         type_piece,
                         piece_moves.index(),
@@ -437,7 +438,7 @@ fn moves2bitboard_moves(
 }
 
 // Check that the moves does not discover King
-fn control_discover_king(
+fn control_discover_king_no_check(
     color: &square::Color,
     type_piece: TypePiece,
     p_start: bitboard::BitIndex,
@@ -449,15 +450,17 @@ fn control_discover_king(
         .king()
         .bitboard()
         .index();
+    // check there is no check if we remove the piece
     match (k.direction(p_start), p_start.direction(p_end)) {
         (bitboard::Direction::None, _) => false,
         (dir1, dir2) if dir1 == dir2 => false,
         (bitboard::Direction::BishopBottomLeftTopRight, _)
         | (bitboard::Direction::BishopTopLeftBottomRight, _) => {
-            // remove P
+            // remove piece at start and add it at the end (not full move which is more costly)
             let bb = bit_boards_white_and_black
                 .clone()
-                .remove_piece(color, type_piece, p_start);
+                .xor_piece(color, type_piece, p_start)
+                .xor_piece(color, type_piece, p_end);
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
@@ -474,14 +477,15 @@ fn control_discover_king(
                 .any(|m| (m.moves & opponent_bishops_queens).non_empty())
         }
         (bitboard::Direction::RookVertical, _) | (bitboard::Direction::RookHorizontal, _) => {
-            // remove P
+            // remove piece at start and add it at the end (not full move which is more costly)
             let bb = bit_boards_white_and_black
                 .clone()
-                .remove_piece(color, type_piece, p_start);
+                .xor_piece(color, type_piece, p_start)
+                .xor_piece(color, type_piece, p_end);
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
-            let moves = BishopsBitBoard::new(k.bitboard()).gen_moves_no_check(
+            let moves = RooksBitBoard::new(k.bitboard()).gen_moves_no_check(
                 color,
                 bit_board,
                 bit_board_opponent,
@@ -1105,7 +1109,7 @@ impl PieceMoves {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board;
+    use crate::{board, uci::notation};
     use bitboard::BitBoard;
 
     impl board::fen::Position {
@@ -1974,5 +1978,28 @@ mod tests {
         println!("{}", position.chessboard());
         println!("{}", fen);
         assert_eq!(fen, "R6k/8/8/8/8/8/8/7K b - - 0 1");
+    }
+
+    #[test]
+    fn test_game_play_discovered_check() {
+        let fen = "2b1k2r/2p5/2P1p2p/2b1ppP1/p3P2q/P2n4/Rr1N2K1/3q2R1 w - - 0 33";
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
+        println!("{}", position.chessboard());
+        let bit_board_position = bitboard::BitPosition::from(position);
+        let color = square::Color::White;
+        let moves = bit_board_position
+            .bit_boards_white_and_black()
+            .gen_moves_for_all(
+                &color,
+                CheckStatus::None,
+                &None,
+                bit_board_position.bit_position_status(),
+            );
+        let moves: Vec<String> = moves
+            .into_iter()
+            .map(|m| notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
+            .collect();
+        // cannot play this move since it would discover the king
+        assert!(!moves.contains(&"d2b1".to_string()))
     }
 }

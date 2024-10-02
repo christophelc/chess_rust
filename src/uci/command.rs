@@ -117,7 +117,7 @@ impl Command {
                     events.push(event::Event::Write(
                         format!("Black time left: {} ms", btime_inc).to_string(),
                     ));
-                    events.push(event::Event::Btime(btime_inc));
+                    events.push(event::Event::BtimeInc(btime_inc));
                 }
                 if !go.search_moves.is_empty() {
                     events.push(event::Event::Write(format!(

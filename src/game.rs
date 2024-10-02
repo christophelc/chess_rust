@@ -564,7 +564,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 }
                 // for the moment, we memorize the inital parameters
                 let mut params = self.configuration().parameters().clone();
-                params.set_btime_inc(time_inc);
+                params.set_wtime_inc(time_inc);
                 self.configuration.update_parameters(params);
             }
             UciCommand::DepthFinite(depth) => {
@@ -587,7 +587,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for Game<T> {
                 self.init_hash_table();
                 self.update_moves();
                 self.history.set_fen(&fen);
-                self.best_move_opt = None;                
+                self.best_move_opt = None;
             }
             UciCommand::SearchMoves(search_moves) => {
                 let mut params = self.configuration().parameters().clone();
