@@ -5,6 +5,7 @@ use super::engine;
 
 pub type ClockActor<T> = Addr<Clock<T>>;
 pub struct Clock<T: engine::EngineActor> {
+    id: String, // useful for debug
     remaining_time: u64,
     inc_time: u64,
     game_actor: super::GameActor<T>,
@@ -13,8 +14,14 @@ pub struct Clock<T: engine::EngineActor> {
 
 impl<T: engine::EngineActor> Clock<T> {
     #[cfg(test)]
-    pub fn new(starting_time: u64, inc_time: u64, game_actor: super::GameActor<T>) -> Self {
+    pub fn new(
+        id: &str,
+        starting_time: u64,
+        inc_time: u64,
+        game_actor: super::GameActor<T>,
+    ) -> Self {
         Clock {
+            id: id.to_string(),
             remaining_time: starting_time,
             inc_time,
             game_actor,
@@ -63,6 +70,27 @@ impl<T: engine::EngineActor> Handler<SetRemainingTime> for Clock<T> {
     fn handle(&mut self, msg: SetRemainingTime, _ctx: &mut Context<Self>) {
         self.remaining_time = msg.new_time;
         println!("Clock time set to: {}", self.remaining_time);
+    }
+}
+
+// Define a message to set the remaining time
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct IncRemainingTime {}
+impl IncRemainingTime {
+    pub fn new() -> Self {
+        IncRemainingTime {}
+    }
+}
+impl<T: engine::EngineActor> Handler<IncRemainingTime> for Clock<T> {
+    type Result = ();
+
+    fn handle(&mut self, _msg: IncRemainingTime, _ctx: &mut Context<Self>) {
+        self.remaining_time += self.inc_time;
+        println!(
+            "Clock id '{}' time set to: {} after increment",
+            self.id, self.remaining_time
+        );
     }
 }
 

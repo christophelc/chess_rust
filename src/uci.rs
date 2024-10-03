@@ -265,8 +265,10 @@ mod tests {
         game.set_players(players);
         let game_actor = Game::start(game);
         // set clocks before executing UCI commands
-        let white_clock_actor = game::chessclock::Clock::new(3, 0, game_actor.clone()).start();
-        let black_clock_actor = game::chessclock::Clock::new(3, 0, game_actor.clone()).start();
+        let white_clock_actor =
+            game::chessclock::Clock::new("white", 3, 0, game_actor.clone()).start();
+        let black_clock_actor =
+            game::chessclock::Clock::new("black", 3, 0, game_actor.clone()).start();
         game_actor.do_send(game::SetClocks::new(
             Some(white_clock_actor),
             Some(black_clock_actor),

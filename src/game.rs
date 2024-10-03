@@ -481,6 +481,19 @@ impl<T: engine::EngineActor> Game<T> {
                         self.history.add_moves(b_move);
                         self.show();
                         self.update_moves();
+                        // update clock if inc
+                        match color {
+                            square::Color::White => {
+                                if let Some(white_clock_actor) = &self.white_clock_actor_opt {
+                                    async_clock_inc("white".to_string(), white_clock_actor.clone());
+                                }
+                            }
+                            square::Color::Black => {
+                                if let Some(black_clock_actor) = &self.black_clock_actor_opt {
+                                    async_clock_inc("black".to_string(), black_clock_actor.clone());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -494,6 +507,22 @@ impl<T: engine::EngineActor> Game<T> {
         self.players = players;
     }
 }
+fn async_clock_inc<T: engine::EngineActor>(debug: String, clock_actor: Addr<chessclock::Clock<T>>) {
+    use tokio::task;
+
+    // Offload the sending to a background task
+    task::spawn(async move {
+        let result = clock_actor.send(chessclock::IncRemainingTime::new()).await;
+        match result {
+            Ok(response) => println!(
+                "Time for {} incremented successfully: {:?}",
+                debug, response
+            ),
+            Err(e) => println!("Error incrementing time: {:?}", e),
+        }
+    });
+}
+
 impl<T: engine::EngineActor> Actor for Game<T> {
     type Context = Context<Self>;
 }
@@ -936,8 +965,8 @@ mod tests {
         // set the position from uci command
         uci::uci_loop(uci_reader, &game_actor).await.unwrap();
         // define clocks
-        let white_clock_actor = chessclock::Clock::new(3, 0, game_actor.clone()).start();
-        let black_clock_actor = chessclock::Clock::new(3, 0, game_actor.clone()).start();
+        let white_clock_actor = chessclock::Clock::new("white", 3, 0, game_actor.clone()).start();
+        let black_clock_actor = chessclock::Clock::new("black", 3, 0, game_actor.clone()).start();
         game_actor.do_send(game::SetClocks {
             white_clock_actor_opt: Some(white_clock_actor),
             black_clock_actor_opt: Some(black_clock_actor),
@@ -961,6 +990,45 @@ mod tests {
         actix::clock::sleep(std::time::Duration::from_millis(100)).await;
         let end_game = game_actor.send(game::GetEndGame).await.unwrap().unwrap();
         assert_eq!(end_game, game::EndGame::TimeOutLost(square::Color::White))
+    }
+    #[actix::test]
+    async fn test_game_inc_timer() {
+        let inputs = vec!["position startpos moves e2e4 e7e5 g1f3 g8f6 f1c4", "quit"];
+        let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
+        let mut game = game::Game::<engine::EngineDummy>::new();
+        let engine_player1 = engine::EngineDummy::default().start();
+        let engine_player2 = engine::EngineDummy::default().start();
+        let player1 = player::Player::Human {
+            engine_opt: Some(engine_player1),
+        };
+        let player2 = player::Player::Computer {
+            engine: engine_player2,
+        };
+        let players = player::Players::new(player1, player2);
+        game.set_players(players);
+        let game_actor = game::Game::<engine::EngineDummy>::start(game);
+        // set the position from uci command
+        let white_clock_actor = chessclock::Clock::new("white", 3, 1, game_actor.clone()).start();
+        let black_clock_actor = chessclock::Clock::new("black", 4, 2, game_actor.clone()).start();
+        game_actor.do_send(game::SetClocks {
+            white_clock_actor_opt: Some(white_clock_actor),
+            black_clock_actor_opt: Some(black_clock_actor),
+        });
+        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
+        uci::uci_loop(uci_reader, &game_actor).await.unwrap();
+        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
+        let clock_white = game_actor
+            .send(game::GetClockRemainingTime::new(square::Color::White))
+            .await
+            .unwrap()
+            .unwrap();
+        let clock_black = game_actor
+            .send(game::GetClockRemainingTime::new(square::Color::Black))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(clock_white, 6);
+        assert_eq!(clock_black, 8);
     }
     #[actix::test]
     async fn test_game_timeout_no_material_gameover() {

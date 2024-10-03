@@ -6,7 +6,6 @@ use super::zobrist;
 use super::BitBoard;
 use super::BitBoardMove;
 use super::BitBoardsWhiteAndBlack;
-use crate::board::fen;
 use crate::board::square::Switch;
 use crate::board::{
     bitboard,

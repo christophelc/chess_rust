@@ -304,24 +304,6 @@ impl BitBoardsWhiteAndBlack {
         };
         square
     }
-    pub fn xor_piece(
-        self,
-        color: &square::Color,
-        type_piece: TypePiece,
-        index: BitIndex,
-    ) -> BitBoardsWhiteAndBlack {
-        let mask_remove = index.bitboard();
-        match color {
-            square::Color::White => BitBoardsWhiteAndBlack {
-                bit_board_white: self.bit_board_white.remove_piece(type_piece, mask_remove),
-                ..self
-            },
-            square::Color::Black => BitBoardsWhiteAndBlack {
-                bit_board_black: self.bit_board_black.remove_piece(type_piece, mask_remove),
-                ..self
-            },
-        }
-    }
     // return bitboard and hash to be applied to last hash with xor
     pub fn move_piece(
         self,
