@@ -457,10 +457,17 @@ fn control_discover_king_no_check(
         (bitboard::Direction::BishopBottomLeftTopRight, _)
         | (bitboard::Direction::BishopTopLeftBottomRight, _) => {
             // remove piece at start and add it at the end (not full move which is more costly)
-            let bb = bit_boards_white_and_black
-                .clone()
-                .xor_piece(color, type_piece, p_start)
-                .xor_piece(color, type_piece, p_end);
+            let capture = match bit_boards_white_and_black.peek(p_end) {
+                square::Square::NonEmpty(piece) => Some(piece.type_piece()),
+                _ => None,
+            };
+            let b_move =
+                &bitboard::BitBoardMove::new(*color, type_piece, p_start, p_end, capture, None);
+            let bb = bit_boards_white_and_black.clone().move_piece(
+                b_move,
+                &mut zobrist::ZobristHash::default(),
+                None,
+            );
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
@@ -478,10 +485,17 @@ fn control_discover_king_no_check(
         }
         (bitboard::Direction::RookVertical, _) | (bitboard::Direction::RookHorizontal, _) => {
             // remove piece at start and add it at the end (not full move which is more costly)
-            let bb = bit_boards_white_and_black
-                .clone()
-                .xor_piece(color, type_piece, p_start)
-                .xor_piece(color, type_piece, p_end);
+            let capture = match bit_boards_white_and_black.peek(p_end) {
+                square::Square::NonEmpty(piece) => Some(piece.type_piece()),
+                _ => None,
+            };
+            let b_move =
+                &bitboard::BitBoardMove::new(*color, type_piece, p_start, p_end, capture, None);
+            let bb = bit_boards_white_and_black.clone().move_piece(
+                b_move,
+                &mut zobrist::ZobristHash::default(),
+                None,
+            );
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
