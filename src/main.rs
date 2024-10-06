@@ -29,19 +29,19 @@ fn fen() {
 }
 
 #[allow(dead_code)]
-async fn test(game_actor: &game::GameActor<engine::EngineDummy>) {
+async fn test(game_manager_actor: &game::game_manager::GameManagerActor<engine::EngineDummy>) {
     let mut stdout = io::stdout();
     println!("Inital position with move e4");
     let input = "position startpos moves e2e4 ";
     let parser = parser::InputParser::new(input);
     let command = parser.parse_input().expect("Invalid command");
-    let _ = uci::execute_command(game_actor, command, &mut stdout, true).await;
-    let configuration = game_actor
-        .send(game::GetConfiguration)
+    let _ = uci::execute_command(game_manager_actor, command, &mut stdout, true).await;
+    let game_state = game_manager_actor
+        .send(game::game_manager::GetGameState)
         .await
         .expect("actix error")
-        .expect("Error when retrieving configuration");
-    let position = configuration.opt_position().expect("No position defined.");
+        .expect("Error when retrieving game_state");
+    let position = game_state.bit_position().to();
     println!("{}", position.chessboard());
     println!();
 
@@ -64,13 +64,19 @@ async fn test(game_actor: &game::GameActor<engine::EngineDummy>) {
     println!("{:?}", moves_as_str);
 }
 
-async fn uci_loop(game_actor: &game::GameActor<engine::EngineDummy>, stdin: &mut io::Stdin) {
+async fn uci_loop(
+    game_actor: &game::game_manager::GameManagerActor<engine::EngineDummy>,
+    stdin: &mut io::Stdin,
+) {
     let uci_reader = uci::UciReadWrapper::new(stdin);
     // we ignore errors (according to uci specifications)
     let _ = uci::uci_loop(uci_reader, game_actor).await;
 }
 
-async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin: &mut io::Stdin) {
+async fn tui_loop<T: engine::EngineActor>(
+    game_actor: &game::game_manager::GameManagerActor<T>,
+    stdin: &mut io::Stdin,
+) {
     // init the game
     let inputs = vec!["position startpos", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
@@ -79,12 +85,12 @@ async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin
     let mut stdin_reader = UciReadWrapper::new(stdin);
     // loop
     loop {
-        let configuration = game_actor
-            .send(game::GetConfiguration)
+        let game_state = game_actor
+            .send(game::game_manager::GetGameState)
             .await
             .expect("actix error")
-            .expect("Error when retrieving configuration");
-        println!("\n{}", configuration.opt_position().unwrap().chessboard());
+            .expect("Error when retrieving game_state");
+        println!("\n{}", game_state.bit_position().to().chessboard());
         let input = stdin_reader.uci_read();
         let input = input.trim();
         match input {
@@ -96,7 +102,7 @@ async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin
                     Err(err) => println!("Error: {}", err),
                     Ok(long_algebric_moves) => {
                         let result = game_actor
-                            .send(game::PlayMoves(long_algebric_moves))
+                            .send(game::game_manager::PlayMoves(long_algebric_moves))
                             .await
                             .unwrap();
                         if let Some(err) = result.err() {
@@ -113,7 +119,7 @@ async fn tui_loop<T: engine::EngineActor>(game_actor: &game::GameActor<T>, stdin
 #[actix::main]
 async fn main() {
     let mut stdin = io::stdin();
-    let mut game = game::Game::<engine::EngineDummy>::new();
+    let mut game_manager = game::game_manager::GameManager::<engine::EngineDummy>::new();
     let engine_player1 = engine::EngineDummy::default().start();
     let engine_player2 = engine::EngineDummy::default().start();
     let player1 = player::Player::Human {
@@ -123,8 +129,8 @@ async fn main() {
         engine: engine_player2,
     };
     let players = player::Players::new(player1, player2);
-    game.set_players(players);
-    let game_actor = game.start();
+    game_manager.set_players(players);
+    let game_actor = game_manager.start();
 
     let args: Vec<String> = env::args().collect();
     if args.len() <= 1 {

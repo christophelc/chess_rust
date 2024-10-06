@@ -45,6 +45,9 @@ impl BitBoardMove {
             promotion,
         }
     }
+    pub fn color(&self) -> square::Color {
+        self.color
+    }
     pub fn start(&self) -> BitIndex {
         self.start
     }
@@ -166,27 +169,27 @@ fn pos2index(u: u64) -> u8 {
 
 impl BitPosition {
     pub fn move_piece(
-        self,
+        &mut self,
         b_move: &BitBoardMove,
         hash: &mut zobrist::ZobristHash,
         zobrist_table: &zobrist::Zobrist,
-    ) -> BitPosition {
-        let bit_boards_white_and_black =
-            self.bit_boards_white_and_black
-                .move_piece(b_move, hash, Some(zobrist_table));
+    ) {
+        self.bit_boards_white_and_black
+            .move_piece(b_move, hash, Some(zobrist_table));
         let bit_board_pawn_opponent = match b_move.color {
-            Color::White => *bit_boards_white_and_black.bit_board_black.pawns.bitboard(),
-            Color::Black => *bit_boards_white_and_black.bit_board_white.pawns.bitboard(),
+            Color::White => self
+                .bit_boards_white_and_black
+                .bit_board_black
+                .pawns
+                .bitboard(),
+            Color::Black => self
+                .bit_boards_white_and_black
+                .bit_board_white
+                .pawns
+                .bitboard(),
         };
-        BitPosition {
-            bit_boards_white_and_black,
-            bit_position_status: update_status(
-                b_move,
-                &bit_board_pawn_opponent,
-                self.bit_position_status,
-            ),
-            ..self
-        }
+        self.bit_position_status =
+            update_status(b_move, &bit_board_pawn_opponent, self.bit_position_status);
     }
     pub fn bit_boards_white_and_black(&self) -> &BitBoardsWhiteAndBlack {
         &self.bit_boards_white_and_black
@@ -306,11 +309,11 @@ impl BitBoardsWhiteAndBlack {
     }
     // return bitboard and hash to be applied to last hash with xor
     pub fn move_piece(
-        self,
+        &mut self,
         b_move: &BitBoardMove,
         hash: &mut zobrist::ZobristHash,
         zobrist_table_opt: Option<&zobrist::Zobrist>,
-    ) -> BitBoardsWhiteAndBlack {
+    ) {
         let mut mask_remove = BitBoard::default();
         if let Some(capture) = b_move.capture {
             mask_remove = b_move.end.bitboard();
@@ -339,35 +342,31 @@ impl BitBoardsWhiteAndBlack {
         if let Some(zobrist_table) = zobrist_table_opt {
             *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
         }
-        let new_bitboards = match b_move.color {
-            square::Color::White => BitBoardsWhiteAndBlack {
-                bit_board_white: self.bit_board_white.move_piece(
+        match b_move.color {
+            square::Color::White => {
+                self.bit_board_white.move_piece(
                     b_move.type_piece,
                     b_move.start,
                     b_move.end,
                     b_move.promotion,
-                ),
-                bit_board_black: if mask_remove.non_empty() {
+                );
+                if mask_remove.non_empty() {
                     let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
-                    self.bit_board_black.remove_piece(capture, mask_remove)
-                } else {
-                    self.bit_board_black
-                },
-            },
-            square::Color::Black => BitBoardsWhiteAndBlack {
-                bit_board_black: self.bit_board_black.move_piece(
+                    self.bit_board_black.remove_piece(capture, mask_remove);
+                }
+            }
+            square::Color::Black => {
+                self.bit_board_black.move_piece(
                     b_move.type_piece,
                     b_move.start,
                     b_move.end,
                     b_move.promotion,
-                ),
-                bit_board_white: if mask_remove.non_empty() {
+                );
+                if mask_remove.non_empty() {
                     let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
-                    self.bit_board_white.remove_piece(capture, mask_remove)
-                } else {
-                    self.bit_board_white
-                },
-            },
+                    self.bit_board_white.remove_piece(capture, mask_remove);
+                }
+            }
         };
         match b_move.check_castle() {
             Some(Castle::Short) => {
@@ -382,7 +381,7 @@ impl BitBoardsWhiteAndBlack {
                     *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);
                     *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
                 }
-                new_bitboards.move_piece(&b_move, hash, zobrist_table_opt)
+                self.move_piece(&b_move, hash, zobrist_table_opt)
             }
             Some(Castle::Long) => {
                 let b_move = BitBoardMove {
@@ -396,9 +395,9 @@ impl BitBoardsWhiteAndBlack {
                     *hash = hash.xor_piece(zobrist_table, piece, b_move.start.value() as usize);
                     *hash = hash.xor_piece(zobrist_table, piece, b_move.end.value() as usize);
                 }
-                new_bitboards.move_piece(&b_move, hash, zobrist_table_opt)
+                self.move_piece(&b_move, hash, zobrist_table_opt)
             }
-            None => new_bitboards,
+            None => {}
         }
     }
     pub fn bit_board(&self, color: &Color) -> &BitBoards {
@@ -542,11 +541,11 @@ impl Iterator for BitIterator {
 }
 
 impl BitBoard {
-    pub fn xor(&self, mask_xor: BitBoard) -> BitBoard {
-        *self ^ mask_xor
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        *self = *self ^ mask_xor
     }
-    fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        (*self ^ mask_switch) | mask_promotion
+    fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        *self = (*self ^ mask_switch) | mask_promotion
     }
     pub fn iter(&self) -> BitIterator {
         BitIterator {
@@ -685,42 +684,36 @@ pub struct BitBoards {
     pawns: piece_move::PawnsBitBoard,
 }
 impl BitBoards {
-    pub fn remove_piece(self, type_piece: square::TypePiece, mask_remove: BitBoard) -> BitBoards {
+    pub fn remove_piece(&mut self, type_piece: square::TypePiece, mask_remove: BitBoard) {
         match type_piece {
-            TypePiece::Rook => BitBoards {
-                rooks: self.rooks.xor(mask_remove),
-                ..self
-            },
-            TypePiece::Bishop => BitBoards {
-                bishops: self.bishops.remove(mask_remove),
-                ..self
-            },
-            TypePiece::Knight => BitBoards {
-                knights: self.knights.remove(mask_remove),
-                ..self
-            },
-            TypePiece::Queen => BitBoards {
-                queens: self.queens.remove(mask_remove),
-                ..self
-            },
-            TypePiece::King => BitBoards {
-                king: self.king.remove(mask_remove),
-                ..self
-            },
-            TypePiece::Pawn => BitBoards {
-                pawns: self.pawns.remove(mask_remove),
-                ..self
-            },
+            TypePiece::Rook => {
+                self.rooks.xor(mask_remove);
+            }
+            TypePiece::Bishop => {
+                self.bishops.remove(mask_remove);
+            }
+            TypePiece::Knight => {
+                self.knights.remove(mask_remove);
+            }
+            TypePiece::Queen => {
+                self.queens.remove(mask_remove);
+            }
+            TypePiece::King => {
+                self.king.remove(mask_remove);
+            }
+            TypePiece::Pawn => {
+                self.pawns.remove(mask_remove);
+            }
         }
     }
 
     pub fn move_piece(
-        self,
+        &mut self,
         type_piece: square::TypePiece,
         start: BitIndex,
         end: BitIndex,
         promotion: Option<TypePiecePromotion>,
-    ) -> BitBoards {
+    ) {
         let (
             mask,
             mask_promotion_rook,
@@ -764,59 +757,44 @@ impl BitBoards {
                 end.bitboard(),
             ),
         };
-        let bitboards = match type_piece {
-            TypePiece::Rook => BitBoards {
-                rooks: self.rooks().switch(mask, mask_promotion_rook),
-                ..self
-            },
-            TypePiece::Bishop => BitBoards {
-                bishops: self.bishops.switch(mask, mask_promotion_bishop),
-                ..self
-            },
-            TypePiece::Knight => BitBoards {
-                knights: self.knights.switch(mask, mask_promotion_knight),
-                ..self
-            },
-            TypePiece::Queen => BitBoards {
-                queens: self.queens.switch(mask, mask_promotion_queen),
-                ..self
-            },
-            TypePiece::King => BitBoards {
-                king: self.king.switch(mask, BitBoard::default()),
-                ..self
-            },
-            TypePiece::Pawn => BitBoards {
-                pawns: self.pawns.switch(mask, BitBoard::default()),
-                ..self
-            },
+        match type_piece {
+            TypePiece::Rook => {
+                self.rooks.switch(mask, mask_promotion_rook);
+            }
+            TypePiece::Bishop => {
+                self.bishops.switch(mask, mask_promotion_bishop);
+            }
+            TypePiece::Knight => {
+                self.knights.switch(mask, mask_promotion_knight);
+            }
+            TypePiece::Queen => {
+                self.queens.switch(mask, mask_promotion_queen);
+            }
+            TypePiece::King => {
+                self.king.switch(mask, BitBoard::default());
+            }
+            TypePiece::Pawn => {
+                self.pawns.switch(mask, BitBoard::default());
+            }
         };
         match promotion {
-            None => bitboards,
-            Some(p_type_piece) if type_piece.equals(p_type_piece) => bitboards,
-            Some(TypePiecePromotion::Rook) => BitBoards {
-                rooks: bitboards
-                    .rooks
-                    .switch(BitBoard::default(), mask_promotion_rook),
-                ..bitboards
-            },
-            Some(TypePiecePromotion::Bishop) => BitBoards {
-                bishops: bitboards
-                    .bishops
-                    .switch(BitBoard::default(), mask_promotion_bishop),
-                ..bitboards
-            },
-            Some(TypePiecePromotion::Knight) => BitBoards {
-                knights: bitboards
-                    .knights
-                    .switch(BitBoard::default(), mask_promotion_knight),
-                ..bitboards
-            },
-            Some(TypePiecePromotion::Queen) => BitBoards {
-                queens: bitboards
-                    .queens
-                    .switch(BitBoard::default(), mask_promotion_queen),
-                ..bitboards
-            },
+            None => {}
+            Some(p_type_piece) if type_piece.equals(p_type_piece) => {}
+            Some(TypePiecePromotion::Rook) => {
+                self.rooks.switch(BitBoard::default(), mask_promotion_rook);
+            }
+            Some(TypePiecePromotion::Bishop) => {
+                self.bishops
+                    .switch(BitBoard::default(), mask_promotion_bishop);
+            }
+            Some(TypePiecePromotion::Knight) => {
+                self.knights
+                    .switch(BitBoard::default(), mask_promotion_knight);
+            }
+            Some(TypePiecePromotion::Queen) => {
+                self.queens
+                    .switch(BitBoard::default(), mask_promotion_queen);
+            }
         }
     }
     pub fn rooks(&self) -> &piece_move::RooksBitBoard {

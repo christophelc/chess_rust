@@ -138,13 +138,13 @@ impl Handler<EngineStop> for EngineDummy {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::game::{self, engine::EngineGetId, tests::build_game_actor};
+    use crate::game::{engine::EngineGetId, game_manager, game_manager::build_game_actor};
 
     #[actix::test]
     async fn test_engine_dummy() {
         let inputs = vec!["position startpos", "go"];
         let game_actor = build_game_actor(inputs.clone()).await;
-        let msg = game::GetCurrentEngine::default();
+        let msg = game_manager::GetCurrentEngine::default();
         let result = game_actor.send(msg).await;
         let mut vec_engine_id: Vec<String> = vec![];
         if let Ok(Some(engine_actor)) = result {
@@ -165,7 +165,7 @@ mod tests {
         for _ in 0..10 {
             let game_actor = build_game_actor(inputs.clone()).await;
             let best_move = game_actor
-                .send(game::GetBestMove)
+                .send(game_manager::GetBestMove)
                 .await
                 .expect("actix mailbox error") // Ensure no Actix mailbox error
                 .expect("No best move found"); // Ensure a best move is found

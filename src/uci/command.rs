@@ -34,12 +34,12 @@ pub enum Command {
 impl Command {
     pub async fn handle_command<T: engine::EngineActor>(
         &self,
-        game_actor: &game::GameActor<T>,
+        game_actor: &game::game_manager::GameManagerActor<T>,
     ) -> Vec<event::Event> {
         let mut events: Vec<event::Event> = vec![];
         match self {
             Command::Uci => {
-                let msg = game::GetCurrentEngine::default();
+                let msg = game::game_manager::GetCurrentEngine::default();
                 let result = game_actor.send(msg).await;
                 if let Ok(Some(engine_actor)) = result {
                     let engine_id_opt = engine_actor.send(engine::EngineGetId::default()).await;

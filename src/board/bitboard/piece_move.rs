@@ -98,15 +98,11 @@ impl RooksBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&self, mask_xor: BitBoard) -> Self {
-        RooksBitBoard {
-            bitboard: self.bitboard.xor(mask_xor),
-        }
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        RooksBitBoard {
-            bitboard: self.bitboard.switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -140,15 +136,11 @@ impl BishopsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
-        BishopsBitBoard {
-            bitboard: self.bitboard.xor(mask_remove),
-        }
+    pub fn remove(&mut self, mask_remove: BitBoard) {
+        self.bitboard.xor(mask_remove);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        BishopsBitBoard {
-            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -181,15 +173,11 @@ impl KnightsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
-        KnightsBitBoard {
-            bitboard: self.bitboard.xor(mask_remove),
-        }
+    pub fn remove(&mut self, mask_remove: BitBoard) {
+        self.bitboard.xor(mask_remove);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        KnightsBitBoard {
-            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -219,15 +207,11 @@ impl KingBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
-        KingBitBoard {
-            bitboard: self.bitboard.xor(mask_remove),
-        }
+    pub fn remove(&mut self, mask_remove: BitBoard) {
+        self.bitboard.xor(mask_remove);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        KingBitBoard {
-            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -271,15 +255,11 @@ impl QueensBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
-        QueensBitBoard {
-            bitboard: self.bitboard.xor(mask_remove),
-        }
+    pub fn remove(&mut self, mask_remove: BitBoard) {
+        self.bitboard.xor(mask_remove);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        QueensBitBoard {
-            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -312,15 +292,11 @@ impl PawnsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&self, mask_remove: BitBoard) -> Self {
-        PawnsBitBoard {
-            bitboard: self.bitboard.xor(mask_remove),
-        }
+    pub fn remove(&mut self, mask_remove: BitBoard) {
+        self.bitboard.xor(mask_remove);
     }
-    pub fn switch(&self, mask_switch: BitBoard, mask_promotion: BitBoard) -> Self {
-        PawnsBitBoard {
-            bitboard: self.bitboard().switch(mask_switch, mask_promotion),
-        }
+    pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
+        self.bitboard.switch(mask_switch, mask_promotion);
     }
     pub fn gen_moves_no_check(
         &self,
@@ -406,17 +382,19 @@ fn moves2bitboard_moves(
             // check that destination square for king are free of attackers
             match piece_moves.type_piece() {
                 TypePiece::King => {
-                    let bitboard_move: Vec<&BitBoardMove> =
-                        bitboard_move
-                            .iter()
-                            .filter(|b_move| {
-                                // simulate the move
-                                let updated_board = (*bit_boards_white_and_black)
-                                    .clone()
-                                    .move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
-                                check_status(&color, &updated_board) == CheckStatus::None
-                            })
-                            .collect();
+                    let bitboard_move: Vec<&BitBoardMove> = bitboard_move
+                        .iter()
+                        .filter(|b_move| {
+                            // simulate the move
+                            let mut updated_board = bit_boards_white_and_black.clone();
+                            updated_board.move_piece(
+                                b_move,
+                                &mut zobrist::ZobristHash::default(),
+                                None,
+                            );
+                            check_status(&color, &updated_board) == CheckStatus::None
+                        })
+                        .collect();
                     bitboard_moves.extend(bitboard_move);
                 }
                 type_piece => {
@@ -462,11 +440,8 @@ fn control_discover_king_no_check(
             };
             let b_move =
                 &bitboard::BitBoardMove::new(*color, type_piece, p_start, p_end, capture, None);
-            let bb = bit_boards_white_and_black.clone().move_piece(
-                b_move,
-                &mut zobrist::ZobristHash::default(),
-                None,
-            );
+            let mut bb = bit_boards_white_and_black.clone();
+            bb.move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
@@ -490,11 +465,8 @@ fn control_discover_king_no_check(
             };
             let b_move =
                 &bitboard::BitBoardMove::new(*color, type_piece, p_start, p_end, capture, None);
-            let bb = bit_boards_white_and_black.clone().move_piece(
-                b_move,
-                &mut zobrist::ZobristHash::default(),
-                None,
-            );
+            let mut bb = bit_boards_white_and_black.clone();
+            bb.move_piece(b_move, &mut zobrist::ZobristHash::default(), None);
             let bit_board = bb.bit_board(color);
             let bit_board_opponent = bb.bit_board(&color.switch());
             // generate king moves as Bishop
@@ -1952,8 +1924,8 @@ mod tests {
         let mut hash = zobrist::ZobristHash::default();
         let bit_board_move = *short_castle;
         assert_eq!(bit_board_move, expected);
-        let bit_board_position2 =
-            bit_board_position.move_piece(&bit_board_move, &mut hash, &zobrist_table);
+        let mut bit_board_position2 = bit_board_position.clone();
+        bit_board_position2.move_piece(&bit_board_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
@@ -1984,8 +1956,8 @@ mod tests {
         let promotion_move = promotion_moves.get(0).unwrap();
         let zobrist_table = zobrist::Zobrist::default();
         let mut hash = zobrist::ZobristHash::default();
-        let bit_board_position2 =
-            bit_board_position.move_piece(&promotion_move, &mut hash, &zobrist_table);
+        let mut bit_board_position2 = bit_board_position.clone();
+        bit_board_position2.move_piece(&promotion_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());

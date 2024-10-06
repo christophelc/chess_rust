@@ -90,7 +90,6 @@ impl Zobrist {
         self.side_to_move = rng.gen();
         self
     }
-    #[cfg(test)]
     pub fn new() -> Self {
         Zobrist::default().init()
     }

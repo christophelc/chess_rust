@@ -8,7 +8,7 @@ pub struct Clock<T: engine::EngineActor> {
     id: String, // useful for debug
     remaining_time: u64,
     inc_time: u64,
-    game_actor: super::GameActor<T>,
+    game_actor: super::game_manager::GameManagerActor<T>,
     ticking_handle: Option<SpawnHandle>, // Handle to the ticking interval
 }
 
@@ -18,7 +18,7 @@ impl<T: engine::EngineActor> Clock<T> {
         id: &str,
         starting_time: u64,
         inc_time: u64,
-        game_actor: super::GameActor<T>,
+        game_actor: super::game_manager::GameManagerActor<T>,
     ) -> Self {
         Clock {
             id: id.to_string(),
@@ -76,17 +76,12 @@ impl<T: engine::EngineActor> Handler<SetRemainingTime> for Clock<T> {
 // Define a message to set the remaining time
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct IncRemainingTime {}
-impl IncRemainingTime {
-    pub fn new() -> Self {
-        IncRemainingTime {}
-    }
-}
+pub struct IncRemainingTime(pub u64);
 impl<T: engine::EngineActor> Handler<IncRemainingTime> for Clock<T> {
     type Result = ();
 
-    fn handle(&mut self, _msg: IncRemainingTime, _ctx: &mut Context<Self>) {
-        self.remaining_time += self.inc_time;
+    fn handle(&mut self, msg: IncRemainingTime, _ctx: &mut Context<Self>) {
+        self.remaining_time += msg.0 * self.inc_time;
         println!(
             "Clock id '{}' time set to: {} after increment",
             self.id, self.remaining_time

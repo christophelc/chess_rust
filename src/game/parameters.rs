@@ -1,4 +1,4 @@
-use super::notation::LongAlgebricNotationMove;
+use crate::uci::notation::LongAlgebricNotationMove;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Parameters {

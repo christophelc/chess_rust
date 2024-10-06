@@ -71,7 +71,7 @@ fn game_cast_result(
 impl Event {
     pub async fn handle_event<T: engine::EngineActor>(
         &self,
-        game_actor: &game::GameActor<T>,
+        game_manager_actor: &game::game_manager::GameManagerActor<T>,
         stdout: &mut Stdout,
     ) -> Result<UciResult, HandleEventError> {
         match self {
@@ -81,77 +81,92 @@ impl Event {
                 Ok(UciResult::Continue)
             }
             Event::StartPos => {
-                let r = (*game_actor).send(game::UciCommand::InitPosition).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::InitPosition)
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::Fen(fen) => {
                 let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
-                let r = (*game_actor)
-                    .send(game::UciCommand::UpdatePosition(fen.to_string(), position))
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::UpdatePosition(
+                        fen.to_string(),
+                        position,
+                    ))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             // Go command
             Event::Depth(depth) => {
-                let r = (*game_actor)
-                    .send(game::UciCommand::DepthFinite(*depth))
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::DepthFinite(*depth))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::SearchInfinite => {
-                let r = (*game_actor).send(game::UciCommand::SearchInfinite).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::SearchInfinite)
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::MaxTimePerMoveInMs(time) => {
-                let r = (*game_actor)
-                    .send(game::UciCommand::MaxTimePerMoveInMs(*time))
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::MaxTimePerMoveInMs(*time))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             event @ Event::Moves(moves) => match moves_validation(moves) {
                 Ok(valid_moves) => {
-                    let r = (*game_actor)
-                        .send(game::UciCommand::ValidMoves(valid_moves))
+                    let r = (*game_manager_actor)
+                        .send(game::game_manager::UciCommand::ValidMoves(valid_moves))
                         .await;
                     game_cast_result(self, r).map(|_| UciResult::Continue)
                 }
                 Err(err) => Err(HandleEventError::new(event.clone(), err)),
             },
             Event::Wtime(wtime) => {
-                let r = (*game_actor).send(game::UciCommand::Wtime(*wtime)).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::Wtime(*wtime))
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::Btime(btime) => {
-                let r = (*game_actor).send(game::UciCommand::Btime(*btime)).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::Btime(*btime))
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::WtimeInc(wtime_inc) => {
-                let r = (*game_actor)
-                    .send(game::UciCommand::WtimeInc(*wtime_inc))
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::WtimeInc(*wtime_inc))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::BtimeInc(btime_inc) => {
-                let r = (*game_actor)
-                    .send(game::UciCommand::BtimeInc(*btime_inc))
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::BtimeInc(*btime_inc))
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             event @ Event::SearchMoves(search_moves) => match moves_validation(search_moves) {
                 Ok(valid_moves) => {
-                    let r = (*game_actor)
-                        .send(game::UciCommand::SearchMoves(valid_moves))
+                    let r = (*game_manager_actor)
+                        .send(game::game_manager::UciCommand::SearchMoves(valid_moves))
                         .await;
                     game_cast_result(self, r).map(|_| UciResult::Continue)
                 }
                 Err(err) => Err(HandleEventError::new(event.clone(), err.to_string())),
             },
             Event::StartEngine => {
-                let r = (*game_actor).send(game::UciCommand::StartEngine).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::StartEngine)
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::BestMove)
             }
             Event::StopEngine => {
-                let r = (*game_actor).send(game::UciCommand::StopEngine).await;
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::StopEngine)
+                    .await;
                 game_cast_result(self, r).map(|_| UciResult::BestMove)
             }
             Event::Quit => Ok(UciResult::Quit),
