@@ -23,6 +23,7 @@ impl<'a> InputParser<'a> {
                 Ok(Command::Ignore)
             }
             "isready" => Ok(Command::IsReady),
+            cmd if cmd.starts_with("debug") => parse_debug(cmd.to_string()),
             cmd if cmd.starts_with("position") => parse_position(cmd.to_string()),
             cmd if cmd.starts_with("go") => parse_go(cmd.to_string()),
             "ucinewgame" => Ok(Command::NewGame),
@@ -37,6 +38,17 @@ impl<'a> InputParser<'a> {
     }
 }
 
+// TODO: ignore invalid token like in 'debug jono on' but not in 'debug jono on'
+fn parse_debug(position_command: String) -> Result<Command, CommandError> {
+    let position_vec = position_command.split_whitespace().collect::<Vec<&str>>();
+    match position_vec.as_slice() {
+        ["debug", "on"] => Ok(Command::DebugMode(true)),
+        ["debug", "off"] => Ok(Command::DebugMode(false)),
+        _ => Err(CommandError::new(
+            format!("position command error: {}", position_command).to_string(),
+        )),
+    }
+}
 fn parse_position(position_command: String) -> Result<Command, CommandError> {
     let position_vec = position_command.split_whitespace().collect::<Vec<&str>>();
 

@@ -44,6 +44,7 @@ pub struct GameManager<T: engine::EngineActor> {
     white_clock_actor_opt: Option<chessclock::ClockActor<T>>,
     black_clock_actor_opt: Option<chessclock::ClockActor<T>>,
     zobrist_table: zobrist::Zobrist,
+    is_debug: bool,
 }
 
 impl<T: engine::EngineActor> GameManager<T> {
@@ -93,6 +94,9 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
                 }
                 // for the moment, we memorize the inital parameters
                 self.parameters.set_btime_inc(time_inc);
+            }
+            UciCommand::DebugMode(is_debug) => {
+                self.is_debug = is_debug;
             }
             UciCommand::InitPosition => {
                 let position = fen::Position::build_initial_position();
@@ -221,6 +225,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
 pub enum UciCommand {
+    DebugMode(bool),
     InitPosition,
     UpdatePosition(String, fen::Position),
     DepthFinite(u32),
@@ -281,7 +286,7 @@ impl<T: engine::EngineActor> GameManager<T> {
             .game_state_opt
             .as_mut()
             .and_then(|game_state: &mut GameState| {
-                Some(game_state.play_moves(valid_moves, &self.zobrist_table))
+                Some(game_state.play_moves(valid_moves, &self.zobrist_table, self.is_debug))
             });
         match result {
             Some(Ok(b_moves)) => {
@@ -364,6 +369,18 @@ impl<T: engine::EngineActor> Handler<chessclock::TimeOut> for GameManager<T> {
         } else {
             panic!("A clock has been started but no position has been set.")
         }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "Option<bool>")]
+pub struct GetDebugMode;
+
+impl<T: engine::EngineActor> Handler<GetDebugMode> for GameManager<T> {
+    type Result = Option<bool>;
+
+    fn handle(&mut self, _msg: GetDebugMode, _ctx: &mut Self::Context) -> Self::Result {
+        Some(self.is_debug)
     }
 }
 

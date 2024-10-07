@@ -146,6 +146,7 @@ impl GameState {
         &mut self,
         valid_moves: Vec<LongAlgebricNotationMove>,
         zobrist_table: &zobrist::Zobrist,
+        is_debug: bool,
     ) -> Result<Vec<BitBoardMove>, String> {
         let mut summary = vec![];
         let mut result: Result<(), String> = Ok(());
@@ -157,14 +158,18 @@ impl GameState {
                     break;
                 }
                 Ok(b_move) => {
-                    println!("play: {:?}", b_move);
+                    if is_debug {
+                        println!("play: {:?}", b_move)
+                    };
                     let mut hash = self.last_hash();
                     self.bit_position
                         .move_piece(&b_move, &mut hash, zobrist_table);
                     // update hash history
                     self.add_hash(hash);
                     summary.push(b_move);
-                    self.show();
+                    if is_debug {
+                        self.show()
+                    };
                     self.update_moves();
                 }
             }
@@ -231,5 +236,49 @@ fn check_move_level2(
             "The move {} is invalid. Valid moves for this piece are: {:?}",
             invalid_move, possible_moves_for_piece
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        board::{bitboard::zobrist::Zobrist, fen::EncodeUserInput},
+        fen,
+        uci::notation,
+    };
+
+    #[test]
+    fn test_position() {
+        let fen_pos = fen::FEN_START_POSITION;
+        let position = fen::Fen::decode(fen_pos).expect("Failed to decode FEN");
+        let moves = vec![
+            "h2h3", "h7h6", "f2f4", "b8c6", "d2d4", "c6b8", "g1f3", "b7b5", "h1g1", "h8h7", "g2g3",
+            "d7d6", "c2c3", "c8e6", "b2b3", "e6g4", "c1a3", "b8a6", "d1d3", "c7c5", "h3h4", "a8c8",
+        ];
+        let zobrist_table = Zobrist::new();
+        let mut game = super::GameState::new(position, &zobrist_table);
+        let valid_moves: Vec<notation::LongAlgebricNotationMove> = moves
+            .into_iter()
+            .map(|m| notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
+            .collect();
+        let _ = game.play_moves(valid_moves, &zobrist_table, false);
+        //println!("{}", game.bit_position().to().chessboard());
+        let fen_pos_final = fen::Fen::encode(&game.bit_position.to()).unwrap();
+        let fen_pos_final_expected =
+            "2rqkbn1/p3pppr/n2p3p/1pp5/3P1PbP/BPPQ1NP1/P3P3/RN2KBR1 w Q - 1 12";
+        assert_eq!(fen_pos_final, fen_pos_final_expected);
+        let moves = game.moves;
+        let algebric_moves_expected = vec![
+            "g1h1", "g1g2", "f1g2", "f1h3", "a3c1", "a3b2", "a3b4", "a3c5", "b1d2", "f3d2", "f3h2",
+            "f3e5", "f3g5", "e1d1", "e1d2", "e1f2", "d3d1", "d3c2", "d3d2", "d3e3", "d3c4", "d3e4",
+            "d3b5", "d3f5", "d3g6", "d3h7", "e2e3", "e2e4", "b3b4", "c3c4", "d4c5", "d4d5", "f4f5",
+            "h4h5",
+        ];
+        let algebric_moves: Vec<String> = moves
+            .into_iter()
+            .map(|b_move| notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast())
+            .collect();
+        assert_eq!(algebric_moves, algebric_moves_expected);
     }
 }

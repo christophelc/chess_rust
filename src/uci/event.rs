@@ -3,13 +3,14 @@ use std::{error::Error, io::Stdout};
 use super::{notation, UciResult};
 use crate::board::fen;
 use crate::board::fen::EncodeUserInput;
-use crate::game::{self, engine};
+use crate::game::{self, engine, game_manager};
 use std::io::Write;
 
 #[derive(Debug, Clone)]
 pub enum Event {
     Btime(u64),
     BtimeInc(u64),
+    DebugMode(bool),
     Depth(u32),
     Fen(String),
     StartEngine,
@@ -21,6 +22,7 @@ pub enum Event {
     StopEngine,
     MaxTimePerMoveInMs(u32),
     Write(String),
+    WriteDebug(String),
     Wtime(u64),
     WtimeInc(u64),
 }
@@ -74,11 +76,29 @@ impl Event {
         game_manager_actor: &game::game_manager::GameManagerActor<T>,
         stdout: &mut Stdout,
     ) -> Result<UciResult, HandleEventError> {
+        let is_debug = game_manager_actor
+            .send(game_manager::GetDebugMode)
+            .await
+            .expect("Actix error")
+            .unwrap();
         match self {
             Event::Write(s) => {
                 writeln!(stdout, "{}", s).unwrap();
                 stdout.flush().unwrap();
                 Ok(UciResult::Continue)
+            }
+            Event::WriteDebug(s) => {
+                if is_debug {
+                    writeln!(stdout, "{}", s).unwrap();
+                    stdout.flush().unwrap();
+                }
+                Ok(UciResult::Continue)
+            }
+            Event::DebugMode(is_debug) => {
+                let r = (*game_manager_actor)
+                    .send(game::game_manager::UciCommand::DebugMode(*is_debug))
+                    .await;
+                game_cast_result(self, r).map(|_| UciResult::Continue)
             }
             Event::StartPos => {
                 let r = (*game_manager_actor)

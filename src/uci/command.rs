@@ -25,6 +25,7 @@ pub enum Command {
     Uci,     // "uci" command, no additional data needed
     Ignore,  // do nothing
     IsReady, // "isready" command, no additional data needed
+    DebugMode(bool),
     Position(PositionStruct),
     NewGame,
     Go(GoStruct),
@@ -54,6 +55,13 @@ impl Command {
             }
             Command::Ignore => {}
             Command::IsReady => events.push(event::Event::Write("readyok".to_string())),
+            Command::DebugMode(is_debug) => {
+                events.push(event::Event::WriteDebug(format!(
+                    "debug mode set to {}",
+                    is_debug
+                )));
+                events.push(event::Event::DebugMode(*is_debug));
+            }
             Command::NewGame => {
                 events.push(event::Event::StartPos);
                 // TODO: reset btime, wtime ?
