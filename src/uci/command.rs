@@ -22,15 +22,16 @@ impl std::fmt::Display for CommandError {
 
 #[derive(Debug)]
 pub enum Command {
-    Uci,     // "uci" command, no additional data needed
+    DebugMode(bool),
+    Go(GoStruct),
     Ignore,  // do nothing
     IsReady, // "isready" command, no additional data needed
-    DebugMode(bool),
-    Position(PositionStruct),
     NewGame,
-    Go(GoStruct),
-    Stop, // "stop" command to stop search
-    Quit, // "quit" command to exit the engine
+    Position(PositionStruct),
+    Quit,      // "quit" command to exit the engine
+    Stop,      // "stop" command to stop search
+    Uci,       // "uci" command, no additional data needed
+    Wait100ms, // for test purpose
 }
 impl Command {
     pub async fn handle_command<T: engine::EngineActor>(
@@ -39,6 +40,12 @@ impl Command {
     ) -> Vec<event::Event> {
         let mut events: Vec<event::Event> = vec![];
         match self {
+            Command::Wait100ms => {
+                use tokio::time::{sleep, Duration};
+
+                events.push(event::Event::Write(format!("waiting 100ms")));
+                sleep(Duration::from_millis(100)).await;
+            }
             Command::Uci => {
                 let msg = game::game_manager::GetCurrentEngine::default();
                 let result = game_actor.send(msg).await;
@@ -141,7 +148,7 @@ impl Command {
                 events.push(event::Event::StopEngine);
             }
             Command::Quit => {
-                events.push(event::Event::Write("Stopping search.".to_string()));
+                events.push(event::Event::Write("Stopping search (Quit).".to_string()));
                 events.push(event::Event::StopEngine);
                 events.push(event::Event::Write("Exiting engine".to_string()));
                 events.push(event::Event::Quit);

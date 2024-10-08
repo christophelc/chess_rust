@@ -179,13 +179,13 @@ impl Event {
             },
             Event::StartEngine => {
                 let r = (*game_manager_actor)
-                    .send(game::game_manager::UciCommand::StartEngine)
+                    .send(game::game_manager::UciCommand::EngineStartThinking)
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::BestMove)
             }
             Event::StopEngine => {
                 let r = (*game_manager_actor)
-                    .send(game::game_manager::UciCommand::StopEngine)
+                    .send(game::game_manager::UciCommand::EngineStopThinking)
                     .await;
                 game_cast_result(self, r).map(|_| UciResult::BestMove)
             }

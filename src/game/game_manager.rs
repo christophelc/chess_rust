@@ -151,7 +151,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
             UciCommand::ValidMoves(valid_moves) => {
                 result = self.play_moves(valid_moves);
             }
-            UciCommand::StartEngine => {
+            UciCommand::EngineStartThinking => {
                 if let Some(ref game_state) = &self.game_state_opt {
                     let bit_position = game_state.bit_position();
                     let engine_actor_or_error = self
@@ -159,7 +159,7 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
                         .get_engine(bit_position.bit_position_status().player_turn());
                     match engine_actor_or_error {
                         Ok(engine_actor) => {
-                            let msg = engine::EngineGo::new(bit_position.clone());
+                            let msg = engine::EngineStartThinking::new(bit_position.clone());
                             engine_actor
                                 .send(msg)
                                 .into_actor(self)
@@ -173,7 +173,28 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
                     }
                 }
             }
-            UciCommand::StopEngine => match &self.game_state_opt {
+            UciCommand::CleanResources => {
+                if let Some(game_state) = &self.game_state_opt {
+                    // clean resources for each engine actor
+                    let color = game_state
+                        .bit_position()
+                        .bit_position_status()
+                        .player_turn();
+                    let engine_current_actor = self.players.get_engine(color).ok();
+                    let engine_opponent_actor = self.players.get_engine(color.switch()).ok();
+                    for engine_actor in engine_current_actor
+                        .iter()
+                        .chain(engine_opponent_actor.iter())
+                    {
+                        engine_actor
+                            .send(engine::EngineCleanResources)
+                            .into_actor(self)
+                            .map(|_result, _act, _ctx| ())
+                            .wait(ctx);
+                    }
+                }
+            }
+            UciCommand::EngineStopThinking => match &self.game_state_opt {
                 None => {
                     self.best_move_opt = None;
                     result =
@@ -187,8 +208,13 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
                             .player_turn(),
                     ) {
                         Ok(engine_actor) => {
+                            // stop thinking
+                            engine_actor
+                                .send(engine::EngineStopThinking)
+                                .into_actor(self)
+                                .map(|_result, _act, _ctx| ())
+                                .wait(ctx);
                             let engine_msg = engine::EngineGetBestMove::default();
-
                             engine_actor
                                 .send(engine_msg)
                                 .into_actor(self)
@@ -225,20 +251,21 @@ impl<T: engine::EngineActor> Handler<UciCommand> for GameManager<T> {
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
 pub enum UciCommand {
-    DebugMode(bool),
-    InitPosition,
-    UpdatePosition(String, fen::Position),
-    DepthFinite(u32),
-    MaxTimePerMoveInMs(u32),
-    SearchInfinite,
-    Wtime(u64),
-    Btime(u64),
-    WtimeInc(u64),
-    BtimeInc(u64),
-    SearchMoves(Vec<notation::LongAlgebricNotationMove>),
-    ValidMoves(Vec<notation::LongAlgebricNotationMove>),
-    StartEngine,
-    StopEngine,
+    Btime(u64),                                           // Update clock for black
+    BtimeInc(u64),                                        // Update increment clock for black
+    CleanResources,                                       // Clean resources
+    DebugMode(bool),                                      // Set debug mode
+    DepthFinite(u32),                                     // Set depth
+    EngineStartThinking,                                  // Go command: start calculating
+    EngineStopThinking,                                   // Stop command: retrieve best move
+    InitPosition,                                         // Set starting position
+    MaxTimePerMoveInMs(u32),                              // Set maximum time per move
+    SearchMoves(Vec<notation::LongAlgebricNotationMove>), // Focus on a list of moves for analysis
+    SearchInfinite,                                       // Set infinite search
+    UpdatePosition(String, fen::Position),                // Set a new position
+    ValidMoves(Vec<notation::LongAlgebricNotationMove>),  // Play moves from the current position
+    Wtime(u64),                                           // Update clock for white
+    WtimeInc(u64),                                        // Update increment clock for white
 }
 
 // Message to set the clocks in the Game actor

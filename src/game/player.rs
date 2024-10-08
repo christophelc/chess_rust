@@ -43,8 +43,15 @@ impl<T: engine::EngineActor> Players<T> {
             &mut self.black
         }
     }
-    pub fn get_engine(&mut self, color: square::Color) -> Result<&actix::Addr<T>, String> {
-        let player = self.get_player_into(color);
+    fn get_player(&self, color: square::Color) -> &Player<T> {
+        if color == square::Color::White {
+            &self.white
+        } else {
+            &self.black
+        }
+    }
+    pub fn get_engine(&self, color: square::Color) -> Result<&actix::Addr<T>, String> {
+        let player = self.get_player(color);
         match player.get_engine() {
             None => Err(format!("No engine for player {:?}", color)),
             Some(engine) => Ok(engine),

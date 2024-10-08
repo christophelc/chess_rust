@@ -1,7 +1,7 @@
 pub mod command;
 pub mod event;
 pub mod notation;
-use crate::game::{self, engine};
+use crate::game::{self, engine, game_manager};
 use command::parser;
 use std::io::{self, BufRead, Stdin, Stdout, Write};
 
@@ -27,15 +27,23 @@ pub async fn uci_loop<T: UciRead, E: engine::EngineActor>(
     let mut stdout = io::stdout();
     let mut errors: Vec<String> = vec![];
 
-    loop {
-        let input = uci_reader.uci_read();
+    while let Some(input) = uci_reader.uci_read() {
         let parser = parser::InputParser::new(&input);
-        let command = parser.parse_input().expect("Invalid command");
-        let r = execute_command(game_manager_actor, command, &mut stdout, true).await;
-        if let Some(error) = r.clone().err() {
-            errors.extend(error);
-        } else if r.unwrap() {
-            break;
+        let command_or_error = parser.parse_input();
+        println!("{} ==> {:?}", input, command_or_error);
+        match command_or_error {
+            Ok(command) => {
+                let r = execute_command(game_manager_actor, command, &mut stdout, true).await;
+                if let Some(error) = r.clone().err() {
+                    errors.extend(error);
+                } else if r.unwrap() {
+                    break;
+                }
+            }
+            Err(err) => {
+                println!("xxxx {}", err.to_string());
+                errors.push(err.to_string())
+            }
         }
     }
     if errors.is_empty() {
@@ -46,7 +54,7 @@ pub async fn uci_loop<T: UciRead, E: engine::EngineActor>(
 }
 
 pub trait UciRead {
-    fn uci_read(&mut self) -> String;
+    fn uci_read(&mut self) -> Option<String>;
 }
 pub struct UciReadWrapper<'a> {
     stdin: &'a mut Stdin,
@@ -58,13 +66,19 @@ impl<'a> UciReadWrapper<'a> {
 }
 
 impl<'a> UciRead for UciReadWrapper<'a> {
-    fn uci_read(&mut self) -> String {
+    fn uci_read(&mut self) -> Option<String> {
         let mut input = String::new();
         self.stdin
             .lock()
             .read_line(&mut input)
             .expect("Failed to read line");
-        input.trim().to_string()
+        // useful for testing purpose
+        let s = input.trim().to_string();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     }
 }
 
@@ -78,13 +92,13 @@ impl<'a> UciReadVecStringWrapper<'a> {
     }
 }
 impl<'a> UciRead for UciReadVecStringWrapper<'a> {
-    fn uci_read(&mut self) -> String {
+    fn uci_read(&mut self) -> Option<String> {
         if self.idx < self.inputs.len() {
             let result = self.inputs[self.idx];
             self.idx += 1;
-            result.to_string()
+            Some(result.to_string())
         } else {
-            "quit".to_string()
+            None
         }
     }
 }
@@ -126,6 +140,13 @@ pub async fn execute_command<T: engine::EngineActor>(
         }
     }
     if errors.is_empty() {
+        if is_quit {
+            game_manager_actor
+                .send(game_manager::UciCommand::CleanResources)
+                .await
+                .expect("Actix error")
+                .unwrap(); // always Ok
+        }
         Ok(is_quit)
     } else {
         Err(errors)
@@ -267,11 +288,13 @@ mod tests {
         let expected = parameters::Parameters::default();
         assert_eq!(parameters, expected)
     }
+
     #[actix::test]
     async fn test_uci_input_modified_parameters() {
         let inputs = vec![
             "position startpos",
             "go depth 3 movetime 5000 wtime 3600000 btime 3600001",
+            "quit",
         ];
         let uci_reader = UciReadVecStringWrapper::new(inputs.as_slice());
         let mut game_manager = game_manager::GameManager::<engine::EngineDummy>::new();
@@ -329,5 +352,38 @@ mod tests {
             .expect("Missing data");
         assert_eq!(remaining_time_white, 3600000);
         assert_eq!(remaining_time_black, 3600001);
+    }
+
+    #[actix::test]
+    async fn test_uci_start_stop_think_engine() {
+        let inputs = vec!["position startpos", "go"];
+        let uci_reader = UciReadVecStringWrapper::new(inputs.as_slice());
+        let mut game_manager = game_manager::GameManager::<engine::EngineDummy>::new();
+        let engine_player1_actor = engine::EngineDummy::default().start();
+        let engine_player2_actor = engine::EngineDummy::default().start();
+        let player1 = player::Player::Human {
+            engine_opt: Some(engine_player1_actor.clone()),
+        };
+        let player2 = player::Player::Computer {
+            engine: engine_player2_actor,
+        };
+        let players = player::Players::new(player1, player2);
+        game_manager.set_players(players);
+        let game_manager_actor = game_manager::GameManager::start(game_manager);
+        // execute UCI commands
+        uci_loop(uci_reader, &game_manager_actor).await.unwrap();
+        let engine_status = engine_player1_actor
+            .send(engine::EngineGetStatus)
+            .await
+            .expect("Actix error")
+            .unwrap();
+        let engine_is_thinking = true;
+        let engine_is_running = true;
+        let expected = engine::EngineStatus::new(engine_is_thinking, engine_is_running);
+        let _ = game_manager_actor
+            .send(game_manager::UciCommand::CleanResources)
+            .await
+            .unwrap();
+        assert_eq!(engine_status, expected)
     }
 }

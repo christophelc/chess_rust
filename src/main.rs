@@ -70,7 +70,8 @@ async fn uci_loop(
 ) {
     let uci_reader = uci::UciReadWrapper::new(stdin);
     // we ignore errors (according to uci specifications)
-    let _ = uci::uci_loop(uci_reader, game_actor).await;
+    let r = uci::uci_loop(uci_reader, game_actor).await;
+    println!("{:?}", r.err());
 }
 
 async fn tui_loop<T: engine::EngineActor>(
@@ -81,7 +82,8 @@ async fn tui_loop<T: engine::EngineActor>(
     let inputs = vec!["position startpos", "quit"];
     let uci_reader = uci::UciReadVecStringWrapper::new(inputs.as_slice());
     // we don't ignore error in tui mode
-    uci::uci_loop(uci_reader, game_actor).await.unwrap();
+    let r = uci::uci_loop(uci_reader, game_actor).await;
+    println!("{:?}", r.err());
     let mut stdin_reader = UciReadWrapper::new(stdin);
     // loop
     loop {
@@ -91,12 +93,12 @@ async fn tui_loop<T: engine::EngineActor>(
             .expect("actix error")
             .expect("Error when retrieving game_state");
         println!("\n{}", game_state.bit_position().to().chessboard());
-        let input = stdin_reader.uci_read();
-        let input = input.trim();
-        match input {
-            "quit" => break,
+        let input_opt = stdin_reader.uci_read();
+        match input_opt.as_deref() {
+            None => {}
+            Some("quit") => break,
             // e2e4 for example
-            _ if input.len() == 4 => {
+            Some(input) if input.len() == 4 => {
                 let moves = vec![input.to_string()];
                 match event::moves_validation(&moves) {
                     Err(err) => println!("Error: {}", err),
@@ -120,8 +122,12 @@ async fn tui_loop<T: engine::EngineActor>(
 async fn main() {
     let mut stdin = io::stdin();
     let mut game_manager = game::game_manager::GameManager::<engine::EngineDummy>::new();
-    let engine_player1 = engine::EngineDummy::default().start();
-    let engine_player2 = engine::EngineDummy::default().start();
+    let engine_player1 = engine::EngineDummy::default()
+        .set_id_number("white")
+        .start();
+    let engine_player2 = engine::EngineDummy::default()
+        .set_id_number("black")
+        .start();
     let player1 = player::Player::Human {
         engine_opt: Some(engine_player1),
     };

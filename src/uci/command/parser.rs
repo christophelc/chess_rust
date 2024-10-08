@@ -29,9 +29,10 @@ impl<'a> InputParser<'a> {
             "ucinewgame" => Ok(Command::NewGame),
             "stop" => Ok(Command::Stop),
             "quit" => Ok(Command::Quit),
+            "wait100ms" => Ok(Command::Wait100ms), // for test only
             _ => {
                 //Err(CommandError::new(format!("Invalid command input: {}", self).to_string()))
-                println!("Unknown command {}", self.input);
+                println!("Unknown command '{}'", self.input);
                 Ok(Command::Ignore)
             }
         }
