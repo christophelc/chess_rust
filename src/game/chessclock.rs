@@ -1,24 +1,22 @@
 use actix::prelude::*;
 use std::time::Duration;
 
-use super::engine;
-
-pub type ClockActor<T> = Addr<Clock<T>>;
-pub struct Clock<T: engine::EngineActor> {
+pub type ClockActor = Addr<Clock>;
+pub struct Clock {
     id: String, // useful for debug
     remaining_time: u64,
     inc_time: u64,
-    game_actor: super::game_manager::GameManagerActor<T>,
+    game_actor: super::game_manager::GameManagerActor,
     ticking_handle: Option<SpawnHandle>, // Handle to the ticking interval
 }
 
-impl<T: engine::EngineActor> Clock<T> {
+impl Clock {
     #[cfg(test)]
     pub fn new(
         id: &str,
         starting_time: u64,
         inc_time: u64,
-        game_actor: super::game_manager::GameManagerActor<T>,
+        game_actor: super::game_manager::GameManagerActor,
     ) -> Self {
         Clock {
             id: id.to_string(),
@@ -45,7 +43,7 @@ impl<T: engine::EngineActor> Clock<T> {
     }
 }
 
-impl<T: engine::EngineActor> Actor for Clock<T> {
+impl Actor for Clock {
     type Context = Context<Self>;
 
     fn started(&mut self, _ctx: &mut Self::Context) {
@@ -54,7 +52,7 @@ impl<T: engine::EngineActor> Actor for Clock<T> {
 }
 
 // Define a message to set the remaining time
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct SetRemainingTime {
     new_time: u64,
@@ -64,7 +62,7 @@ impl SetRemainingTime {
         SetRemainingTime { new_time }
     }
 }
-impl<T: engine::EngineActor> Handler<SetRemainingTime> for Clock<T> {
+impl Handler<SetRemainingTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: SetRemainingTime, _ctx: &mut Context<Self>) {
@@ -74,10 +72,10 @@ impl<T: engine::EngineActor> Handler<SetRemainingTime> for Clock<T> {
 }
 
 // Define a message to set the remaining time
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct IncRemainingTime(pub u64);
-impl<T: engine::EngineActor> Handler<IncRemainingTime> for Clock<T> {
+impl Handler<IncRemainingTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: IncRemainingTime, _ctx: &mut Context<Self>) {
@@ -90,7 +88,7 @@ impl<T: engine::EngineActor> Handler<IncRemainingTime> for Clock<T> {
 }
 
 // Define a message to set the remaining time
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct SetIncTime(u64);
 
@@ -99,7 +97,7 @@ impl SetIncTime {
         SetIncTime(new_inc_time)
     }
 }
-impl<T: engine::EngineActor> Handler<SetIncTime> for Clock<T> {
+impl Handler<SetIncTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: SetIncTime, _ctx: &mut Context<Self>) {
@@ -109,11 +107,11 @@ impl<T: engine::EngineActor> Handler<SetIncTime> for Clock<T> {
 }
 
 // Define the message to pause the clock
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct PauseClock;
 
-impl<T: engine::EngineActor> Handler<PauseClock> for Clock<T> {
+impl Handler<PauseClock> for Clock {
     type Result = ();
 
     fn handle(&mut self, _msg: PauseClock, ctx: &mut Context<Self>) {
@@ -125,11 +123,11 @@ impl<T: engine::EngineActor> Handler<PauseClock> for Clock<T> {
 }
 
 // Define the message to resume the clock
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct ResumeClock;
 
-impl<T: engine::EngineActor> Handler<ResumeClock> for Clock<T> {
+impl Handler<ResumeClock> for Clock {
     type Result = ();
 
     fn handle(&mut self, _msg: ResumeClock, ctx: &mut Context<Self>) {
@@ -140,11 +138,11 @@ impl<T: engine::EngineActor> Handler<ResumeClock> for Clock<T> {
     }
 }
 
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "u64")]
 pub struct GetRemainingTime;
 
-impl<T: engine::EngineActor> Handler<GetRemainingTime> for Clock<T> {
+impl Handler<GetRemainingTime> for Clock {
     type Result = u64;
 
     fn handle(&mut self, _msg: GetRemainingTime, _ctx: &mut Context<Self>) -> u64 {
@@ -152,11 +150,11 @@ impl<T: engine::EngineActor> Handler<GetRemainingTime> for Clock<T> {
     }
 }
 
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct TerminateClock;
 
-impl<T: engine::EngineActor> Handler<TerminateClock> for Clock<T> {
+impl Handler<TerminateClock> for Clock {
     type Result = ();
 
     fn handle(&mut self, _msg: TerminateClock, ctx: &mut Context<Self>) {
@@ -165,6 +163,6 @@ impl<T: engine::EngineActor> Handler<TerminateClock> for Clock<T> {
 }
 
 // Message sent to game actor when clock runs out
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct TimeOut;

@@ -3,6 +3,8 @@ use crate::board::bitboard::{zobrist, BitBoardMove, BitBoardsWhiteAndBlack};
 use crate::board::{bitboard, fen, square};
 use crate::uci::notation::{self, LongAlgebricNotationMove};
 
+use super::monitoring::debug;
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum EndGame {
     #[default]
@@ -137,16 +139,12 @@ impl GameState {
         }
     }
 
-    #[allow(dead_code)]
-    fn show(&self) {
-        println!("{}", self.bit_position.to().chessboard());
-    }
     // play n moves from the current position
     pub fn play_moves(
         &mut self,
         valid_moves: Vec<LongAlgebricNotationMove>,
         zobrist_table: &zobrist::Zobrist,
-        is_debug: bool,
+        debug_actor_opt: Option<debug::DebugActor>,
     ) -> Result<Vec<BitBoardMove>, String> {
         let mut summary = vec![];
         let mut result: Result<(), String> = Ok(());
@@ -154,22 +152,32 @@ impl GameState {
             let color = self.bit_position.bit_position_status().player_turn();
             match check_move(color, m, &self.bit_position) {
                 Err(err) => {
+                    if let Some(debug_actor) = &debug_actor_opt {
+                        debug_actor.do_send(debug::AddMessage(format!(
+                            "play error for move {}: '{}'",
+                            m.cast(),
+                            err
+                        )));
+                    }
                     result = Err(err);
                     break;
                 }
                 Ok(b_move) => {
-                    if is_debug {
-                        println!("play: {:?}", b_move)
-                    };
+                    if let Some(debug_actor) = &debug_actor_opt {
+                        debug_actor.do_send(debug::AddMessage(format!("play: {:?}", b_move)));
+                    }
                     let mut hash = self.last_hash();
                     self.bit_position
                         .move_piece(&b_move, &mut hash, zobrist_table);
                     // update hash history
                     self.add_hash(hash);
                     summary.push(b_move);
-                    if is_debug {
-                        self.show()
-                    };
+                    if let Some(debug_actor) = &debug_actor_opt {
+                        debug_actor.do_send(debug::AddMessage(format!(
+                            "{}",
+                            self.bit_position.to().chessboard()
+                        )));
+                    }
                     self.update_moves();
                 }
             }
@@ -245,11 +253,13 @@ mod tests {
     use crate::{
         board::{bitboard::zobrist::Zobrist, fen::EncodeUserInput},
         fen,
+        game::monitoring::debug,
         uci::notation,
     };
 
     #[test]
     fn test_position() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
         let fen_pos = fen::FEN_START_POSITION;
         let position = fen::Fen::decode(fen_pos).expect("Failed to decode FEN");
         let moves = vec![
@@ -262,7 +272,7 @@ mod tests {
             .into_iter()
             .map(|m| notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
             .collect();
-        let _ = game.play_moves(valid_moves, &zobrist_table, false);
+        let _ = game.play_moves(valid_moves, &zobrist_table, debug_actor_opt.clone());
         //println!("{}", game.bit_position().to().chessboard());
         let fen_pos_final = fen::Fen::encode(&game.bit_position.to()).unwrap();
         let fen_pos_final_expected =

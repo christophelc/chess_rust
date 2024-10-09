@@ -1,9 +1,12 @@
 use std::fmt;
 
+use crate::game::game_manager;
+
 use super::{Command, CommandError, GoStruct, PositionStruct};
 
 pub struct InputParser<'a> {
     input: &'a str,
+    game_manager_actor: game_manager::GameManagerActor,
 }
 impl<'a> fmt::Display for InputParser<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -12,12 +15,15 @@ impl<'a> fmt::Display for InputParser<'a> {
     }
 }
 impl<'a> InputParser<'a> {
-    pub fn new(input: &'a str) -> Self {
-        InputParser { input }
+    pub fn new(input: &'a str, game_manager_actor: game_manager::GameManagerActor) -> Self {
+        InputParser::<'a> {
+            input,
+            game_manager_actor,
+        }
     }
     pub fn parse_input(&self) -> Result<Command, CommandError> {
         match self.input {
-            "uci" => Ok(Command::Uci),
+            "uci" => Ok(Command::Uci(self.game_manager_actor.clone())),
             "xboard" => {
                 println!("xboard protocol not supported");
                 Ok(Command::Ignore)
