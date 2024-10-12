@@ -1,70 +1,37 @@
-pub mod command;
-pub mod event;
+pub mod handler_event;
+pub mod handler_poll;
+pub mod handler_read;
+pub mod handler_uci;
 
+use crate::{
+    entity::uci::component::command,
+    ui::notation::{
+        fen::{self, EncodeUserInput},
+        long_notation,
+    },
+};
 use actix::{
-    dev::ContextFutureSpawner, Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message,
-    WrapFuture,
+    dev::ContextFutureSpawner, Actor, AsyncContext, Context, Handler, Message, WrapFuture,
 };
 use std::{
+    error::Error,
     io::{self, Stdin, Stdout, Write},
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use crate::entity::engine::component::engine_logic as logic;
-use crate::entity::game::actor::game_manager::{self, GetBestMoveFromUci};
+use crate::entity::game::actor::game_manager;
+use crate::entity::uci::component::event;
 use crate::monitoring::debug;
-use command::parser;
 
 const POLLING_INTERVAL_MS: u64 = 50;
 
-#[derive(Message)]
-#[rtype(result = "()")]
-struct PollBestMove;
-
-// TODO: Uci is in charge of polling game_engine_actor for best move each 100ms
-// Handle polling requests from UCI actor
-impl<R> Handler<PollBestMove> for UciEntity<R>
-where
-    R: UciRead + 'static,
-{
-    type Result = ();
-
-    fn handle(&mut self, _msg: PollBestMove, ctx: &mut Self::Context) -> Self::Result {
-        self.game_manager_actor
-            .do_send(game_manager::GetBestMoveFromUci::new(ctx.address()));
-        let debug_actor_opt = self.debug_actor_opt.clone();
-        if self.state_polling == StatePollingUciEntity::Polling {
-            ctx.run_later(
-                Duration::from_millis(POLLING_INTERVAL_MS),
-                move |actor, ctx| {
-                    if let Some(debug_actor) = debug_actor_opt {
-                        debug_actor.do_send(debug::AddMessage(
-                            "UciEntity polling Game Manager to get best move...".to_string(),
-                        ));
-                    }
-                    actor
-                        .game_manager_actor
-                        .do_send(GetBestMoveFromUci::new(ctx.address().clone()));
-                },
-            );
-        }
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub enum UciResult {
-    Quit,
-    DisplayBestMove(Option<game_manager::TimestampedBestMove>, bool), // maybe move, display in uci ui 'bestmove ...': bool
-    Err(event::HandleEventError),
-}
-
 #[derive(Debug, PartialEq)]
-enum StatePollingUciEntity {
+pub enum StatePollingUciEntity {
     Pending,
     Polling,
 }
+
 pub struct UciEntity<R>
 where
     R: UciRead + 'static,
@@ -88,7 +55,7 @@ where
 {
     pub fn new(
         uci_reader: R,
-        game_manager_actor: Addr<game_manager::GameManager>,
+        game_manager_actor: game_manager::GameManagerActor,
         debug_actor_opt: Option<debug::DebugActor>,
     ) -> Self {
         Self {
@@ -98,81 +65,6 @@ where
             game_manager_actor,
             debug_actor_opt,
         }
-    }
-}
-
-impl<R: UciRead> Handler<UciResult> for UciEntity<R> {
-    type Result = ();
-
-    fn handle(&mut self, msg: UciResult, ctx: &mut Self::Context) -> Self::Result {
-        match msg {
-            UciResult::DisplayBestMove(timestamped_best_move_opt, is_show) => {
-                if let Some(timestamped_best_move) = timestamped_best_move_opt {
-                    // TODO: compare best move timestamp ? We could imagine competition between engine of different type searching for the best move
-                    let msg_best_move =
-                        format!("bestmove {}", timestamped_best_move.best_move().cast());
-                    let msg_ts = format!("timestamp: {}", timestamped_best_move.timestamp());
-                    let msg_origin = format!("origin: {:?}", timestamped_best_move.origin());
-                    let msg = [msg_best_move, msg_ts, msg_origin].join(", ");
-                    if let Some(debug_actor) = &self.debug_actor_opt {
-                        debug_actor.do_send(debug::AddMessage(msg.to_string()));
-                    }
-                    if is_show {
-                        let _ = writeln!(self.stdout, "{}", msg);
-                        self.stdout.flush().unwrap();
-                    }
-                }
-                self.state_polling = StatePollingUciEntity::Pending;
-            }
-            UciResult::Err(err) => {
-                if let Some(debug_actor) = &self.debug_actor_opt {
-                    debug_actor.do_send(debug::AddMessage(err.to_string()));
-                }
-            }
-            UciResult::Quit => {
-                self.game_manager_actor.do_send(game_manager::StopActor);
-                if let Some(debug_actor) = &self.debug_actor_opt {
-                    debug_actor.do_send(debug::AddMessage(
-                        "Send Stop message to game manager.".to_string(),
-                    ))
-                }
-                ctx.stop();
-            }
-        }
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct ProcessEvents(pub Vec<event::Event>);
-
-impl<R: UciRead> Handler<ProcessEvents> for UciEntity<R> {
-    type Result = ();
-
-    fn handle(&mut self, msg: ProcessEvents, ctx: &mut Self::Context) -> Self::Result {
-        let events = msg.0;
-
-        let addr = ctx.address();
-
-        // Spawn a future within the actor context
-        async move {
-            for event in events {
-                // Send the event and await its result
-                let result = addr.send(event).await;
-
-                match result {
-                    Ok(_) => {
-                        // Handle successful result
-                    }
-                    Err(e) => {
-                        // Handle error
-                        println!("Failed to send event: {:?}", e);
-                    }
-                }
-            }
-        }
-        .into_actor(self) // Converts the future to an Actix-compatible future
-        .spawn(ctx); // Spawns the future in the actor's context
     }
 }
 
@@ -189,42 +81,6 @@ impl<R: UciRead> Handler<DisplayEngineId> for UciEntity<R> {
         writeln!(self.stdout, "id author {}", engine_id.author())?;
         writeln!(self.stdout, "uciok")?;
         Ok(())
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "Result<(), Vec<String>> ")]
-pub struct ReadUserInput;
-
-impl<R: UciRead> Handler<ReadUserInput> for UciEntity<R> {
-    type Result = Result<(), Vec<String>>;
-
-    fn handle(&mut self, _msg: ReadUserInput, ctx: &mut Self::Context) -> Self::Result {
-        let mut errors: Vec<String> = vec![];
-        if let Some(input) = self.uci_reader.uci_read() {
-            let parser = parser::InputParser::new(&input, self.game_manager_actor.clone());
-            let command_or_error = parser.parse_input();
-            match command_or_error {
-                Ok(command) => {
-                    if let Some(debug_actor) = &self.debug_actor_opt {
-                        debug_actor.do_send(debug::AddMessage(format!(
-                            "input '{}' send as command '{:?}' to uci_actor",
-                            input, command
-                        )));
-                    }
-                    ctx.address().do_send(command);
-                }
-                Err(err) => errors.push(err.to_string()),
-            }
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            if let Some(debug_actor) = &self.debug_actor_opt {
-                debug_actor.do_send(debug::AddMessage(format!("Errors: {}", errors.join("\n"))));
-            }
-            Err(errors)
-        }
     }
 }
 
@@ -285,14 +141,16 @@ impl UciRead for UciReadVecStringWrapper {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::entity::clock::actor::chessclock;
     use crate::entity::game::actor::game_manager;
     use crate::entity::game::component::square;
     use crate::entity::game::component::{game_state, parameters, player};
-    use crate::uci;
     use crate::ui::notation::fen::{self, EncodeUserInput};
-    use actix::Actor;
+    use actix::{Actor, Addr};
+    use command::parser;
     use parser::InputParser;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -304,7 +162,7 @@ mod tests {
         inputs: Vec<&str>,
     ) {
         for _i in 0..inputs.len() {
-            let _ = uci_entity_actor.send(ReadUserInput).await;
+            let _ = uci_entity_actor.send(handler_read::ReadUserInput).await;
         }
     }
     async fn init(input: &str) -> (game_manager::GameManagerActor, command::Command) {
@@ -319,7 +177,9 @@ mod tests {
     async fn get_game_state(
         game_manager_actor: &game_manager::GameManagerActor,
     ) -> Option<game_state::GameState> {
-        let result_or_error = game_manager_actor.send(game_manager::GetGameState).await;
+        let result_or_error = game_manager_actor
+            .send(game_manager::handler_game::GetGameState)
+            .await;
         result_or_error.unwrap()
     }
 
@@ -329,7 +189,7 @@ mod tests {
         let input = "position startpos";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -337,7 +197,7 @@ mod tests {
         );
         let uci_actor = uci_entity.start();
         uci_actor
-            .send(uci::ReadUserInput)
+            .send(handler_read::ReadUserInput)
             .await
             .expect("Actix error")
             .unwrap();
@@ -354,7 +214,7 @@ mod tests {
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -362,7 +222,7 @@ mod tests {
         );
         let uci_actor = uci_entity.start();
         uci_actor
-            .send(uci::ReadUserInput)
+            .send(handler_read::ReadUserInput)
             .await
             .expect("Actix error")
             .unwrap();
@@ -380,7 +240,7 @@ mod tests {
         let input = format!("position fen {}", fen::FEN_START_POSITION);
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _) = init(&input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -388,7 +248,7 @@ mod tests {
         );
         let uci_actor = uci_entity.start();
         uci_actor
-            .send(uci::ReadUserInput)
+            .send(handler_read::ReadUserInput)
             .await
             .expect("Actix error")
             .unwrap();
@@ -407,7 +267,7 @@ mod tests {
         );
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -415,7 +275,7 @@ mod tests {
         );
         let uci_actor = uci_entity.start();
         uci_actor
-            .send(uci::ReadUserInput)
+            .send(handler_read::ReadUserInput)
             .await
             .expect("Actix error")
             .unwrap();
@@ -435,7 +295,7 @@ mod tests {
         );
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -445,7 +305,7 @@ mod tests {
         exec_inputs(uci_entity_actor, inputs).await;
         // check the last move has not been played
         let game_state = game_manager_actor
-            .send(game_manager::GetGameState)
+            .send(game_manager::handler_game::GetGameState)
             .await
             .expect("actix error")
             .expect("empty game");
@@ -459,7 +319,7 @@ mod tests {
         let input = "position startpos";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -468,7 +328,7 @@ mod tests {
         let uci_entity_actor = uci_entity.start();
         exec_inputs(uci_entity_actor, inputs).await;
         let parameters = game_manager_actor
-            .send(game_manager::GetParameters)
+            .send(game_manager::handler_game::GetParameters)
             .await
             .expect("mailbox error")
             .unwrap();
@@ -505,7 +365,7 @@ mod tests {
             chessclock::Clock::new("white", 3, 0, game_manager_actor.clone()).start();
         let black_clock_actor =
             chessclock::Clock::new("black", 3, 0, game_manager_actor.clone()).start();
-        game_manager_actor.do_send(game_manager::SetClocks::new(
+        game_manager_actor.do_send(game_manager::handler_clock::SetClocks::new(
             Some(white_clock_actor),
             Some(black_clock_actor),
         ));
@@ -518,7 +378,7 @@ mod tests {
         exec_inputs(uci_entity_actor, inputs).await;
         actix::clock::sleep(Duration::from_millis(100)).await;
         let parameters = game_manager_actor
-            .send(game_manager::GetParameters)
+            .send(game_manager::handler_game::GetParameters)
             .await
             .expect("Actix error")
             .unwrap();
@@ -534,14 +394,14 @@ mod tests {
         assert_eq!(parameters, expected);
         // check wtime and btime
         let remaining_time_white = game_manager_actor
-            .send(game_manager::GetClockRemainingTime::new(
+            .send(game_manager::handler_clock::GetClockRemainingTime::new(
                 square::Color::White,
             ))
             .await
             .expect("actor error")
             .expect("Missing data");
         let remaining_time_black = game_manager_actor
-            .send(game_manager::GetClockRemainingTime::new(
+            .send(game_manager::handler_clock::GetClockRemainingTime::new(
                 square::Color::Black,
             ))
             .await
@@ -588,7 +448,7 @@ mod tests {
             .await
             .expect("Actix error");
         let engine_status = engine_player1_dispatcher_actor
-            .send(dispatcher::EngineGetStatus)
+            .send(dispatcher::handler_engine::EngineGetStatus)
             .await
             .expect("Actix error")
             .unwrap();
@@ -596,7 +456,7 @@ mod tests {
         let engine_is_running = true;
         let expected = dispatcher::EngineStatus::new(engine_is_thinking, engine_is_running);
         let _ = game_manager_actor
-            .send(game_manager::UciCommand::CleanResources)
+            .send(game_manager::handler_uci_command::UciCommand::CleanResources)
             .await
             .unwrap();
         assert_eq!(engine_status, expected);
@@ -604,5 +464,277 @@ mod tests {
             .into_iter()
             .find(|el| el.contains("EngineStartThinkin"));
         assert!(debug_start_thinking.is_some());
+    }
+}
+
+#[derive(Debug)]
+pub struct HandleEventError {
+    event: event::Event,
+    error: String,
+}
+impl HandleEventError {
+    pub fn new(event: event::Event, error: String) -> Self {
+        HandleEventError { event, error }
+    }
+}
+impl Error for HandleEventError {}
+impl std::fmt::Display for HandleEventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "HandleEvent error for event {:?}. The error is: {}",
+            self.event, self.error
+        )
+    }
+}
+impl<R: UciRead> Handler<event::Event> for UciEntity<R> {
+    type Result = ();
+
+    fn handle(&mut self, msg: event::Event, ctx: &mut Self::Context) -> Self::Result {
+        let actor_self = ctx.address();
+        match msg {
+            event::Event::Write(s) => {
+                writeln!(self.stdout, "{}", s).unwrap();
+                self.stdout.flush().unwrap();
+            }
+            event::Event::WriteDebug(s) => {
+                if let Some(debug_actor) = &self.debug_actor_opt {
+                    debug_actor.do_send(debug::AddMessage(format!("Uci actor event: {}", s)))
+                }
+            }
+            event::Event::DebugMode(debug_actor_opt) => {
+                self.debug_actor_opt = debug_actor_opt;
+            }
+            event::Event::StartPos => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::InitPosition);
+            }
+            event::Event::Fen(fen) => {
+                let position = fen::Fen::decode(&fen).expect("Failed to decode FEN");
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::UpdatePosition(
+                        fen.to_string(),
+                        position,
+                    ),
+                );
+            }
+            // Go command
+            event::Event::Depth(depth) => {
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::DepthFinite(depth),
+                );
+            }
+            event::Event::SearchInfinite => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::SearchInfinite);
+            }
+            event::Event::MaxTimePerMoveInMs(time) => {
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::MaxTimePerMoveInMs(time),
+                );
+            }
+            ref event @ event::Event::Moves(ref moves) => match moves_validation(moves) {
+                Ok(valid_moves) => {
+                    self.game_manager_actor.do_send(
+                        game_manager::handler_uci_command::UciCommand::ValidMoves {
+                            moves: valid_moves,
+                        },
+                    );
+                }
+                Err(err) => {
+                    actor_self.do_send(handler_uci::UciResult::Err(HandleEventError::new(
+                        event.clone(),
+                        err,
+                    )));
+                }
+            },
+            event::Event::Wtime(wtime) => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::Wtime(wtime));
+            }
+            event::Event::Btime(btime) => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::Btime(btime));
+            }
+            event::Event::WtimeInc(wtime_inc) => {
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::WtimeInc(wtime_inc),
+                );
+            }
+            event::Event::BtimeInc(btime_inc) => {
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::BtimeInc(btime_inc),
+                );
+            }
+            ref event @ event::Event::SearchMoves(ref search_moves) => {
+                match moves_validation(search_moves) {
+                    Ok(valid_moves) => {
+                        self.game_manager_actor.do_send(
+                            game_manager::handler_uci_command::UciCommand::SearchMoves(valid_moves),
+                        );
+                    }
+                    Err(err) => {
+                        actor_self.do_send(handler_uci::UciResult::Err(HandleEventError::new(
+                            event.clone(),
+                            err,
+                        )));
+                    }
+                }
+            }
+            event::Event::StartEngine => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking);
+                self.state_polling = StatePollingUciEntity::Polling;
+                ctx.address().do_send(handler_poll::PollBestMove);
+            }
+            event::Event::StopEngine => {
+                self.game_manager_actor
+                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStopThinking);
+            }
+            event::Event::Quit => {
+                actor_self.do_send(handler_uci::UciResult::Quit);
+            }
+        }
+    }
+}
+
+pub fn moves_validation(
+    moves: &Vec<String>,
+) -> Result<Vec<long_notation::LongAlgebricNotationMove>, String> {
+    let mut valid_moves: Vec<long_notation::LongAlgebricNotationMove> = vec![];
+    let mut errors: Vec<String> = vec![];
+    for m in moves {
+        match long_notation::LongAlgebricNotationMove::build_from_str(m) {
+            Ok(valid_move) => valid_moves.push(valid_move),
+            Err(err) => errors.push(err),
+        }
+    }
+    if !errors.is_empty() {
+        Err(errors.join(", "))
+    } else {
+        Ok(valid_moves)
+    }
+}
+
+impl<R> Handler<command::Command> for UciEntity<R>
+where
+    R: UciRead + 'static,
+{
+    type Result = ();
+
+    fn handle(&mut self, msg: command::Command, ctx: &mut Self::Context) -> Self::Result {
+        let mut events: Vec<event::Event> = vec![];
+        match msg {
+            command::Command::Wait100ms => {
+                use tokio::time::{sleep, Duration};
+
+                events.push(event::Event::WriteDebug("waiting 100ms".to_string()));
+                sleep(Duration::from_millis(100)).into_actor(self).wait(ctx);
+            }
+            command::Command::Uci(game_manager_actor) => {
+                let uci_caller = ctx.address();
+                let msg = game_manager::handler_engine::GetCurrentEngineAsync::new(uci_caller);
+                game_manager_actor.do_send(msg);
+            }
+            command::Command::Ignore => {}
+            command::Command::IsReady => events.push(event::Event::Write("readyok".to_string())),
+            command::Command::DebugMode(is_debug) => {
+                events.push(event::Event::WriteDebug(format!(
+                    "debug mode set to {}",
+                    is_debug
+                )));
+                events.push(event::Event::DebugMode(self.debug_actor_opt.clone()));
+            }
+            command::Command::NewGame => {
+                events.push(event::Event::StartPos);
+                // TODO: reset btime, wtime ?
+            }
+            command::Command::Position(pos) => {
+                events.push(event::Event::WriteDebug("Position received".to_string()));
+                if pos.startpos() {
+                    events.push(event::Event::WriteDebug(
+                        "Set board to starting position.".to_string(),
+                    ));
+                    events.push(event::Event::StartPos);
+                } else if let Some(fen_str) = pos.fen() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Set board to FEN: {}", fen_str).to_string(),
+                    ));
+                    events.push(event::Event::Fen(fen_str));
+                }
+                if !pos.moves().is_empty() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Moves played: {:?}", pos.moves()).to_string(),
+                    ));
+                    events.push(event::Event::Moves(pos.moves().clone()));
+                }
+            }
+            command::Command::Go(go) => {
+                if let Some(d) = go.depth() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Searching to depth: {}", d).to_string(),
+                    ));
+                    events.push(event::Event::Depth(d));
+                }
+                if let Some(time) = go.movetime() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Max time for move: {} ms", time).to_string(),
+                    ));
+                    events.push(event::Event::MaxTimePerMoveInMs(time));
+                }
+                if go.infinite() {
+                    events.push(event::Event::WriteDebug(
+                        "Searching indefinitely...".to_string(),
+                    ));
+                    events.push(event::Event::SearchInfinite);
+                }
+                if let Some(wtime) = go.wtime() {
+                    events.push(event::Event::WriteDebug(
+                        format!("White time left: {} ms", wtime).to_string(),
+                    ));
+                    events.push(event::Event::Wtime(wtime));
+                }
+                if let Some(btime) = go.btime() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Black time left: {} ms", btime).to_string(),
+                    ));
+                    events.push(event::Event::Btime(btime));
+                }
+                if let Some(wtime_inc) = go.wtime_inc() {
+                    events.push(event::Event::WriteDebug(
+                        format!("White time inc: {} ms", wtime_inc).to_string(),
+                    ));
+                    events.push(event::Event::WtimeInc(wtime_inc));
+                }
+                if let Some(btime_inc) = go.btime_inc() {
+                    events.push(event::Event::WriteDebug(
+                        format!("Black time left: {} ms", btime_inc).to_string(),
+                    ));
+                    events.push(event::Event::BtimeInc(btime_inc));
+                }
+                if !go.search_moves().is_empty() {
+                    events.push(event::Event::WriteDebug(format!(
+                        "Limit search to these moves: {:?}",
+                        go.search_moves()
+                    )));
+                    events.push(event::Event::SearchMoves(go.search_moves().clone()));
+                }
+                events.push(event::Event::StartEngine)
+            }
+            command::Command::Stop => {
+                events.push(event::Event::WriteDebug("Stopping search.".to_string()));
+                events.push(event::Event::StopEngine);
+            }
+            command::Command::Quit => {
+                events.push(event::Event::WriteDebug(
+                    "Stopping search (Quit).".to_string(),
+                ));
+                events.push(event::Event::StopEngine);
+                events.push(event::Event::WriteDebug("Exiting engine".to_string()));
+                events.push(event::Event::Quit);
+            }
+        }
+        let msg = handler_event::ProcessEvents(events);
+        ctx.address().do_send(msg);
     }
 }

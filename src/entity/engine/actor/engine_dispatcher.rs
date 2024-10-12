@@ -1,4 +1,5 @@
-use actix::Message;
+pub mod handler_engine;
+
 use std::sync::Arc;
 
 use tokio::task::spawn_local;
@@ -10,13 +11,12 @@ use crate::entity::engine::component::engine_logic as logic;
 use crate::entity::game::actor::game_manager;
 use crate::entity::game::component::bitboard::{self, BitBoardMove};
 use crate::monitoring::debug;
-use crate::ui::uci;
 
 pub struct EngineDispatcher {
     engine: Arc<dyn logic::Engine + Send + Sync>, // EngineActor dans un Arc
     debug_actor_opt: Option<debug::DebugActor>,
     engine_status: EngineStatus,
-    ts_best_move_opt: Option<game_manager::TimestampedBitBoardMove>,
+    ts_best_move_opt: Option<game_manager::handler_game::TimestampedBitBoardMove>,
     self_actor_opt: Option<Addr<EngineDispatcher>>,
     game_manager_actor_opt: Option<game_manager::GameManagerActor>,
     bit_position_opt: Option<bitboard::BitPosition>, // initial position to be played
@@ -39,12 +39,12 @@ impl EngineDispatcher {
     fn get_addr(&self) -> Addr<EngineDispatcher> {
         self.self_actor_opt.as_ref().unwrap().clone()
     }
-    fn get_best_move(&self) -> Option<game_manager::TimestampedBitBoardMove> {
+    fn get_best_move(&self) -> Option<game_manager::handler_game::TimestampedBitBoardMove> {
         self.ts_best_move_opt.clone()
     }
     fn set_best_move(&mut self, best_move_opt: Option<BitBoardMove>) {
         self.ts_best_move_opt = best_move_opt.map(|best_move| {
-            game_manager::TimestampedBitBoardMove::new(best_move, self.engine.id())
+            game_manager::handler_game::TimestampedBitBoardMove::new(best_move, self.engine.id())
         });
     }
     // main loop for thinking
@@ -127,7 +127,8 @@ impl EngineDispatcher {
             self.set_is_thinking(false);
             self.bit_position_opt = None;
             if let Some(best_move) = &self.ts_best_move_opt {
-                let reply = game_manager::SetBestMove::from_ts_move(best_move.clone());
+                let reply =
+                    game_manager::handler_game::SetBestMove::from_ts_move(best_move.clone());
                 if let Some(debug_actor) = &self.debug_actor_opt {
                     debug_actor.do_send(debug::AddMessage(format!(
                         "EngineDummy of id {:?} stopped thinking.",
@@ -186,208 +187,5 @@ impl EngineStatus {
             is_running,
             is_thinking: self.is_thinking,
         }
-    }
-}
-#[derive(Debug, Message, Default)]
-#[rtype(result = "Option<logic::EngineId>")]
-pub struct EngineGetId;
-impl Handler<EngineGetId> for EngineDispatcher {
-    type Result = Option<logic::EngineId>;
-
-    fn handle(&mut self, msg: EngineGetId, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        Some(self.engine.id())
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct EngineGetIdAsync<R>
-where
-    R: uci::UciRead + 'static,
-{
-    uci_caller: Addr<uci::UciEntity<R>>,
-}
-impl<R> EngineGetIdAsync<R>
-where
-    R: uci::UciRead + 'static,
-{
-    pub fn new(uci_caller: Addr<uci::UciEntity<R>>) -> Self {
-        Self { uci_caller }
-    }
-}
-impl<R> Handler<EngineGetIdAsync<R>> for EngineDispatcher
-where
-    R: uci::UciRead + 'static,
-{
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineGetIdAsync<R>, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive EngineGetIdAsync",
-                self.engine.id()
-            )));
-        }
-        let reply = uci::DisplayEngineId(self.engine.id());
-        msg.uci_caller.do_send(reply);
-    }
-}
-
-#[derive(Debug, Message, Default)]
-#[rtype(result = "Option<EngineStatus>")]
-pub struct EngineGetStatus;
-impl Handler<EngineGetStatus> for EngineDispatcher {
-    type Result = Option<EngineStatus>;
-
-    fn handle(&mut self, msg: EngineGetStatus, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        Some(self.engine_status.clone())
-    }
-}
-
-#[derive(Debug, Message, Default)]
-#[rtype(result = "Option<game_manager::TimestampedBitBoardMove>")]
-pub struct EngineGetBestMove;
-impl Handler<EngineGetBestMove> for EngineDispatcher {
-    type Result = Option<game_manager::TimestampedBitBoardMove>;
-
-    fn handle(&mut self, msg: EngineGetBestMove, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        self.get_best_move()
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct EngineBestMoveFound(pub bitboard::BitBoardMove);
-impl Handler<EngineBestMoveFound> for EngineDispatcher {
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineBestMoveFound, _ctx: &mut Self::Context) -> Self::Result {
-        let forward = game_manager::SetBestMove::new(msg.0, self.engine.id());
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} send to game_manager: {:?}",
-                self.engine.id(),
-                forward
-            )));
-        }
-        self.game_manager_actor_opt
-            .as_ref()
-            .unwrap()
-            .do_send(forward);
-        self.set_best_move(Some(msg.0));
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct EngineSetStatus(EngineStatus);
-impl Handler<EngineSetStatus> for EngineDispatcher {
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineSetStatus, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        self.engine_status = msg.0;
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct EngineStartThinking {
-    bit_position: bitboard::BitPosition,
-    game_manager_actor: game_manager::GameManagerActor,
-}
-impl EngineStartThinking {
-    pub fn new(
-        bit_position: bitboard::BitPosition,
-        game_manager_actor: game_manager::GameManagerActor,
-    ) -> Self {
-        EngineStartThinking {
-            bit_position,
-            game_manager_actor,
-        }
-    }
-}
-impl Handler<EngineStartThinking> for EngineDispatcher {
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineStartThinking, _ctx: &mut Self::Context) {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        self.start_thinking(&msg.bit_position, msg.game_manager_actor);
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct EngineStopThinking;
-
-impl Handler<EngineStopThinking> for EngineDispatcher {
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineStopThinking, _ctx: &mut Self::Context) {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        self.stop_thinking();
-    }
-}
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct EngineCleanResources;
-
-impl Handler<EngineCleanResources> for EngineDispatcher {
-    type Result = ();
-
-    fn handle(&mut self, msg: EngineCleanResources, _ctx: &mut Self::Context) {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDispatcher for engine id {:?} receive {:?}",
-                self.engine.id(),
-                msg
-            )));
-        }
-        self.stop_event_loop();
     }
 }

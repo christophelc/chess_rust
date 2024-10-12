@@ -62,11 +62,11 @@ impl logic::Engine for EngineDummy {
         // First generate moves
         let moves = gen_moves(bit_position);
         // And then stop thinking and clear positino
-        self_actor.do_send(dispatcher::EngineStopThinking);
+        self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
         let mut rng = ChaCha12Rng::from_entropy();
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
-            let reply = dispatcher::EngineBestMoveFound(best_move);
+            let reply = dispatcher::handler_engine::EngineBestMoveFound(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(
                     "EngineDummy of id {:?} reply is: '{:?}'",

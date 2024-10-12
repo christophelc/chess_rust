@@ -13,11 +13,11 @@ mod tests {
     async fn test_engine_dummy() {
         let inputs = vec!["position startpos", "go"];
         let game_manager_actor = build_game_manager_actor(inputs.clone()).await;
-        let msg = game_manager::GetCurrentEngine::default();
+        let msg = game_manager::handler_engine::GetCurrentEngine::default();
         let result = game_manager_actor.send(msg).await;
         let mut vec_engine_id: Vec<String> = vec![];
         if let Ok(Some(engine_actor)) = result {
-            let engine_id_opt = engine_actor.send(dispatcher::EngineGetId::default()).await;
+            let engine_id_opt = engine_actor.send(dispatcher::handler_engine::EngineGetId::default()).await;
             if let Ok(Some(engine_id)) = engine_id_opt {
                 vec_engine_id.push(engine_id.name().to_string());
                 vec_engine_id.push(engine_id.author().to_string());
@@ -34,7 +34,7 @@ mod tests {
         for _ in 0..10 {
             let game_manager_actor = build_game_manager_actor(inputs.clone()).await;
             let ts_best_move = game_manager_actor
-                .send(game_manager::GetBestMove)
+                .send(game_manager::handler_game::GetBestMove)
                 .await
                 .expect("actix mailbox error") // Ensure no Actix mailbox error
                 .expect("No best move found"); // Ensure a best move is found
@@ -42,7 +42,7 @@ mod tests {
             let best_move_str = ts_best_move.best_move().cast(); // Convert the best move to the desired format (if necessary)
             best_moves.push(best_move_str); // Add the best move to the Vec
             game_manager_actor
-                .send(game_manager::UciCommand::CleanResources)
+                .send(game_manager::handler_uci_command::UciCommand::CleanResources)
                 .await
                 .expect("actix mailbox error")
                 .unwrap();
