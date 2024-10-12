@@ -1,24 +1,25 @@
-mod board;
-mod game;
-mod uci;
+mod entity;
+mod monitoring;
+mod ui;
+
 use actix::Actor;
-use board::bitboard::piece_move;
-use board::bitboard::BitPosition;
-use board::fen;
-use board::san;
-use fen::EncodeUserInput;
-use game::engine;
-use game::monitoring::debug;
-use game::player;
-use piece_move::GenMoves;
+use entity::game::actor::game_manager;
+use entity::game::component::square;
+use std::env;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
-use uci::event;
-use uci::UciRead;
-use uci::UciReadWrapper;
 
-use std::env;
+use crate::entity::game::component::bitboard::{piece_move, BitPosition};
+use crate::entity::game::component::player;
+use crate::monitoring::debug;
+use crate::ui::notation::{fen, san};
+use fen::EncodeUserInput;
+use piece_move::GenMoves;
+use ui::uci::{self, UciRead};
+
+use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+use crate::entity::engine::component::engine_dummy as dummy;
 
 #[allow(dead_code)]
 fn fen() {
@@ -31,7 +32,7 @@ fn fen() {
 }
 
 #[allow(dead_code)]
-async fn test(game_manager_actor: &game::game_manager::GameManagerActor) {
+async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     println!("Inital position with move e4");
     let inputs = vec!["position startpos moves e2e4 "];
     let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
@@ -39,7 +40,7 @@ async fn test(game_manager_actor: &game::game_manager::GameManagerActor) {
     let uci_entity_actor = uci_entity.start();
     uci_entity_actor.do_send(uci::ReadUserInput);
     let game_state = game_manager_actor
-        .send(game::game_manager::GetGameState)
+        .send(game_manager::GetGameState)
         .await
         .expect("actix error")
         .expect("Error when retrieving game_state");
@@ -50,7 +51,7 @@ async fn test(game_manager_actor: &game::game_manager::GameManagerActor) {
     println!("Generate moves for white king considering pawn is in e4");
     let bit_position = BitPosition::from(position);
     let moves = bit_position.bit_boards_white_and_black().gen_moves_for_all(
-        &board::square::Color::White,
+        &square::Color::White,
         piece_move::CheckStatus::None,
         &None,
         bit_position.bit_position_status(),
@@ -68,7 +69,7 @@ async fn test(game_manager_actor: &game::game_manager::GameManagerActor) {
 
 #[allow(dead_code)]
 fn uci_loop(
-    game_manager_actor: &game::game_manager::GameManagerActor,
+    game_manager_actor: &game_manager::GameManagerActor,
     stdin: &mut Arc<Mutex<io::Stdin>>,
 ) {
     let uci_reader = uci::UciReadWrapper::new(stdin.clone());
@@ -81,11 +82,11 @@ fn uci_loop(
 }
 
 async fn tui_loop(
-    game_manager_actor: &game::game_manager::GameManagerActor,
+    game_manager_actor: &game_manager::GameManagerActor,
     stdin: &mut Arc<Mutex<io::Stdin>>,
 ) {
     // init the game
-    let inputs = vec!["position startpos", "quit"];
+    let inputs = vec!["position startpos"];
     let uci_reader = uci::UciReadVecStringWrapper::new(&inputs);
     // we don't ignore error in tui mode
     let debug_actor = debug::DebugEntity::default().start();
@@ -97,11 +98,11 @@ async fn tui_loop(
     }
     //let r = uci::uci_loop(uci_reader, game_actor).await;
     //println!("{:?}", r.err());
-    let mut stdin_reader = UciReadWrapper::new(stdin.clone());
+    let mut stdin_reader = uci::UciReadWrapper::new(stdin.clone());
     // loop
     loop {
         let game_state = game_manager_actor
-            .send(game::game_manager::GetGameState)
+            .send(game_manager::GetGameState)
             .await
             .expect("actix error")
             .expect("Error when retrieving game_state");
@@ -113,11 +114,11 @@ async fn tui_loop(
             // e2e4 for example
             Some(input) if input.len() == 4 => {
                 let moves = vec![input.to_string()];
-                match event::moves_validation(&moves) {
+                match uci::event::moves_validation(&moves) {
                     Err(err) => println!("Error: {}", err),
                     Ok(long_algebric_moves) => {
                         let result = game_manager_actor
-                            .send(game::game_manager::PlayMoves::new(long_algebric_moves))
+                            .send(game_manager::PlayMoves::new(long_algebric_moves))
                             .await
                             .unwrap();
                         if let Some(err) = result.err() {
@@ -133,15 +134,16 @@ async fn tui_loop(
 
 #[actix::main]
 async fn main() {
-    let debug_actor_opt: Option<debug::DebugActor> = None;
+    //let debug_actor_opt: Option<debug::DebugActor> = None;
+    let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
-    let mut game_manager = game::game_manager::GameManager::new(None);
-    let engine_player1 = engine::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
+    let mut game_manager = game_manager::GameManager::new(None);
+    let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
     let engine_player1_dispatcher =
-        engine::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
-    let engine_player2 = engine::EngineDummy::new(debug_actor_opt.clone()).set_id_number("black");
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+    let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("black");
     let engine_player2_dispatcher =
-        engine::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
     let player1 = player::Player::Human {
         engine_opt: Some(engine_player1_dispatcher.start()),
     };
@@ -165,7 +167,9 @@ async fn main() {
         //fen();
         //test(&game_actor).await;
         println!("Enter an uci command:");
-        uci_entity_actor.do_send(uci::ReadUserInput);
+        loop {
+            let _ = uci_entity_actor.send(uci::ReadUserInput).await;
+        }
     } else {
         println!("Entering in tui mode");
         println!("{:?}", args);
