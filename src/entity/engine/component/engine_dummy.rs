@@ -54,13 +54,13 @@ impl logic::Engine for EngineDummy {
         let author = DUMMY_ENGINE_ID_AUTHOR.to_owned();
         logic::EngineId::new(name, author)
     }
-    fn think(
+    fn find_best_move(
         &self,
         self_actor: Addr<dispatcher::EngineDispatcher>,
-        bit_position: &bitboard::BitPosition,
+        bit_position: bitboard::BitPosition,
     ) {
         // First generate moves
-        let moves = gen_moves(bit_position);
+        let moves = gen_moves(&bit_position);
         // And then stop thinking and clear positino
         self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
         let mut rng = ChaCha12Rng::from_entropy();

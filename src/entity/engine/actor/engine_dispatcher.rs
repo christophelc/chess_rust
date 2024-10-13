@@ -2,10 +2,8 @@ pub mod handler_engine;
 
 use std::sync::Arc;
 
-use tokio::task::spawn_local;
-use tokio::time::{sleep, Duration};
-
 use actix::prelude::*;
+use tokio::task::{spawn_local, JoinHandle};
 
 use crate::entity::engine::component::engine_logic as logic;
 use crate::entity::game::actor::game_manager;
@@ -20,6 +18,7 @@ pub struct EngineDispatcher {
     self_actor_opt: Option<Addr<EngineDispatcher>>,
     game_manager_actor_opt: Option<game_manager::GameManagerActor>,
     bit_position_opt: Option<bitboard::BitPosition>, // initial position to be played
+    thread_find_best_move_opt: Option<JoinHandle<()>>,
 }
 impl EngineDispatcher {
     pub fn new(
@@ -34,10 +33,8 @@ impl EngineDispatcher {
             ts_best_move_opt: None,
             self_actor_opt: None,
             bit_position_opt: None,
+            thread_find_best_move_opt: None,
         }
-    }
-    fn get_addr(&self) -> Addr<EngineDispatcher> {
-        self.self_actor_opt.as_ref().unwrap().clone()
     }
     fn get_best_move(&self) -> Option<game_manager::handler_game::TimestampedBitBoardMove> {
         self.ts_best_move_opt.clone()
@@ -47,60 +44,10 @@ impl EngineDispatcher {
             game_manager::handler_game::TimestampedBitBoardMove::new(best_move, self.engine.id())
         });
     }
-    // main loop for thinking
-    async fn event_loop(&self) {
-        while self.is_running() {
-            sleep(Duration::from_millis(100)).await;
-            if self.is_thinking() {
-                self.engine
-                    .think(self.get_addr(), self.bit_position_opt.as_ref().unwrap());
-            }
-        }
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "Event loop has stopped for Engine id {:?}.",
-                self.engine.id()
-            )));
-        }
-    }
-    fn start_event_loop(&mut self) {
-        // we can start an event loop only one time
-        if !self.is_running() {
-            self.set_is_running(true);
-            let self_ref = self as *mut Self;
-            spawn_local(async move {
-                let self_ref = unsafe { &mut *self_ref }; // Dereference raw pointer
-                self_ref.event_loop().await;
-            });
-            if let Some(debug_actor) = &self.debug_actor_opt {
-                debug_actor.do_send(debug::AddMessage(format!(
-                    "Event loop started for Engine id {:?}.",
-                    self.engine.id()
-                )))
-            }
-        }
-    }
-    fn stop_event_loop(&mut self) {
-        if self.is_running() {
-            self.set_is_running(false);
-            if let Some(debug_actor) = &self.debug_actor_opt {
-                debug_actor.do_send(debug::AddMessage(format!(
-                    "Event loop stopped for Engine id {:?}.",
-                    self.engine.id()
-                )));
-            }
-        }
-    }
-    fn set_is_running(&mut self, is_running: bool) {
-        self.engine_status = self.engine_status.clone().set_is_running(is_running);
-    }
     fn set_is_thinking(&mut self, is_thinking: bool) {
         if self.bit_position_opt.is_some() {
             self.engine_status = self.engine_status.clone().set_is_thinking(is_thinking);
         }
-    }
-    fn is_running(&self) -> bool {
-        self.engine_status.is_running()
     }
     fn is_thinking(&self) -> bool {
         self.engine_status.is_thinking()
@@ -112,7 +59,7 @@ impl EngineDispatcher {
         game_manager_actor: game_manager::GameManagerActor,
     ) {
         self.game_manager_actor_opt = Some(game_manager_actor);
-        assert!(self.is_running() && !self.is_thinking());
+        assert!(!self.is_thinking());
         self.bit_position_opt = Some(bit_position.clone());
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
@@ -121,10 +68,31 @@ impl EngineDispatcher {
             )));
         }
         self.engine_status = self.engine_status.clone().set_is_thinking(true);
+
+        // start non blocking task find_best_move
+        let self_actor = self.self_actor_opt.as_ref().unwrap().clone();
+        let bit_position = bit_position.clone();
+        let engine = self.engine.clone();
+        let thread_find_best_move = spawn_local(async move {
+            engine.find_best_move(self_actor, bit_position);
+        });
+        self.thread_find_best_move_opt = Some(thread_find_best_move);
+        if let Some(debug_actor) = &self.debug_actor_opt {
+            debug_actor.do_send(debug::AddMessage(format!(
+                "Start find best move for Engine id {:?}.",
+                self.engine.id()
+            )))
+        }
+    }
+    fn reset_thinking(&mut self) {
+        self.set_is_thinking(false);
+        if let Some(thread) = &self.thread_find_best_move_opt {
+            thread.abort();
+        }
     }
     fn stop_thinking(&mut self) {
         if self.is_thinking() {
-            self.set_is_thinking(false);
+            self.reset_thinking();
             self.bit_position_opt = None;
             if let Some(best_move) = &self.ts_best_move_opt {
                 let reply =
@@ -150,42 +118,27 @@ impl Actor for EngineDispatcher {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         self.self_actor_opt = Some(ctx.address());
-        self.start_event_loop();
     }
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
-        self.stop_event_loop();
+        self.reset_thinking();
     }
 }
 pub type EngineDispatcherActor = Addr<EngineDispatcher>;
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct EngineStatus {
-    is_running: bool,  // event loop should always be running
     is_thinking: bool, // thinking
 }
 impl EngineStatus {
     #[cfg(test)]
-    pub fn new(is_thinking: bool, is_running: bool) -> Self {
-        Self {
-            is_thinking,
-            is_running,
-        }
+    pub fn new(is_thinking: bool) -> Self {
+        Self { is_thinking }
     }
     pub fn is_thinking(&self) -> bool {
         self.is_thinking
     }
-    pub fn is_running(&self) -> bool {
-        self.is_running
-    }
     pub fn set_is_thinking(&self, is_thinking: bool) -> Self {
         Self {
             is_thinking,
-            is_running: self.is_running,
-        }
-    }
-    pub fn set_is_running(&self, is_running: bool) -> Self {
-        Self {
-            is_running,
-            is_thinking: self.is_thinking,
         }
     }
 }

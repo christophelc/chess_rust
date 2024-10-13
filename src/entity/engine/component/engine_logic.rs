@@ -23,9 +23,9 @@ impl EngineId {
 pub trait Engine {
     fn id(&self) -> EngineId;
 
-    fn think(
+    fn find_best_move(
         &self,
         self_actor: Addr<engine_dispatcher::EngineDispatcher>,
-        bit_position: &bitboard::BitPosition,
+        bit_position: bitboard::BitPosition,
     );
 }

@@ -453,8 +453,7 @@ mod tests {
             .expect("Actix error")
             .unwrap();
         let engine_is_thinking = false;
-        let engine_is_running = true;
-        let expected = dispatcher::EngineStatus::new(engine_is_thinking, engine_is_running);
+        let expected = dispatcher::EngineStatus::new(engine_is_thinking);
         let _ = game_manager_actor
             .send(game_manager::handler_uci_command::UciCommand::CleanResources)
             .await

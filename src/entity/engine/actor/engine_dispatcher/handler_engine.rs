@@ -106,6 +106,7 @@ impl Handler<EngineBestMoveFound> for EngineDispatcher {
     type Result = ();
 
     fn handle(&mut self, msg: EngineBestMoveFound, _ctx: &mut Self::Context) -> Self::Result {
+        self.reset_thinking();
         let forward = game_manager::handler_game::SetBestMove::new(msg.0, self.engine.id());
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
@@ -211,6 +212,6 @@ impl Handler<EngineCleanResources> for EngineDispatcher {
                 msg
             )));
         }
-        self.stop_event_loop();
+        self.reset_thinking();
     }
 }
