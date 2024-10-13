@@ -5,10 +5,10 @@ use rand_chacha::ChaCha12Rng;
 
 use super::engine_logic as logic;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::game::component::bitboard::{self, piece_move::GenMoves};
+use crate::entity::game::component::game_state;
 use crate::monitoring::debug;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EngineDummy {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -20,31 +20,14 @@ impl EngineDummy {
             debug_actor_opt,
         }
     }
-    pub fn set_id_number(&self, id_number: &str) -> Self {
-        Self {
-            id_number: id_number.to_string(),
-            ..self.clone()
-        }
+    pub fn set_id_number(&mut self, id_number: &str) {
+        self.id_number = id_number.to_string();
     }
 }
 unsafe impl Send for EngineDummy {}
 
 const DUMMY_ENGINE_ID_NAME: &str = "Random engine";
 const DUMMY_ENGINE_ID_AUTHOR: &str = "Christophe le cam";
-
-pub fn gen_moves(bit_position: &bitboard::BitPosition) -> Vec<bitboard::BitBoardMove> {
-    let bit_boards_white_and_black = bit_position.bit_boards_white_and_black();
-    let bit_position_status = bit_position.bit_position_status();
-    let color = &bit_position_status.player_turn();
-    let check_status = bit_boards_white_and_black.check_status(color);
-    let capture_en_passant = bit_position_status.pawn_en_passant();
-    bit_boards_white_and_black.gen_moves_for_all(
-        color,
-        check_status,
-        &capture_en_passant,
-        bit_position_status,
-    )
-}
 
 impl logic::Engine for EngineDummy {
     fn id(&self) -> logic::EngineId {
@@ -57,15 +40,13 @@ impl logic::Engine for EngineDummy {
     fn find_best_move(
         &self,
         self_actor: Addr<dispatcher::EngineDispatcher>,
-        bit_position: bitboard::BitPosition,
+        game: game_state::GameState,
     ) {
-        // First generate moves
-        let moves = gen_moves(&bit_position);
-        // And then stop thinking and clear positino
-        self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
+        let moves = game.moves();
         let mut rng = ChaCha12Rng::from_entropy();
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
+            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);            
             let reply = dispatcher::handler_engine::EngineBestMoveFound(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(

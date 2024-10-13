@@ -138,13 +138,12 @@ impl Handler<UciCommand> for GameManager {
             }
             UciCommand::EngineStartThinking => {
                 if let Some(ref game_state) = &self.game_state_opt {
-                    let bit_position = game_state.bit_position();
-                    let color = bit_position.bit_position_status().player_turn();
+                    let color = game_state.bit_position().bit_position_status().player_turn();
                     let engine_actor_or_error = self.players.get_engine(color);
                     match engine_actor_or_error {
                         Ok(engine_actor) => {
                             let msg = dispatcher::handler_engine::EngineStartThinking::new(
-                                bit_position.clone(),
+                                game_state.clone(),
                                 ctx.address().clone(),
                             );
                             if let Some(debug_actor) = &self.debug_actor_opt {

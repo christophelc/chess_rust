@@ -15,6 +15,7 @@ use crate::entity::game::actor::game_manager;
 use crate::entity::uci::component::event;
 use crate::monitoring::debug;
 
+// should be less than the sleep timer in the loop in main.rs
 const POLLING_INTERVAL_MS: u64 = 50;
 
 #[derive(Debug, PartialEq)]
@@ -425,13 +426,15 @@ mod tests {
         ];
         let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
-        let engine_player1 =
-            dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
+        let mut engine_player1 =
+            dummy::EngineDummy::new(debug_actor_opt.clone());
+        engine_player1.set_id_number("white");
         let engine_player1_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone())
                 .start();
-        let engine_player2 =
-            dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("black");
+        let mut engine_player2 =
+            dummy::EngineDummy::new(debug_actor_opt.clone());
+        engine_player2.set_id_number("black");
         let engine_player2_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone())
                 .start();

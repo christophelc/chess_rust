@@ -1,3 +1,4 @@
+use chess_actix::entity::engine::component::engine_minimax;
 use chess_actix::{entity, monitoring, ui};
 
 use actix::Actor;
@@ -138,14 +139,18 @@ async fn tui_loop(
 
 #[actix::main]
 async fn main() {
-    //let debug_actor_opt: Option<debug::DebugActor> = None;
-    let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
+    let debug_actor_opt: Option<debug::DebugActor> = None;
+    //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
-    let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
+    //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
+    let mut engine_player1 = engine_minimax::EngineMinimax::new(debug_actor_opt.clone(), game_manager.zobrist_table(), 4);    
+    engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
-    let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("black");
+    //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
+    let mut engine_player2 = engine_minimax::EngineMinimax::new(debug_actor_opt.clone(), game_manager.zobrist_table(), 4);        
+    engine_player2.set_id_number("black");
     let engine_player2_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
     let player1 = player::Player::Human {

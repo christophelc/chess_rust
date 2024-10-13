@@ -73,6 +73,10 @@ impl GameState {
         self.end_game.clone()
     }
 
+    pub fn moves(&self) -> &Vec<BitBoardMove> {
+        &self.moves
+    }
+
     pub fn update_moves(&mut self) {
         let bit_position_status = self.bit_position.bit_position_status();
         let color = bit_position_status.player_turn();
@@ -145,7 +149,7 @@ impl GameState {
     // play n moves from the current position
     pub fn play_moves(
         &mut self,
-        valid_moves: Vec<long_notation::LongAlgebricNotationMove>,
+        valid_moves: &[long_notation::LongAlgebricNotationMove],
         zobrist_table: &zobrist::Zobrist,
         debug_actor_opt: Option<debug::DebugActor>,
     ) -> Result<Vec<BitBoardMove>, String> {
@@ -153,7 +157,7 @@ impl GameState {
         let mut result: Result<(), String> = Ok(());
         for m in valid_moves {
             let color = self.bit_position.bit_position_status().player_turn();
-            match check_move(color, m, &self.bit_position) {
+            match check_move(color, *m, &self.bit_position) {
                 Err(err) => {
                     if let Some(debug_actor) = &debug_actor_opt {
                         debug_actor.do_send(debug::AddMessage(format!(
@@ -274,7 +278,7 @@ mod tests {
             .into_iter()
             .map(|m| long_notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
             .collect();
-        let _ = game.play_moves(valid_moves, &zobrist_table, debug_actor_opt.clone());
+        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone());
         //println!("{}", game.bit_position().to().chessboard());
         let fen_pos_final = fen::Fen::encode(&game.bit_position.to()).unwrap();
         let fen_pos_final_expected =

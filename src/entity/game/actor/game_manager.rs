@@ -95,6 +95,9 @@ impl GameManager {
     pub fn history(&self) -> &History {
         &self.history
     }
+    pub fn zobrist_table(&self) -> zobrist::Zobrist {
+        self.zobrist_table.clone()
+    }
 }
 
 impl Actor for GameManager {
@@ -108,7 +111,7 @@ impl GameManager {
             .as_mut()
             .map(|game_state: &mut GameState| {
                 game_state.play_moves(
-                    valid_moves,
+                    &valid_moves,
                     &self.zobrist_table,
                     self.debug_actor_opt.clone(),
                 )

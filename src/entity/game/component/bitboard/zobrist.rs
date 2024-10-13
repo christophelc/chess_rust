@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::entity::game::component::{bitboard, square};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Zobrist {
     piece_square: [[u64; 64]; 12], // 6 pièces * 2 colors, 64 squares
     castling_rights: [u64; 4],

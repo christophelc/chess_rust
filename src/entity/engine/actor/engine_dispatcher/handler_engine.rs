@@ -1,6 +1,7 @@
 use actix::{Addr, Handler, Message};
 
 use crate::entity::engine::component::engine_logic as logic;
+use crate::entity::game::component::game_state;
 use crate::{
     entity::{
         game::{actor::game_manager, component::bitboard},
@@ -149,16 +150,16 @@ impl Handler<EngineSetStatus> for EngineDispatcher {
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct EngineStartThinking {
-    bit_position: bitboard::BitPosition,
+    game: game_state::GameState,
     game_manager_actor: game_manager::GameManagerActor,
 }
 impl EngineStartThinking {
     pub fn new(
-        bit_position: bitboard::BitPosition,
+        game: game_state::GameState,
         game_manager_actor: game_manager::GameManagerActor,
     ) -> Self {
         EngineStartThinking {
-            bit_position,
+            game,
             game_manager_actor,
         }
     }
@@ -174,7 +175,7 @@ impl Handler<EngineStartThinking> for EngineDispatcher {
                 msg
             )));
         }
-        self.start_thinking(&msg.bit_position, msg.game_manager_actor);
+        self.start_thinking(&msg.game, msg.game_manager_actor);
     }
 }
 
