@@ -178,7 +178,7 @@ pub async fn build_game_manager_actor(inputs: Vec<&str>) -> GameManagerActor {
 
     let debug_actor_opt: Option<debug::DebugActor> = None;
     //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
-    let uci_reader = crate::uci_entity::UciReadVecStringWrapper::new(&inputs);
+    let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
     let mut game = GameManager::new(debug_actor_opt.clone());
     let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
     let engine_player1_dispatcher =

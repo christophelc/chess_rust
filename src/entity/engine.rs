@@ -17,7 +17,9 @@ mod tests {
         let result = game_manager_actor.send(msg).await;
         let mut vec_engine_id: Vec<String> = vec![];
         if let Ok(Some(engine_actor)) = result {
-            let engine_id_opt = engine_actor.send(dispatcher::handler_engine::EngineGetId::default()).await;
+            let engine_id_opt = engine_actor
+                .send(dispatcher::handler_engine::EngineGetId::default())
+                .await;
             if let Ok(Some(engine_id)) = engine_id_opt {
                 vec_engine_id.push(engine_id.name().to_string());
                 vec_engine_id.push(engine_id.author().to_string());

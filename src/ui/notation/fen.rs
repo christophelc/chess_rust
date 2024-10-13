@@ -19,8 +19,9 @@ pub struct PositionStatus {
     n_half_moves: u16, // 50 moves rule without capturing a piece or moving a pawn
     n_moves: u16,
 }
-impl PositionStatus {
-    pub fn new() -> Self {
+
+impl Default for PositionStatus {
+    fn default() -> Self {
         PositionStatus {
             castling_white_queen_side: false,
             castling_white_king_side: false,
@@ -32,6 +33,8 @@ impl PositionStatus {
             n_moves: 0,
         }
     }
+}
+impl PositionStatus {
     // getters
     ////////////////////////
     pub fn castling_white_queen_side(&self) -> bool {
@@ -159,7 +162,7 @@ pub trait EncodeUserInput {
     fn encode(position: &Position) -> Result<String, FenError>;
 }
 
-pub(crate) struct Fen;
+pub struct Fen;
 
 impl EncodeUserInput for Fen {
     fn decode(fen: &str) -> Result<Position, FenError> {
@@ -545,7 +548,7 @@ mod tests {
     #[test]
     fn test_encode_empty_position() {
         let empty_position = Position {
-            chessboard: ChessBoard::new(),
+            chessboard: ChessBoard::default(),
             status: PositionStatus {
                 castling_white_king_side: false,
                 castling_white_queen_side: false,
@@ -579,7 +582,7 @@ fn test_decode_en_passant() {
 #[test]
 fn test_encode_en_passant() {
     let position = Position {
-        chessboard: ChessBoard::new(),
+        chessboard: ChessBoard::default(),
         status: PositionStatus {
             castling_white_king_side: false,
             castling_white_queen_side: false,

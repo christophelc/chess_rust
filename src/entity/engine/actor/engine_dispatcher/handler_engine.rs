@@ -1,7 +1,13 @@
 use actix::{Addr, Handler, Message};
 
-use crate::{entity::{game::{actor::game_manager, component::bitboard}, uci::actor::uci_entity}, monitoring::debug};
 use crate::entity::engine::component::engine_logic as logic;
+use crate::{
+    entity::{
+        game::{actor::game_manager, component::bitboard},
+        uci::actor::uci_entity,
+    },
+    monitoring::debug,
+};
 
 use super::{EngineDispatcher, EngineStatus};
 

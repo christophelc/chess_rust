@@ -1,6 +1,4 @@
-mod entity;
-mod monitoring;
-mod ui;
+use chess_actix::{entity, monitoring, ui};
 
 use actix::Actor;
 use entity::game::actor::game_manager;
@@ -10,16 +8,17 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::entity::game::component::bitboard::{piece_move, BitPosition};
-use crate::entity::game::component::player;
-use crate::monitoring::debug;
-use crate::ui::notation::{fen, san};
+use entity::engine::actor::engine_dispatcher as dispatcher;
+use entity::engine::component::engine_dummy as dummy;
+use entity::game::component::bitboard::{
+    piece_move::{self, GenMoves},
+    BitPosition,
+};
+use entity::game::component::player;
 use entity::uci::actor::uci_entity::{self, UciRead};
 use fen::EncodeUserInput;
-use piece_move::GenMoves;
-
-use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::engine::component::engine_dummy as dummy;
+use monitoring::debug;
+use ui::notation::{fen, san};
 
 #[allow(dead_code)]
 fn fen() {

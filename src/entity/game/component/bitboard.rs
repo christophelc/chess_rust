@@ -413,8 +413,8 @@ impl BitBoardsWhiteAndBlack {
         &self.bit_board_black
     }
     pub fn from(board: ChessBoard) -> Self {
-        let mut bit_board_white = BitBoards::new();
-        let mut bit_board_black = BitBoards::new();
+        let mut bit_board_white = BitBoards::default();
+        let mut bit_board_black = BitBoards::default();
         for (idx, square) in board.iter().enumerate() {
             match square {
                 square::Square::NonEmpty(piece) => {
@@ -441,7 +441,7 @@ impl BitBoardsWhiteAndBlack {
         }
     }
     pub fn to(&self) -> ChessBoard {
-        let mut chessboard = ChessBoard::new();
+        let mut chessboard = ChessBoard::default();
         for type_piece in TypePiece::ALL {
             let bitboard = self.bit_board_white.get_bitboard(type_piece);
             for coord in bitboard.list_non_empty_squares() {
@@ -674,7 +674,7 @@ impl Not for BitBoard {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct BitBoards {
     rooks: piece_move::RooksBitBoard,
     bishops: piece_move::BishopsBitBoard,
@@ -847,25 +847,23 @@ impl fmt::Display for BitBoards {
     }
 }
 
-impl BitBoards {
-    pub fn new() -> Self {
-        BitBoards {
-            rooks: piece_move::RooksBitBoard::default(),
-            bishops: piece_move::BishopsBitBoard::default(),
-            knights: piece_move::KnightsBitBoard::default(),
-            king: piece_move::KingBitBoard::default(),
-            queens: piece_move::QueensBitBoard::default(),
-            pawns: piece_move::PawnsBitBoard::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BitPositionStatus {
     flags: u8,
     pawn_en_passant: i8, // 1 byte for the en passant square (-1 if None, 0-63 if Some)
     n_half_moves: u16,
     n_moves: u16,
+}
+
+impl Default for BitPositionStatus {
+    fn default() -> Self {
+        BitPositionStatus {
+            flags: 0,
+            pawn_en_passant: -1,
+            n_half_moves: 0,
+            n_moves: 0,
+        }
+    }
 }
 
 impl BitPositionStatus {
@@ -892,14 +890,6 @@ impl BitPositionStatus {
     const MASK_CASTLING_QUEENSIDE_BLACK_3: u8 = 59;
     const MASK_CASTLING_QUEENSIDE_BLACK: u64 = 0x0E00000000000000;
 
-    pub fn new() -> Self {
-        BitPositionStatus {
-            flags: 0,
-            pawn_en_passant: -1,
-            n_half_moves: 0,
-            n_moves: 0,
-        }
-    }
     pub fn can_castle_queen_side(
         &self,
         bit_board: BitBoard,
@@ -1091,7 +1081,7 @@ impl BitPositionStatus {
     }
 
     pub fn from(status: &PositionStatus) -> Self {
-        let mut bp = BitPositionStatus::new();
+        let mut bp = BitPositionStatus::default();
         bp.set_castling_white_queen_side(status.castling_white_queen_side());
         bp.set_castling_white_king_side(status.castling_white_king_side());
         bp.set_castling_black_queen_side(status.castling_black_queen_side());
@@ -1104,7 +1094,7 @@ impl BitPositionStatus {
     }
 
     pub fn to(&self) -> PositionStatus {
-        let mut bp = PositionStatus::new();
+        let mut bp = PositionStatus::default();
         bp.set_castling_white_queen_side(self.castling_white_queen_side());
         bp.set_castling_white_king_side(self.castling_white_king_side());
         bp.set_castling_black_queen_side(self.castling_black_queen_side());
@@ -1138,7 +1128,7 @@ mod tests {
     #[test]
     fn test_bit_position_status_from() {
         // Create a PositionStatus with some specific values
-        let mut status = PositionStatus::new();
+        let mut status = PositionStatus::default();
         status.set_castling_white_queen_side(true);
         status.set_castling_white_king_side(false);
         status.set_castling_black_queen_side(true);
@@ -1165,7 +1155,7 @@ mod tests {
     #[test]
     fn test_bit_position_status_to() {
         // Create a BitPositionStatus with some specific values
-        let mut bit_status = BitPositionStatus::new();
+        let mut bit_status = BitPositionStatus::default();
         bit_status.set_castling_white_queen_side(true);
         bit_status.set_castling_white_king_side(false);
         bit_status.set_castling_black_queen_side(true);
@@ -1228,7 +1218,7 @@ mod tests {
 
     #[test]
     fn test_bit_position_from_mixed_board() {
-        let mut mixed_board: ChessBoard = ChessBoard::new();
+        let mut mixed_board: ChessBoard = ChessBoard::default();
         mixed_board.add(
             coord::Coord::from('A', 1).unwrap(),
             square::TypePiece::Rook,
@@ -1335,7 +1325,7 @@ mod tests {
             bit_board_black,
         };
         let chessboard = bit_position.to();
-        let position = Position::build(chessboard, PositionStatus::new());
+        let position = Position::build(chessboard, PositionStatus::default());
         let fen_str =
             fen::Fen::encode(&position).expect("Error when decoding position to FEN format.");
         let expected_fen = "7k/8/p7/4b3/3Q4/8/P1P4P/K7 w - - 0 0";

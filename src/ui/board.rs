@@ -29,17 +29,18 @@ impl<'a> Iterator for ChessBoardIterator<'a> {
     }
 }
 
+impl Default for ChessBoard {
+    fn default() -> Self {
+        Self {
+            squares: [[square::Square::Empty; 8]; 8],
+        }
+    }
+}
+
 impl ChessBoard {
     #[cfg(test)]
     fn at(&self, coord: coord::Coord) -> square::Square {
         self.squares[coord.get_y()][coord.get_x()]
-    }
-
-    // Helper function to create an empty board
-    pub fn new() -> Self {
-        ChessBoard {
-            squares: [[square::Square::Empty; 8]; 8],
-        }
     }
 
     pub fn build(squares: [[square::Square; 8]; 8]) -> Self {
@@ -101,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_chessboard_empty() {
-        let board = ChessBoard::new();
+        let board = ChessBoard::default();
 
         assert_eq!(
             board.at(coord::Coord::from('A', 1).unwrap()),
@@ -115,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_chessboard_add() {
-        let mut board = ChessBoard::new();
+        let mut board = ChessBoard::default();
         board.add(
             coord::Coord::from('A', 1).unwrap(),
             square::TypePiece::Rook,

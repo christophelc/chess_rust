@@ -40,7 +40,8 @@ where
             let color = bit_position_status.player_turn();
             let engine_actor_opt = self.players.get_player_into(color).get_engine().cloned();
             if let Some(engine_actor) = engine_actor_opt {
-                let reply = dispatcher::handler_engine::EngineGetIdAsync::new(msg.uci_caller.clone());
+                let reply =
+                    dispatcher::handler_engine::EngineGetIdAsync::new(msg.uci_caller.clone());
                 engine_actor.do_send(reply);
             }
         }
