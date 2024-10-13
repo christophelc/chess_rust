@@ -116,7 +116,7 @@ async fn tui_loop(
             // e2e4 for example
             Some(input) if input.len() == 4 => {
                 let moves = vec![input.to_string()];
-                match uci_entity::moves_validation(&moves) {
+                match uci_entity::handler_event::moves_validation(&moves) {
                     Err(err) => println!("Error: {}", err),
                     Ok(long_algebric_moves) => {
                         let result = game_manager_actor
@@ -141,7 +141,7 @@ async fn main() {
     //let debug_actor_opt: Option<debug::DebugActor> = None;
     let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
-    let mut game_manager = game_manager::GameManager::new(None);
+    let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
     let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
     let engine_player1_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
@@ -171,10 +171,13 @@ async fn main() {
         //fen();
         //test(&game_actor).await;
         println!("Enter an uci command:");
+
         loop {
-            let _ = uci_entity_actor
+            let _r = uci_entity_actor
                 .send(uci_entity::handler_read::ReadUserInput)
-                .await;
+                .await
+                .expect("Actix error");
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
     } else {
         println!("Entering in tui mode");

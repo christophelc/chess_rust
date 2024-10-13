@@ -58,7 +58,7 @@ where
                 self.engine.id()
             )));
         }
-        let reply = uci_entity::DisplayEngineId(self.engine.id());
+        let reply = uci_entity::handler_uci::DisplayEngineId(self.engine.id());
         msg.uci_caller.do_send(reply);
     }
 }

@@ -137,8 +137,6 @@ impl EngineStatus {
         self.is_thinking
     }
     pub fn set_is_thinking(&self, is_thinking: bool) -> Self {
-        Self {
-            is_thinking,
-        }
+        Self { is_thinking }
     }
 }

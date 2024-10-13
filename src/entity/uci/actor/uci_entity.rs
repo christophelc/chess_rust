@@ -2,24 +2,15 @@ pub mod handler_event;
 pub mod handler_poll;
 pub mod handler_read;
 pub mod handler_uci;
+pub mod handler_uci_command;
 
-use crate::{
-    entity::uci::component::command,
-    ui::notation::{
-        fen::{self, EncodeUserInput},
-        long_notation,
-    },
-};
-use actix::{
-    dev::ContextFutureSpawner, Actor, AsyncContext, Context, Handler, Message, WrapFuture,
-};
+use actix::{Actor, Context};
 use std::{
     error::Error,
-    io::{self, Stdin, Stdout, Write},
+    io::{self, Stdin, Stdout},
     sync::{Arc, Mutex},
 };
 
-use crate::entity::engine::component::engine_logic as logic;
 use crate::entity::game::actor::game_manager;
 use crate::entity::uci::component::event;
 use crate::monitoring::debug;
@@ -47,6 +38,14 @@ where
     R: UciRead + 'static,
 {
     type Context = Context<Self>;
+
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
+        if let Some(debug_actor) = &self.debug_actor_opt {
+            debug_actor.do_send(debug::AddMessage(
+                "uci_entity_actor has stopped.".to_string(),
+            ));
+        }
+    }
 }
 
 impl<R> UciEntity<R>
@@ -65,22 +64,6 @@ where
             game_manager_actor,
             debug_actor_opt,
         }
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "Result<(), io::Error>")]
-pub struct DisplayEngineId(pub logic::EngineId);
-
-impl<R: UciRead> Handler<DisplayEngineId> for UciEntity<R> {
-    type Result = Result<(), io::Error>;
-
-    fn handle(&mut self, msg: DisplayEngineId, _ctx: &mut Self::Context) -> Self::Result {
-        let engine_id = msg.0;
-        writeln!(self.stdout, "id name {}", engine_id.name())?;
-        writeln!(self.stdout, "id author {}", engine_id.author())?;
-        writeln!(self.stdout, "uciok")?;
-        Ok(())
     }
 }
 
@@ -139,6 +122,27 @@ impl UciRead for UciReadVecStringWrapper {
     }
 }
 
+#[derive(Debug)]
+pub struct HandleEventError {
+    event: event::Event,
+    error: String,
+}
+impl HandleEventError {
+    pub fn new(event: event::Event, error: String) -> Self {
+        HandleEventError { event, error }
+    }
+}
+impl Error for HandleEventError {}
+impl std::fmt::Display for HandleEventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "HandleEvent error for event {:?}. The error is: {}",
+            self.event, self.error
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -148,10 +152,9 @@ mod tests {
     use crate::entity::game::actor::game_manager;
     use crate::entity::game::component::square;
     use crate::entity::game::component::{game_state, parameters, player};
+    use crate::entity::uci::component::command::{self, parser};
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use actix::{Actor, Addr};
-    use command::parser;
-    use parser::InputParser;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
     use crate::entity::engine::component::engine_dummy as dummy;
@@ -170,7 +173,7 @@ mod tests {
         let game_manager_actor = game_manager::GameManager::start(game_manager::GameManager::new(
             debug_actor_opt.clone(),
         ));
-        let parser = InputParser::new(&input, game_manager_actor.clone());
+        let parser = parser::InputParser::new(&input, game_manager_actor.clone());
         let command = parser.parse_input().expect("Invalid command");
         (game_manager_actor, command)
     }
@@ -415,14 +418,20 @@ mod tests {
     async fn test_uci_start_stop_think_engine() {
         let debug_actor = debug::DebugEntity::new(true).start();
         let debug_actor_opt = Some(debug_actor.clone());
-        let inputs = vec!["position startpos", "go"];
+        //let inputs = vec!["position startpos", "go"];
+        let inputs = vec![
+            "position startpos",
+            "go wtime 246000 btime 240000 winc 6000 binc 6000",
+        ];
         let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
-        let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
+        let engine_player1 =
+            dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("white");
         let engine_player1_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone())
                 .start();
-        let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
+        let engine_player2 =
+            dummy::EngineDummy::new(debug_actor_opt.clone()).set_id_number("black");
         let engine_player2_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone())
                 .start();
@@ -463,277 +472,5 @@ mod tests {
             .into_iter()
             .find(|el| el.contains("EngineStartThinkin"));
         assert!(debug_start_thinking.is_some());
-    }
-}
-
-#[derive(Debug)]
-pub struct HandleEventError {
-    event: event::Event,
-    error: String,
-}
-impl HandleEventError {
-    pub fn new(event: event::Event, error: String) -> Self {
-        HandleEventError { event, error }
-    }
-}
-impl Error for HandleEventError {}
-impl std::fmt::Display for HandleEventError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "HandleEvent error for event {:?}. The error is: {}",
-            self.event, self.error
-        )
-    }
-}
-impl<R: UciRead> Handler<event::Event> for UciEntity<R> {
-    type Result = ();
-
-    fn handle(&mut self, msg: event::Event, ctx: &mut Self::Context) -> Self::Result {
-        let actor_self = ctx.address();
-        match msg {
-            event::Event::Write(s) => {
-                writeln!(self.stdout, "{}", s).unwrap();
-                self.stdout.flush().unwrap();
-            }
-            event::Event::WriteDebug(s) => {
-                if let Some(debug_actor) = &self.debug_actor_opt {
-                    debug_actor.do_send(debug::AddMessage(format!("Uci actor event: {}", s)))
-                }
-            }
-            event::Event::DebugMode(debug_actor_opt) => {
-                self.debug_actor_opt = debug_actor_opt;
-            }
-            event::Event::StartPos => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::InitPosition);
-            }
-            event::Event::Fen(fen) => {
-                let position = fen::Fen::decode(&fen).expect("Failed to decode FEN");
-                self.game_manager_actor.do_send(
-                    game_manager::handler_uci_command::UciCommand::UpdatePosition(
-                        fen.to_string(),
-                        position,
-                    ),
-                );
-            }
-            // Go command
-            event::Event::Depth(depth) => {
-                self.game_manager_actor.do_send(
-                    game_manager::handler_uci_command::UciCommand::DepthFinite(depth),
-                );
-            }
-            event::Event::SearchInfinite => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::SearchInfinite);
-            }
-            event::Event::MaxTimePerMoveInMs(time) => {
-                self.game_manager_actor.do_send(
-                    game_manager::handler_uci_command::UciCommand::MaxTimePerMoveInMs(time),
-                );
-            }
-            ref event @ event::Event::Moves(ref moves) => match moves_validation(moves) {
-                Ok(valid_moves) => {
-                    self.game_manager_actor.do_send(
-                        game_manager::handler_uci_command::UciCommand::ValidMoves {
-                            moves: valid_moves,
-                        },
-                    );
-                }
-                Err(err) => {
-                    actor_self.do_send(handler_uci::UciResult::Err(HandleEventError::new(
-                        event.clone(),
-                        err,
-                    )));
-                }
-            },
-            event::Event::Wtime(wtime) => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::Wtime(wtime));
-            }
-            event::Event::Btime(btime) => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::Btime(btime));
-            }
-            event::Event::WtimeInc(wtime_inc) => {
-                self.game_manager_actor.do_send(
-                    game_manager::handler_uci_command::UciCommand::WtimeInc(wtime_inc),
-                );
-            }
-            event::Event::BtimeInc(btime_inc) => {
-                self.game_manager_actor.do_send(
-                    game_manager::handler_uci_command::UciCommand::BtimeInc(btime_inc),
-                );
-            }
-            ref event @ event::Event::SearchMoves(ref search_moves) => {
-                match moves_validation(search_moves) {
-                    Ok(valid_moves) => {
-                        self.game_manager_actor.do_send(
-                            game_manager::handler_uci_command::UciCommand::SearchMoves(valid_moves),
-                        );
-                    }
-                    Err(err) => {
-                        actor_self.do_send(handler_uci::UciResult::Err(HandleEventError::new(
-                            event.clone(),
-                            err,
-                        )));
-                    }
-                }
-            }
-            event::Event::StartEngine => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking);
-                self.state_polling = StatePollingUciEntity::Polling;
-                ctx.address().do_send(handler_poll::PollBestMove);
-            }
-            event::Event::StopEngine => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStopThinking);
-            }
-            event::Event::Quit => {
-                actor_self.do_send(handler_uci::UciResult::Quit);
-            }
-        }
-    }
-}
-
-pub fn moves_validation(
-    moves: &Vec<String>,
-) -> Result<Vec<long_notation::LongAlgebricNotationMove>, String> {
-    let mut valid_moves: Vec<long_notation::LongAlgebricNotationMove> = vec![];
-    let mut errors: Vec<String> = vec![];
-    for m in moves {
-        match long_notation::LongAlgebricNotationMove::build_from_str(m) {
-            Ok(valid_move) => valid_moves.push(valid_move),
-            Err(err) => errors.push(err),
-        }
-    }
-    if !errors.is_empty() {
-        Err(errors.join(", "))
-    } else {
-        Ok(valid_moves)
-    }
-}
-
-impl<R> Handler<command::Command> for UciEntity<R>
-where
-    R: UciRead + 'static,
-{
-    type Result = ();
-
-    fn handle(&mut self, msg: command::Command, ctx: &mut Self::Context) -> Self::Result {
-        let mut events: Vec<event::Event> = vec![];
-        match msg {
-            command::Command::Wait100ms => {
-                use tokio::time::{sleep, Duration};
-
-                events.push(event::Event::WriteDebug("waiting 100ms".to_string()));
-                sleep(Duration::from_millis(100)).into_actor(self).wait(ctx);
-            }
-            command::Command::Uci(game_manager_actor) => {
-                let uci_caller = ctx.address();
-                let msg = game_manager::handler_engine::GetCurrentEngineAsync::new(uci_caller);
-                game_manager_actor.do_send(msg);
-            }
-            command::Command::Ignore => {}
-            command::Command::IsReady => events.push(event::Event::Write("readyok".to_string())),
-            command::Command::DebugMode(is_debug) => {
-                events.push(event::Event::WriteDebug(format!(
-                    "debug mode set to {}",
-                    is_debug
-                )));
-                events.push(event::Event::DebugMode(self.debug_actor_opt.clone()));
-            }
-            command::Command::NewGame => {
-                events.push(event::Event::StartPos);
-                // TODO: reset btime, wtime ?
-            }
-            command::Command::Position(pos) => {
-                events.push(event::Event::WriteDebug("Position received".to_string()));
-                if pos.startpos() {
-                    events.push(event::Event::WriteDebug(
-                        "Set board to starting position.".to_string(),
-                    ));
-                    events.push(event::Event::StartPos);
-                } else if let Some(fen_str) = pos.fen() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Set board to FEN: {}", fen_str).to_string(),
-                    ));
-                    events.push(event::Event::Fen(fen_str));
-                }
-                if !pos.moves().is_empty() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Moves played: {:?}", pos.moves()).to_string(),
-                    ));
-                    events.push(event::Event::Moves(pos.moves().clone()));
-                }
-            }
-            command::Command::Go(go) => {
-                if let Some(d) = go.depth() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Searching to depth: {}", d).to_string(),
-                    ));
-                    events.push(event::Event::Depth(d));
-                }
-                if let Some(time) = go.movetime() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Max time for move: {} ms", time).to_string(),
-                    ));
-                    events.push(event::Event::MaxTimePerMoveInMs(time));
-                }
-                if go.infinite() {
-                    events.push(event::Event::WriteDebug(
-                        "Searching indefinitely...".to_string(),
-                    ));
-                    events.push(event::Event::SearchInfinite);
-                }
-                if let Some(wtime) = go.wtime() {
-                    events.push(event::Event::WriteDebug(
-                        format!("White time left: {} ms", wtime).to_string(),
-                    ));
-                    events.push(event::Event::Wtime(wtime));
-                }
-                if let Some(btime) = go.btime() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Black time left: {} ms", btime).to_string(),
-                    ));
-                    events.push(event::Event::Btime(btime));
-                }
-                if let Some(wtime_inc) = go.wtime_inc() {
-                    events.push(event::Event::WriteDebug(
-                        format!("White time inc: {} ms", wtime_inc).to_string(),
-                    ));
-                    events.push(event::Event::WtimeInc(wtime_inc));
-                }
-                if let Some(btime_inc) = go.btime_inc() {
-                    events.push(event::Event::WriteDebug(
-                        format!("Black time left: {} ms", btime_inc).to_string(),
-                    ));
-                    events.push(event::Event::BtimeInc(btime_inc));
-                }
-                if !go.search_moves().is_empty() {
-                    events.push(event::Event::WriteDebug(format!(
-                        "Limit search to these moves: {:?}",
-                        go.search_moves()
-                    )));
-                    events.push(event::Event::SearchMoves(go.search_moves().clone()));
-                }
-                events.push(event::Event::StartEngine)
-            }
-            command::Command::Stop => {
-                events.push(event::Event::WriteDebug("Stopping search.".to_string()));
-                events.push(event::Event::StopEngine);
-            }
-            command::Command::Quit => {
-                events.push(event::Event::WriteDebug(
-                    "Stopping search (Quit).".to_string(),
-                ));
-                events.push(event::Event::StopEngine);
-                events.push(event::Event::WriteDebug("Exiting engine".to_string()));
-                events.push(event::Event::Quit);
-            }
-        }
-        let msg = handler_event::ProcessEvents(events);
-        ctx.address().do_send(msg);
     }
 }

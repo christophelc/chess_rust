@@ -3,8 +3,25 @@ use actix::{ActorContext, Handler, Message};
 use crate::{entity::game::actor::game_manager, monitoring::debug};
 
 use super::{StatePollingUciEntity, UciEntity, UciRead};
+use crate::entity::engine::component::engine_logic as logic;
 
-use std::io::Write;
+use std::io::{self, Write};
+
+#[derive(Message)]
+#[rtype(result = "Result<(), io::Error>")]
+pub struct DisplayEngineId(pub logic::EngineId);
+
+impl<R: UciRead> Handler<DisplayEngineId> for UciEntity<R> {
+    type Result = Result<(), io::Error>;
+
+    fn handle(&mut self, msg: DisplayEngineId, _ctx: &mut Self::Context) -> Self::Result {
+        let engine_id = msg.0;
+        writeln!(self.stdout, "id name {}", engine_id.name())?;
+        writeln!(self.stdout, "id author {}", engine_id.author())?;
+        writeln!(self.stdout, "uciok")?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
@@ -18,6 +35,9 @@ impl<R: UciRead> Handler<UciResult> for UciEntity<R> {
     type Result = ();
 
     fn handle(&mut self, msg: UciResult, ctx: &mut Self::Context) -> Self::Result {
+        if let Some(debug_actor) = &self.debug_actor_opt {
+            debug_actor.do_send(debug::AddMessage(format!("uci_actor receives {:?}", msg)));
+        }
         match msg {
             UciResult::DisplayBestMove(timestamped_best_move_opt, is_show) => {
                 if let Some(timestamped_best_move) = timestamped_best_move_opt {
@@ -34,8 +54,8 @@ impl<R: UciRead> Handler<UciResult> for UciEntity<R> {
                         let _ = writeln!(self.stdout, "{}", msg);
                         self.stdout.flush().unwrap();
                     }
+                    self.state_polling = StatePollingUciEntity::Pending;
                 }
-                self.state_polling = StatePollingUciEntity::Pending;
             }
             UciResult::Err(err) => {
                 if let Some(debug_actor) = &self.debug_actor_opt {
