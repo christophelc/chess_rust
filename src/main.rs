@@ -21,6 +21,9 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
+// must be odd
+const MINIMAX_DEPTH: u8 = 2;
+
 #[allow(dead_code)]
 fn fen() {
     println!("chessboard generated from initial position encoded with FEN");
@@ -144,12 +147,20 @@ async fn main() {
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
     //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
-    let mut engine_player1 = engine_minimax::EngineMinimax::new(debug_actor_opt.clone(), game_manager.zobrist_table(), 4);    
+    let mut engine_player1 = engine_minimax::EngineMinimax::new(
+        debug_actor_opt.clone(),
+        game_manager.zobrist_table(),
+        MINIMAX_DEPTH,
+    );
     engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
     //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
-    let mut engine_player2 = engine_minimax::EngineMinimax::new(debug_actor_opt.clone(), game_manager.zobrist_table(), 4);        
+    let mut engine_player2 = engine_minimax::EngineMinimax::new(
+        debug_actor_opt.clone(),
+        game_manager.zobrist_table(),
+        MINIMAX_DEPTH,
+    );
     engine_player2.set_id_number("black");
     let engine_player2_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());

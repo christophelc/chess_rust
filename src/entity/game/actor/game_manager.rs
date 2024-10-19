@@ -243,6 +243,7 @@ mod tests {
     use crate::entity::uci::actor::uci_entity;
     use crate::monitoring::debug;
     use crate::ui::notation::fen::{self, EncodeUserInput};
+    use crate::ui::notation::long_notation;
 
     // FIXME: redudant with uci.rs test
     async fn get_game_state(
@@ -303,6 +304,43 @@ mod tests {
             .expect("Failed to encode position");
         let fen_expected = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
         assert_eq!(fen, fen_expected);
+    }
+    #[actix::test]
+    async fn test_game_pawns_moves() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let position = "position startpos moves e2e4 g8f6 e4e5 e7e6 e5f6";
+        let inputs = vec![position];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor =
+            game_manager::GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let moves: Vec<String> = game_opt
+            .as_ref()
+            .unwrap()
+            .moves()
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect();
+        assert!(!moves.contains(&"d7e6".to_string()));
+        let fen = fen::Fen::encode(&game_opt.unwrap().bit_position().to())
+            .expect("Failed to encode position");
+        assert_eq!(
+            fen,
+            "rnbqkb1r/pppp1ppp/4pP2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3"
+        );
     }
 
     #[actix::test]
@@ -428,6 +466,7 @@ mod tests {
         let fen_expected = "rnb1kbnr/pppp1ppp/8/4p3/4P2q/P7/1PPP1PPP/RNBQKBNR w KQkq - 1 3";
         assert_eq!(fen, fen_expected);
     }
+
     #[actix::test]
     async fn test_game_block_ckeck() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
@@ -455,6 +494,45 @@ mod tests {
         let fen_expected = "rnb1kbnr/ppp1pppp/8/4q3/8/P7/1PPP1PPP/RNBQKBNR w KQkq - 1 4";
         assert_eq!(fen, fen_expected);
     }
+
+    #[actix::test]
+    async fn test_game_pawn_takes_attacker() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some( debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 a8b8 b1c3 b8b4 g1f3 b4c4 d1d3 c4b4 a2a3 b4b6 c3d5 b6c6 c2c4 c6d6 e4e5 d6c6 b2b4 c6e6 f3g5 e6e5 d4e5"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = game_manager::GameManager::start(game_manager::GameManager::new(
+            debug_actor_opt.clone(),
+        ));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.clone().unwrap();
+        println!("{:?}", game.bit_position().to().check_status());
+        let moves: Vec<String> = game
+            .moves()
+            .into_iter()
+            .map(|b_move| {
+                long_notation::LongAlgebricNotationMove::build_from_b_move(b_move.clone()).cast()
+            })
+            .collect();
+        println!("{:?}", moves);
+        let fen = fen::Fen::encode(&game_opt.unwrap().bit_position().to())
+            .expect("Failed to encode position");
+        let fen_expected = "2bqkbnr/p1pppppp/p7/3NP1N1/1PP5/P2Q4/5PPP/R1B1K2R b KQk - 0 13";
+        assert_eq!(fen, fen_expected);
+    }
+
     #[actix::test]
     async fn test_game_block_ckeck2() {
         let debug_actor_opt: Option<debug::DebugActor> = None;

@@ -426,14 +426,12 @@ mod tests {
         ];
         let uci_reader = UciReadVecStringWrapper::new(&inputs);
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
-        let mut engine_player1 =
-            dummy::EngineDummy::new(debug_actor_opt.clone());
+        let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
         engine_player1.set_id_number("white");
         let engine_player1_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone())
                 .start();
-        let mut engine_player2 =
-            dummy::EngineDummy::new(debug_actor_opt.clone());
+        let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
         engine_player2.set_id_number("black");
         let engine_player2_dispatcher_actor =
             dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone())

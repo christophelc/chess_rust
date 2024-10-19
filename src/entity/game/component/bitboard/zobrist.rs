@@ -32,7 +32,6 @@ impl ZobristHistory {
             Some(hash) => {
                 let len = self.hashes.len();
                 let start_index = len.saturating_sub((n_half_moves + 1) as usize); // Avoids underflow
-                println!("xx {} {} {}", len, n_half_moves, start_index);
                 self.hashes[start_index..]
                     .iter()
                     .step_by(2)

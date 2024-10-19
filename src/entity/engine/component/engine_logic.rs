@@ -1,8 +1,8 @@
 use actix::prelude::*;
 
-use crate::entity::game::component::{bitboard, game_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::bitboard::piece_move::GenMoves;
+use crate::entity::game::component::{bitboard, game_state};
 
 #[derive(Debug, Clone)]
 pub struct EngineId {

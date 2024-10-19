@@ -46,7 +46,7 @@ impl logic::Engine for EngineDummy {
         let mut rng = ChaCha12Rng::from_entropy();
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
-            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);            
+            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
             let reply = dispatcher::handler_engine::EngineBestMoveFound(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(

@@ -219,6 +219,7 @@ fn update_status(
     bit_position_status: BitPositionStatus,
 ) -> BitPositionStatus {
     let mut bit_position_status = bit_position_status;
+    bit_position_status.set_pawn_en_passant(None);
     // move of a rook
     match b_move.type_piece {
         TypePiece::Rook => {
@@ -234,8 +235,8 @@ fn update_status(
             let mut capture_en_passant: Option<i8> = None;
             let dir: i8 = if b_move.color == Color::White { 8 } else { -8 };
             if b_move.start.0 as i8 + dir + dir == b_move.end.0 as i8
-                && (*bit_board_pawn_opponent & b_move.end.right().bitboard()).non_empty()
-                || (*bit_board_pawn_opponent & b_move.end.left().bitboard()).non_empty()
+                && ((*bit_board_pawn_opponent & b_move.end.right().bitboard()).non_empty()
+                    || (*bit_board_pawn_opponent & b_move.end.left().bitboard()).non_empty())
             {
                 capture_en_passant = Some(b_move.start.0 as i8 + dir);
             }
@@ -352,7 +353,7 @@ impl BitBoardsWhiteAndBlack {
                 );
                 if mask_remove.non_empty() {
                     let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
-                    self.bit_board_black.remove_piece(capture, mask_remove);
+                    self.bit_board_black.xor_piece(capture, mask_remove);
                 }
             }
             square::Color::Black => {
@@ -364,7 +365,7 @@ impl BitBoardsWhiteAndBlack {
                 );
                 if mask_remove.non_empty() {
                     let capture = b_move.capture.unwrap_or(square::TypePiece::Pawn);
-                    self.bit_board_white.remove_piece(capture, mask_remove);
+                    self.bit_board_white.xor_piece(capture, mask_remove);
                 }
             }
         };
@@ -684,25 +685,25 @@ pub struct BitBoards {
     pawns: piece_move::PawnsBitBoard,
 }
 impl BitBoards {
-    pub fn remove_piece(&mut self, type_piece: square::TypePiece, mask_remove: BitBoard) {
+    pub fn xor_piece(&mut self, type_piece: square::TypePiece, mask_xor: BitBoard) {
         match type_piece {
             TypePiece::Rook => {
-                self.rooks.xor(mask_remove);
+                self.rooks.xor(mask_xor);
             }
             TypePiece::Bishop => {
-                self.bishops.remove(mask_remove);
+                self.bishops.xor(mask_xor);
             }
             TypePiece::Knight => {
-                self.knights.remove(mask_remove);
+                self.knights.xor(mask_xor);
             }
             TypePiece::Queen => {
-                self.queens.remove(mask_remove);
+                self.queens.xor(mask_xor);
             }
             TypePiece::King => {
-                self.king.remove(mask_remove);
+                self.king.xor(mask_xor);
             }
             TypePiece::Pawn => {
-                self.pawns.remove(mask_remove);
+                self.pawns.xor(mask_xor);
             }
         }
     }

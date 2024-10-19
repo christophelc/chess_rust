@@ -135,8 +135,8 @@ impl BishopsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&mut self, mask_remove: BitBoard) {
-        self.bitboard.xor(mask_remove);
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -172,8 +172,8 @@ impl KnightsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&mut self, mask_remove: BitBoard) {
-        self.bitboard.xor(mask_remove);
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -206,8 +206,8 @@ impl KingBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&mut self, mask_remove: BitBoard) {
-        self.bitboard.xor(mask_remove);
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -254,8 +254,8 @@ impl QueensBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&mut self, mask_remove: BitBoard) {
-        self.bitboard.xor(mask_remove);
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -291,8 +291,8 @@ impl PawnsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn remove(&mut self, mask_remove: BitBoard) {
-        self.bitboard.xor(mask_remove);
+    pub fn xor(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -511,14 +511,14 @@ fn gen_moves_for_all_simple_check(
     };
     let mut moves: Vec<PieceMoves> = moves_king.into_iter().collect();
     // capture attacker to remove check
-    let (type_piece, bit_board_attacker_of_opponent) =
-        attackers_opponent_check.iter().next().unwrap();
-    if bit_board_attacker_of_opponent.non_empty() {
-        moves.push(PieceMoves {
-            type_piece,
-            index: bit_board_attacker_of_opponent.index(),
-            moves: attacker_index.bitboard(),
-        })
+    for (type_piece, bit_board_attacker_of_opponent) in attackers_opponent_check.iter() {
+        if bit_board_attacker_of_opponent.non_empty() {
+            moves.push(PieceMoves {
+                type_piece,
+                index: bit_board_attacker_of_opponent.index(),
+                moves: attacker_index.bitboard(),
+            })
+        }
     }
     match king_index.direction(attacker_index) {
         bitboard::Direction::RookHorizontal | bitboard::Direction::RookVertical => {
@@ -782,7 +782,6 @@ fn attackers(
         .unwrap_or(&bb_zero);
     let piece_as_pawn =
         gen_pawn_squares_attacked(piece_index, color, &bit_board_opponent.concat_bit_boards());
-
     // Intersect piece moves with rooks, bishops, knights, pawns bitboards of the opposite color
     let rook_attackers: BitBoard = *piece_as_rook & *bit_board_opponent.rooks().bitboard();
     let bishop_attackers: BitBoard = *piece_as_bishop & *bit_board_opponent.bishops().bitboard();
