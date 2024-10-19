@@ -121,12 +121,9 @@ impl EngineMinimax {
             // TODO: implement 'go back' feature instead of cloning game_state
             let mut game_clone = game.clone();
             //println!("{}",game_clone.bit_position().to().chessboard());
-            let r = game_clone.play_moves(&[long_algebric_move], &self.zobrist_table, None);
-            if r.is_err() {
-                println!("{}", updated_variant);
-                println!("{}", game_clone.bit_position().to().chessboard());
-            }
-            let _ = r.unwrap();
+            let _ = game_clone
+                .play_moves(&[long_algebric_move], &self.zobrist_table, None)
+                .unwrap();
             let score = match game_clone.end_game() {
                 game_state::EndGame::None => {
                     if current_depth < self.max_depth {
@@ -208,7 +205,7 @@ impl logic::Engine for EngineMinimax {
             let reply = dispatcher::handler_engine::EngineBestMoveFound(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(
-                    "EngineDummy of id {:?} reply is: '{:?}'",
+                    "Engine pf id {:?} reply is: '{:?}'",
                     self.id(),
                     reply
                 )));

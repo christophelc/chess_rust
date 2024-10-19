@@ -484,7 +484,7 @@ fn control_discover_king_no_check(
     }
 }
 
-// Generate move for king in case of simple check
+// Generate moves for king in case of simple check
 fn gen_moves_for_all_simple_check(
     color: &square::Color,
     attacker_index: bitboard::BitIndex,
@@ -520,6 +520,7 @@ fn gen_moves_for_all_simple_check(
             })
         }
     }
+    // move a piece to block attack
     match king_index.direction(attacker_index) {
         bitboard::Direction::RookHorizontal | bitboard::Direction::RookVertical => {
             // generate moves for king seen as a rook

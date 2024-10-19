@@ -64,7 +64,7 @@ impl EngineDispatcher {
         self.game_opt = Some(game.clone());
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
-                "EngineDummy of id {:?} started thinking.",
+                "Engine of id {:?} started thinking.",
                 self.engine.id()
             )));
         }
@@ -100,11 +100,11 @@ impl EngineDispatcher {
                     game_manager::handler_game::SetBestMove::from_ts_move(best_move.clone());
                 if let Some(debug_actor) = &self.debug_actor_opt {
                     debug_actor.do_send(debug::AddMessage(format!(
-                        "EngineDummy of id {:?} stopped thinking.",
+                        "Engine of id {:?} stopped thinking.",
                         self.engine.id()
                     )));
                     debug_actor.do_send(debug::AddMessage(format!(
-                        "EngineDummy of id {:?} reply is: '{:?}'",
+                        "Engine of id {:?} reply is: '{:?}'",
                         self.engine.id(),
                         reply
                     )));

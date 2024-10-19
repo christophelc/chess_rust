@@ -497,9 +497,10 @@ impl BitIndex {
     pub fn direction(&self, to: BitIndex) -> Direction {
         let index = (to.0 as i8 - self.0 as i8).abs();
         match index {
-            _ if index % 7 == 0 => Direction::BishopTopLeftBottomRight,
-            _ if index % 9 == 0 => Direction::BishopBottomLeftTopRight,
             _ if index % 8 == 0 => Direction::RookVertical,
+            _ if index % 9 == 0 => Direction::BishopBottomLeftTopRight,
+            // must be tested at the end because 56 = 8 x 7, 63 = 9 x 7
+            _ if index % 7 == 0 => Direction::BishopTopLeftBottomRight,
             _ if to.row() == self.row() => Direction::RookHorizontal,
             _ => Direction::None,
         }

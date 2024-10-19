@@ -281,6 +281,7 @@ mod tests {
         let fen_expected = "rnbqkbnr/ppp2ppp/4P3/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3";
         assert_eq!(fen, fen_expected);
     }
+    #[actix::test]
     async fn test_game_pawn_move_invalid() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
@@ -733,6 +734,42 @@ mod tests {
         .to_vec();
         println!("{:?}", moves);
         assert!(!moves.contains(&"e8g8".to_string()));
+    }
+    #[actix::test]
+    async fn test_game_block_check_mod7() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position fen 5r1r/p1p3pp/n1b1p1k1/4P3/8/4q1P1/3R3P/3R1K2 w - - 3 35"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        //actix::clock::sleep(Duration::from_secs(3)).await;
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        assert_eq!(game.end_game(), game_state::EndGame::None);
+        assert_eq!(
+            game.bit_position().bit_position_status().player_turn(),
+            square::Color::White
+        );
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        println!("{:?}", moves);
+        assert_eq!(moves, ["d2f2".to_string()]);
     }
     #[actix::test]
     async fn test_game_promotion_king_moves() {
