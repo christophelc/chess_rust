@@ -110,41 +110,58 @@ impl EngineMinimax {
         let mut max_score = i32::MIN;
         let mut best_move = game.moves()[0];
         for m in game.moves() {
+            //for m in game.moves().into_iter().filter(|m| current_depth > 0 || long_notation::LongAlgebricNotationMove::build_from_b_move(**m).cast() == "e7f8B") {
             // TODO: optimize that
             let long_algebric_move = long_notation::LongAlgebricNotationMove::build_from_b_move(*m);
-            if current_depth == 0 {
-                println!("{}", long_algebric_move.cast());
-            }
+            let updated_variant = format!("{} {}", variant, long_algebric_move.cast());
             let mut move_score = NodeNameAndScore::new(long_algebric_move.cast());
             // update graph with new child with score equals to zero
             let node_id: petgraph::graph::NodeIndex = graph.add_node(move_score.clone());
             graph.add_edge(*node_parent_id, node_id, ());
             // TODO: implement 'go back' feature instead of cloning game_state
             let mut game_clone = game.clone();
-            let updated_variant = format!("{} {}", variant, long_algebric_move.cast());
-            let _ = game_clone
-                .play_moves(&[long_algebric_move], &self.zobrist_table, None)
-                .unwrap();
-            let score = if game_clone.end_game() != game_state::EndGame::None {
-                // TODO: evaluate end game
-                Score(0)
-            } else if current_depth < self.max_depth {
-                let (_, score) = self.minimax_rec(
-                    &updated_variant,
-                    &game_clone,
-                    current_depth + 1,
-                    &node_id,
-                    graph,
-                );
-                Score(-score.0)
-            } else {
-                let score = evaluate(game_clone.bit_position());
-                // update current leaf node_id with score
-                if let Some(node) = graph.node_weight_mut(node_id) {
-                    move_score.set_score(score.clone());
-                    *node = move_score;
+            //println!("{}",game_clone.bit_position().to().chessboard());
+            let r = game_clone.play_moves(&[long_algebric_move], &self.zobrist_table, None);
+            if r.is_err() {
+                println!("{}", updated_variant);
+                println!("{}", game_clone.bit_position().to().chessboard());
+            }
+            let _ = r.unwrap();
+            let score = match game_clone.end_game() {
+                game_state::EndGame::None => {
+                    if current_depth < self.max_depth {
+                        let (_, score) = self.minimax_rec(
+                            &updated_variant,
+                            &game_clone,
+                            current_depth + 1,
+                            &node_id,
+                            graph,
+                        );
+                        Score(-score.0)
+                    } else {
+                        let score = evaluate(game_clone.bit_position());
+                        // update current leaf node_id with score
+                        if let Some(node) = graph.node_weight_mut(node_id) {
+                            move_score.set_score(score.clone());
+                            *node = move_score;
+                        }
+                        score
+                    }
                 }
-                score
+                // the last mave wins => it is a very good move
+                game_state::EndGame::Mat(_color) => Score(i32::MAX),
+                game_state::EndGame::TimeOutLost(color)
+                    if color
+                        == game_clone
+                            .bit_position()
+                            .bit_position_status()
+                            .player_turn() =>
+                {
+                    Score(i32::MAX)
+                }
+                // the last move loses
+                game_state::EndGame::TimeOutLost(_color) => Score(i32::MIN),
+                _ => Score(0),
             };
             if score.0 > max_score {
                 best_move = *m;
@@ -167,9 +184,14 @@ const MINIMAX_ENGINE_ID_AUTHOR: &str = "Christophe le cam";
 
 impl logic::Engine for EngineMinimax {
     fn id(&self) -> logic::EngineId {
-        let name = format!("{} {}", MINIMAX_ENGINE_ID_NAME.to_owned(), self.id_number)
-            .trim()
-            .to_string();
+        let name = format!(
+            "{} max_depth {} - {}",
+            MINIMAX_ENGINE_ID_NAME.to_owned(),
+            self.max_depth,
+            self.id_number
+        )
+        .trim()
+        .to_string();
         let author = MINIMAX_ENGINE_ID_AUTHOR.to_owned();
         logic::EngineId::new(name, author)
     }
@@ -227,7 +249,23 @@ fn evaluate(bit_position: &bitboard::BitPosition) -> Score {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::game::component::{bitboard, square::TypePiece};
+    use std::sync::Arc;
+
+    use actix::Actor;
+
+    use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+    use crate::{
+        entity::{
+            engine::component::engine_minimax,
+            game::{
+                actor::game_manager,
+                component::{bitboard, player, square::TypePiece},
+            },
+            uci::actor::uci_entity,
+        },
+        monitoring::debug,
+        ui::notation::long_notation,
+    };
 
     use super::evaluate_one_side;
 
@@ -238,5 +276,79 @@ mod tests {
         bitboards.xor_piece(TypePiece::Pawn, bitboard::BitBoard::new(2));
         let score = evaluate_one_side(&bitboards);
         assert_eq!(score, 6);
+    }
+
+    use crate::entity::game::component::game_state;
+    #[cfg(test)]
+    async fn get_game_state(
+        game_manager_actor: &game_manager::GameManagerActor,
+    ) -> Option<game_state::GameState> {
+        let result_or_error = game_manager_actor
+            .send(game_manager::handler_game::GetGameState)
+            .await;
+        result_or_error.unwrap()
+    }
+
+    // FIXME: remove sleep
+    #[ignore]
+    #[actix::test]
+    async fn test_game_end() {
+        const MINIMAX_DEPTH: u8 = 2;
+
+        //let debug_actor_opt: Option<debug::DebugActor> = None;
+        let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 e1g1 c8g4 d1d3 b8b4 c2c3 b4a4 b2b3 a4a5 c1d2 g4f3 g2f3 a5b5 c3c4 b5b7 c4d5 d8d5 d3c3 b7b5 d2e3 d5f3 c3c6 f3c6 b1a3 b5b4 a1c1 c6e6 a3c4 b4b5 f1d1 b5b4 d4d5 e6g4 g1f1 b4b7 d5d6 g4h3 f1g1 h3g4 g1f1 g4h3 f1e1 h3h2 d6e7 g8f6", "go"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
+        //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
+        let mut engine_player1 = engine_minimax::EngineMinimax::new(
+            debug_actor_opt.clone(),
+            game_manager.zobrist_table(),
+            MINIMAX_DEPTH,
+        );
+        engine_player1.set_id_number("white");
+        let engine_player1_dispatcher =
+            dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
+        let mut engine_player2 = engine_minimax::EngineMinimax::new(
+            debug_actor_opt.clone(),
+            game_manager.zobrist_table(),
+            MINIMAX_DEPTH,
+        );
+        engine_player2.set_id_number("black");
+        let engine_player2_dispatcher =
+            dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        let player1 = player::Player::Human {
+            engine_opt: Some(engine_player1_dispatcher.start()),
+        };
+        let player2 = player::Player::Computer {
+            engine: engine_player2_dispatcher.start(),
+        };
+        let players = player::Players::new(player1, player2);
+        game_manager.set_players(players);
+        let game_manager_actor = game_manager.start();
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let r = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+            println!("{:?}", r);
+        }
+        actix::clock::sleep(std::time::Duration::from_secs(100)).await;
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        assert!(!moves.contains(&"h3h2".to_string()));
     }
 }

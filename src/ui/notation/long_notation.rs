@@ -41,9 +41,10 @@ impl LongAlgebricNotationMove {
     }
     pub fn cast(&self) -> String {
         format!(
-            "{}{}",
+            "{}{}{}",
             index_to_string(self.start),
-            index_to_string(self.end)
+            index_to_string(self.end),
+            self.show_promotion(),
         )
     }
     pub fn start(&self) -> bitboard::BitIndex {
@@ -54,6 +55,16 @@ impl LongAlgebricNotationMove {
     }
     pub fn opt_promotion(&self) -> Option<square::TypePiecePromotion> {
         self.opt_promotion
+    }
+    fn show_promotion(&self) -> String {
+        match self.opt_promotion {
+            Some(square::TypePiecePromotion::Rook) => "R",
+            Some(square::TypePiecePromotion::Knight) => "N",
+            Some(square::TypePiecePromotion::Bishop) => "B",
+            Some(square::TypePiecePromotion::Queen) => "Q",
+            None => "",
+        }
+        .to_string()
     }
 }
 
@@ -80,12 +91,13 @@ fn promotion2type_piece(
 ) -> Result<Option<square::TypePiecePromotion>, String> {
     match opt_promotion_as_char {
         None => Ok(None),
-        Some('q') => Ok(Some(square::TypePiecePromotion::Queen)),
-        Some('r') => Ok(Some(square::TypePiecePromotion::Rook)),
-        Some('n') => Ok(Some(square::TypePiecePromotion::Knight)),
-        Some('b') => Ok(Some(square::TypePiecePromotion::Bishop)),
+        // we consider uppercase is valid. We cast internally promotion to uppercse too.
+        Some('q') | Some('Q') => Ok(Some(square::TypePiecePromotion::Queen)),
+        Some('r') | Some('R') => Ok(Some(square::TypePiecePromotion::Rook)),
+        Some('n') | Some('N') => Ok(Some(square::TypePiecePromotion::Knight)),
+        Some('b') | Some('B') => Ok(Some(square::TypePiecePromotion::Bishop)),
         Some(p) => Err(format!(
-            "Unknow promotion piece: '{}'. Valid pieces are: q, r, n",
+            "Unknown promotion piece: '{}'. Valid pieces are: q, r, n",
             p
         )),
     }

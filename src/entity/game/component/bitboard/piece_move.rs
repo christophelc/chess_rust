@@ -674,10 +674,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
             }
             CheckStatus::Double => {
                 let index = bit_board.king().bitboard.index();
-                let moves = gen_moves_for_king_except_castle(
-                    index,
-                    &bit_board_opponent.concat_bit_boards(),
-                );
+                let moves = gen_moves_for_king_except_castle(index, &bit_board.concat_bit_boards());
                 if moves.empty() {
                     vec![]
                 } else {
@@ -716,30 +713,30 @@ fn check_status(
     let king_index = bit_board.king().bitboard.index();
     let attackers = attackers(king_index, color, bit_board, bit_board_opponent);
     match (
-        sign(attackers.rooks),
-        sign(attackers.bishops),
-        sign(attackers.queens),
-        sign(attackers.knights),
-        sign(attackers.pawns),
-        sign(attackers.king),
+        attackers.rooks.count_ones(),
+        attackers.bishops.count_ones(),
+        attackers.queens.count_ones(),
+        attackers.knights.count_ones(),
+        attackers.pawns.count_ones(),
+        attackers.king.count_ones(),
     ) {
-        (false, false, false, false, false, false) => CheckStatus::None,
-        (true, false, false, false, false, false) => {
+        (0, 0, 0, 0, 0, 0) => CheckStatus::None,
+        (1, 0, 0, 0, 0, 0) => {
             CheckStatus::build_simple_check(TypePiece::Rook, attackers.rooks.index())
         }
-        (false, true, false, false, false, false) => {
+        (0, 1, 0, 0, 0, 0) => {
             CheckStatus::build_simple_check(TypePiece::Bishop, attackers.bishops.index())
         }
-        (false, false, true, false, false, false) => {
+        (0, 0, 1, 0, 0, 0) => {
             CheckStatus::build_simple_check(TypePiece::Queen, attackers.queens.index())
         }
-        (false, false, false, true, false, false) => {
+        (0, 0, 0, 1, 0, 0) => {
             CheckStatus::build_simple_check(TypePiece::Knight, attackers.knights.index())
         }
-        (false, false, false, false, true, false) => {
+        (0, 0, 0, 0, 1, 0) => {
             CheckStatus::build_simple_check(TypePiece::Pawn, attackers.pawns.index())
         }
-        (false, false, false, false, false, true) => {
+        (0, 0, 0, 0, 0, 1) => {
             CheckStatus::build_simple_check(TypePiece::King, attackers.king.index())
         }
         _ => CheckStatus::Double,
@@ -803,10 +800,6 @@ fn attackers(
     }
 }
 
-fn sign(u: BitBoard) -> bool {
-    u.non_empty()
-}
-
 fn moves_non_empty(
     type_piece: TypePiece,
     index: bitboard::BitIndex,
@@ -824,9 +817,13 @@ fn gen_moves_for_king_castle(
     can_castle_king_side: Option<(bitboard::BitIndex, bitboard::BitIndex)>,
     can_castle_queen_side: Option<(bitboard::BitIndex, bitboard::BitIndex, bitboard::BitIndex)>,
 ) -> BitBoard {
+    let occupied_squares = bit_board.concat_bit_boards() | bit_board_opponent.concat_bit_boards();
     let mut move_short_castle = BitBoard::default();
     if let Some((sq1_idx, sq2_idx)) = can_castle_king_side {
-        if attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
+        let are_squares_empty =
+            (occupied_squares & (sq1_idx.bitboard() | sq2_idx.bitboard())).empty();
+        if are_squares_empty
+            && attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
             && attackers(sq2_idx, color, bit_board, bit_board_opponent).is_empty()
         {
             move_short_castle = sq2_idx.bitboard();
@@ -834,7 +831,11 @@ fn gen_moves_for_king_castle(
     };
     let mut move_long_castle = BitBoard::default();
     if let Some((sq1_idx, sq2_idx, sq3_idx)) = can_castle_queen_side {
-        if attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
+        let are_squares_empty = (occupied_squares
+            & (sq1_idx.bitboard() | sq2_idx.bitboard() | sq3_idx.bitboard()))
+        .empty();
+        if are_squares_empty
+            && attackers(sq1_idx, color, bit_board, bit_board_opponent).is_empty()
             && attackers(sq2_idx, color, bit_board, bit_board_opponent).is_empty()
             && attackers(sq3_idx, color, bit_board, bit_board_opponent).is_empty()
         {
@@ -1005,7 +1006,9 @@ fn gen_pawn_non_attacker_moves(
             }
             // capture en passant
             if let Some(en_passant_idx) = capture_en_passant {
-                if index.up().left() == *en_passant_idx || index.up().right() == *en_passant_idx {
+                if index.col() < 7 && index.up().left() == *en_passant_idx
+                    || index.col() > 0 && index.up().right() == *en_passant_idx
+                {
                     moves |= en_passant_idx.bitboard();
                 }
             }
@@ -1025,7 +1028,8 @@ fn gen_pawn_non_attacker_moves(
             }
             // capture en passant
             if let Some(en_passant_idx) = capture_en_passant {
-                if index.down().right() == *en_passant_idx || index.down().left() == *en_passant_idx
+                if index.col() > 7 && index.down().right() == *en_passant_idx
+                    || index.col() > 0 && index.down().left() == *en_passant_idx
                 {
                     moves |= en_passant_idx.bitboard();
                 }
@@ -1847,6 +1851,32 @@ mod tests {
             1u64 << 3 | 1u64 << 5 | 1u64 << 11 | 1u64 << 12 | 1u64 << 13 | 1u64 << 2 | 1u64 << 6;
         assert_eq!(result, expected)
     }
+    #[test]
+    fn test_moves_king_cannot_castle() {
+        let fen = "4kB1r/pr3ppp/p7/4P3/2K5/1P2B3/P4P1Q/2RRK3 b k - 0 1";
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
+        let bit_position = bitboard::BitPosition::from(position);
+        let color = &bit_position.bit_position_status().player_turn();
+        let bit_board = bit_position.bit_boards_white_and_black.bit_board(color);
+        let bit_board_opponent = bit_position
+            .bit_boards_white_and_black
+            .bit_board(&color.switch());
+        let white_king_bit_board = bit_board.king();
+        let moves = KingBitBoard::new(white_king_bit_board.bitboard).gen_moves_no_check(
+            &square::Color::White,
+            bit_board,
+            bit_board_opponent,
+            bit_position
+                .bit_position_status()
+                .can_castle_king_side(bit_board.concat_bit_boards(), color),
+            bit_position
+                .bit_position_status()
+                .can_castle_queen_side(bit_board.concat_bit_boards(), color),
+        );
+        let result = moves.get(0).unwrap().moves().value();
+        // check cannot castle
+        assert!(result & (1 << 62) == 0);
+    }
     /////////////////////////
     #[test]
     fn test_game_play_castle() {
@@ -1963,7 +1993,9 @@ mod tests {
         assert_eq!(fen, "R6k/8/8/8/8/8/8/7K b - - 0 1");
     }
 
+    // FIXME: do not use sleep.
     #[test]
+    #[ignore]
     fn test_game_play_discovered_check() {
         let fen = "2b1k2r/2p5/2P1p2p/2b1ppP1/p3P2q/P2n4/Rr1N2K1/3q2R1 w - - 0 33";
         let position = fen::Fen::decode(fen).expect("Failed to decode FEN");

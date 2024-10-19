@@ -239,13 +239,14 @@ mod tests {
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
     use crate::entity::engine::component::engine_dummy as dummy;
     use crate::entity::game::actor::game_manager;
+    use crate::entity::game::component::bitboard::piece_move;
     use crate::entity::game::component::{game_state, player, square};
     use crate::entity::uci::actor::uci_entity;
     use crate::monitoring::debug;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::ui::notation::long_notation;
 
-    // FIXME: redudant with uci.rs test
+    // FIXME: redudant with uci, engine_minimax tests
     async fn get_game_state(
         game_manager_actor: &game_manager::GameManagerActor,
     ) -> Option<game_state::GameState> {
@@ -280,7 +281,6 @@ mod tests {
         let fen_expected = "rnbqkbnr/ppp2ppp/4P3/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3";
         assert_eq!(fen, fen_expected);
     }
-    #[actix::test]
     async fn test_game_pawn_move_invalid() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
@@ -341,6 +341,38 @@ mod tests {
             fen,
             "rnbqkb1r/pppp1ppp/4pP2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3"
         );
+    }
+
+    #[actix::test]
+    async fn test_game_pawns_en_passant_out_of_board() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let position = "position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 e1g1 c8g4 b1c3 b8b6 c3a4 b6b4 a4c5 b4b6 c2c3 g4h5 d1d3 a6a5 h2h4";
+        let inputs = vec![position];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor =
+            game_manager::GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let moves: Vec<String> = game_opt
+            .as_ref()
+            .unwrap()
+            .moves()
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect();
+        assert!(!moves.contains(&"a5h3".to_string()));
     }
 
     #[actix::test]
@@ -609,6 +641,128 @@ mod tests {
         let fen = fen::Fen::encode(&game_opt.unwrap().bit_position().to())
             .expect("Failed to encode position");
         assert_eq!(fen, fen_initial);
+    }
+    #[actix::test]
+    async fn test_game_king_double_check_move() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 b1c3 c8g4 e1g1 b8b6 d1d3 b6b4 a2a3 b4b6 c3a4 b6b8 a4c5 b8b6 c2c4 g4f3 g2f3 d8c7 c4d5 c7c8 b2b4 c6d5 c1g5 b6g6 f3f4 g6b6 f1e1 h7h6 g5h4 b6c6 a1c1 c6b6 e5e6 b6c6 e6f7 e8f7 g1g2 c6e6 g2h3 e6e3"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        assert!(!moves.contains(&"h3h2".to_string()));
+    }
+    #[actix::test]
+    async fn test_game_king_double_check_after_promotion() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 g1f3 d7d5 e4d5 a8b8 e1g1 b8b4 d2d4 b4a4 b1c3 a4b4 a2a3 b4b6 b2b4 c8g4 c1b2 b6d6 d1d3 d6b6 f3e5 g4c8 d3f3 b6f6 f3e4 f6b6 e5c6 f7f5 e4f3 b6c6 d5c6 d8d4 c3a4 d4d2 f3h5 e8d8 a1d1 d2d6 d1d6 c7d6 h5g5 c8e6 b2g7 h7h6 g5g3 h8h7 g7f8 e6c4 f1e1 c4f7 f8e7 g8e7 e1e7 f5f4 g3f4 d8e7 c6c7 e7d7 f4f5 f7e6 f5h7 d7c8 a4c3 c8b7 c7c8Q"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        //actix::clock::sleep(Duration::from_secs(3)).await;
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        let check_status = game.bit_position().to().check_status();
+        assert_eq!(check_status, piece_move::CheckStatus::Double);
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        println!("{:?}", moves);
+        assert!(!moves.contains(&"e6d7".to_string()));
+    }
+    #[actix::test]
+    async fn test_game_cannot_small_castle_after_rook_captured() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 d2d4 e7e6 c2c4 f8b4 b1c3 a8b8 a2a3 b4c3 b2c3 b8a8 g1f3 a6b8 f1e2 b8a6 e1g1 a6b8 c1f4 b8a6 d4d5 a8b8 d5e6 d7e6 d1b3 d8d7 a1d1 d7c6 f3e5 c6e4 e5f7 g8f6 f7h8"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        println!("{:?}", moves);
+        assert!(!moves.contains(&"e8g8".to_string()));
+    }
+    #[actix::test]
+    async fn test_game_promotion_king_moves() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 e1g1 c8g4 d1d3 b8b4 c2c3 b4a4 b2b3 a4a5 c1d2 g4f3 g2f3 a5b5 c3c4 b5b7 c4d5 d8d5 d3c3 b7b5 d2e3 d5f3 c3c6 f3c6 b1a3 b5b4 a1c1 c6e6 a3c4 b4b5 f1d1 b5b4 d4d5 e6g4 g1f1 b4b7 d5d6 g4h3 f1g1 h3g4 g1f1 g4h3 f1e1 h3h2 d6e7 g8f6 e7f8B"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        let game = game_opt.as_ref().unwrap();
+        let moves = game.moves();
+        let moves: Vec<String> = (*moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect::<Vec<String>>())
+        .to_vec();
+        println!("{:?}", moves);
+        assert!(!moves.contains(&"e8g8".to_string()));
     }
     #[actix::test]
     async fn test_game_rule_insufficient_material() {

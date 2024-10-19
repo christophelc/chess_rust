@@ -109,7 +109,7 @@ where
                     )));
                     events.push(event::Event::SearchMoves(go.search_moves().clone()));
                 }
-                events.push(event::Event::StartEngine)
+                events.push(event::Event::StartEngineThinking)
             }
             command::Command::Stop => {
                 events.push(event::Event::WriteDebug("Stopping search.".to_string()));

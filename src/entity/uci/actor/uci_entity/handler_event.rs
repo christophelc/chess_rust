@@ -143,7 +143,7 @@ impl<R: UciRead> Handler<event::Event> for UciEntity<R> {
                     }
                 }
             }
-            event::Event::StartEngine => {
+            event::Event::StartEngineThinking => {
                 self.game_manager_actor
                     .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking);
                 self.state_polling = StatePollingUciEntity::Polling;

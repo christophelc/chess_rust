@@ -244,6 +244,21 @@ fn update_status(
         }
         _ => {}
     }
+    match b_move.capture {
+        Some(TypePiece::Rook) if b_move.color == Color::Black && b_move.end() == BitIndex(7) => {
+            bit_position_status.set_castling_white_king_side(false);
+        }
+        Some(TypePiece::Rook) if b_move.color == Color::Black && b_move.end() == BitIndex(0) => {
+            bit_position_status.set_castling_white_queen_side(false);
+        }
+        Some(TypePiece::Rook) if b_move.color == Color::White && b_move.end() == BitIndex(63) => {
+            bit_position_status.set_castling_black_king_side(false);
+        }
+        Some(TypePiece::Rook) if b_move.color == Color::White && b_move.end() == BitIndex(56) => {
+            bit_position_status.set_castling_black_queen_side(false);
+        }
+        _ => {}
+    }
     // Change player turn
     bit_position_status.set_player_turn_white(b_move.color == Color::Black);
     // n_moves
@@ -561,6 +576,9 @@ impl BitBoard {
     }
     pub fn empty(&self) -> bool {
         self.0 == 0
+    }
+    pub fn count_ones(&self) -> u32 {
+        self.0.count_ones()
     }
     // contains zero or one piece max
     pub fn one_bit_set_max(&self) -> bool {
