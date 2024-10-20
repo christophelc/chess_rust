@@ -95,7 +95,7 @@ impl EngineMinimax {
         let (best_move, _) = self.minimax_rec("", &game, 0, &root_node_id, &mut graph);
         // FIXME: send graph to actor
         if self.debug_actor_opt.is_some() {
-            Self::display_tree(&graph, root_node_id, 0);
+            //Self::display_tree(&graph, root_node_id, 0);
         }
         best_move
     }
@@ -117,6 +117,9 @@ impl EngineMinimax {
             let mut move_score = NodeNameAndScore::new(long_algebric_move.cast());
             // update graph with new child with score equals to zero
             let node_id: petgraph::graph::NodeIndex = graph.add_node(move_score.clone());
+            if current_depth == 0 {
+                println!("{}", updated_variant);
+            }
             graph.add_edge(*node_parent_id, node_id, ());
             // TODO: implement 'go back' feature instead of cloning game_state
             let mut game_clone = game.clone();

@@ -39,7 +39,7 @@ pub fn gen_moves(bit_position: &bitboard::BitPosition) -> Vec<bitboard::BitBoard
     bit_boards_white_and_black.gen_moves_for_all(
         color,
         check_status,
-        &capture_en_passant,
+        capture_en_passant.as_ref(),
         bit_position_status,
     )
 }

@@ -15,7 +15,6 @@ pub struct Clock {
 }
 
 impl Clock {
-    #[cfg(test)]
     pub fn new(
         id: &str,
         starting_time: u64,

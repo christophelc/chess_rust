@@ -86,7 +86,7 @@ impl GameState {
         self.moves = bit_boards_white_and_black.gen_moves_for_all(
             &color,
             check_status,
-            &capture_en_passant,
+            capture_en_passant.as_ref(),
             bit_position_status,
         );
         if self.moves.is_empty() {
@@ -228,7 +228,7 @@ fn check_move_level2(
     let moves = bit_boards_white_and_black.gen_moves_for_all(
         &color,
         check_status,
-        &capture_en_passant,
+        capture_en_passant.as_ref(),
         bit_position_status,
     );
     if moves.iter().any(|m| *m == b_move) {

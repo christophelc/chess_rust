@@ -56,7 +56,7 @@ async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     let moves = bit_position.bit_boards_white_and_black().gen_moves_for_all(
         &square::Color::White,
         piece_move::CheckStatus::None,
-        &None,
+        None,
         bit_position.bit_position_status(),
     );
     let moves_as_str: Vec<String> = moves

@@ -20,7 +20,6 @@ pub struct SetClocks {
     white_clock_actor_opt: Option<chessclock::ClockActor>,
     black_clock_actor_opt: Option<chessclock::ClockActor>,
 }
-#[cfg(test)]
 impl SetClocks {
     pub fn new(
         white_clock_actor_opt: Option<chessclock::ClockActor>,
@@ -42,19 +41,21 @@ impl Handler<SetClocks> for GameManager {
                 msg
             )));
         }
-        // If white clock exists, terminate it before setting a new one
-        if let Some(clock_actor) = &self.white_clock_actor_opt {
-            clock_actor.do_send(chessclock::handler_clock::TerminateClock);
-        }
-
-        // If black clock exists, terminate it before setting a new one
-        if let Some(clock_actor) = &self.black_clock_actor_opt {
-            clock_actor.do_send(chessclock::handler_clock::TerminateClock);
-        }
-
         // Set the new clock actors from the message
-        self.white_clock_actor_opt = msg.white_clock_actor_opt;
-        self.black_clock_actor_opt = msg.black_clock_actor_opt;
+        if msg.white_clock_actor_opt.is_some() {
+            // If white clock exists, terminate it before setting a new one
+            if let Some(clock_actor) = &self.white_clock_actor_opt {
+                clock_actor.do_send(chessclock::handler_clock::TerminateClock);
+            }
+            self.white_clock_actor_opt = msg.white_clock_actor_opt;
+        }
+        if msg.black_clock_actor_opt.is_some() {
+            // If black clock exists, terminate it before setting a new one
+            if let Some(clock_actor) = &self.black_clock_actor_opt {
+                clock_actor.do_send(chessclock::handler_clock::TerminateClock);
+            }
+            self.black_clock_actor_opt = msg.black_clock_actor_opt;
+        }
     }
 }
 

@@ -1,15 +1,17 @@
 use actix::{
     dev::ContextFutureSpawner, ActorFutureExt, AsyncContext, Handler, Message, WrapFuture,
 };
+use actix::{Actor, Addr};
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::game::component::square::Switch;
+use crate::entity::game::component::square::{self, Switch};
 use crate::{
     entity::{clock::actor::chessclock, game::component::game_state},
     monitoring::debug,
     ui::notation::{fen, long_notation},
 };
 
+use super::handler_clock;
 use super::{handler_game::TimestampedBitBoardMove, GameManager};
 
 #[derive(Debug, Message)]
@@ -49,7 +51,10 @@ impl Handler<UciCommand> for GameManager {
             UciCommand::Btime(time) => {
                 match &self.black_clock_actor_opt {
                     None => {
-                        // do nothing
+                        let black_clock_actor =
+                            chessclock::Clock::new("white", time, 0, ctx.address()).start();
+                        ctx.address()
+                            .do_send(handler_clock::SetClocks::new(None, Some(black_clock_actor)));
                     }
                     Some(clock_actor) => {
                         clock_actor.do_send(chessclock::handler_clock::SetRemainingTime::new(time));
@@ -80,7 +85,10 @@ impl Handler<UciCommand> for GameManager {
             UciCommand::Wtime(time) => {
                 match &self.white_clock_actor_opt {
                     None => {
-                        // do nothing
+                        let white_clock_actor =
+                            chessclock::Clock::new("white", time, 0, ctx.address()).start();
+                        ctx.address()
+                            .do_send(handler_clock::SetClocks::new(Some(white_clock_actor), None));
                     }
                     Some(white_clock_actor) => {
                         white_clock_actor
@@ -156,6 +164,17 @@ impl Handler<UciCommand> for GameManager {
                                 )));
                             }
                             engine_actor.do_send(msg);
+                            match (&self.white_clock_actor_opt, &self.black_clock_actor_opt) {
+                                (Some(white_clock_actor), Some(black_clock_actor)) => {
+                                    start_or_switch_clock(
+                                        color,
+                                        &white_clock_actor,
+                                        &black_clock_actor,
+                                        self.debug_actor_opt.clone(),
+                                    );
+                                }
+                                _ => {}
+                            }
                         }
                         Err(err) => result = Err(err),
                     }
@@ -255,5 +274,35 @@ impl Handler<UciCommand> for GameManager {
             },
         }
         result
+    }
+}
+
+fn start_or_switch_clock(
+    color: square::Color,
+    white_clock_actor: &chessclock::ClockActor,
+    black_clock_actor: &chessclock::ClockActor,
+    debug_actor_opt: Option<Addr<debug::DebugEntity>>,
+) {
+    match color {
+        square::Color::White => {
+            if let Some(debug_actor) = debug_actor_opt {
+                let msg = debug::AddMessage(
+                    "Send to black clock 'Pause' and to white clock 'Resume'".to_string(),
+                );
+                debug_actor.do_send(msg);
+            }
+            black_clock_actor.do_send(chessclock::handler_clock::PauseClock);
+            white_clock_actor.do_send(chessclock::handler_clock::ResumeClock);
+        }
+        square::Color::Black => {
+            if let Some(debug_actor) = debug_actor_opt {
+                let msg = debug::AddMessage(
+                    "Send to white clock 'Pause' and to black clock 'Resume'".to_string(),
+                );
+                debug_actor.do_send(msg);
+            }
+            black_clock_actor.do_send(chessclock::handler_clock::ResumeClock);
+            white_clock_actor.do_send(chessclock::handler_clock::PauseClock);
+        }
     }
 }
