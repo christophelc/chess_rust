@@ -380,7 +380,42 @@ mod tests {
     }
 
     #[actix::test]
-    async fn test_game_pawns_en_passant_out_of_board() {
+    async fn test_game_pawns_en_passant_out_of_board_white() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
+        let inputs = vec!["position startpos moves b2b4 b8a6 b4b5 a6b4 c2c3 b4d5 e2e4 d5b6 a2a4 a8b8 a4a5 b6a8 c3c4 a7a6 b5a6 h7h5"];
+        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let game_manager_actor = GameManager::start(GameManager::new(debug_actor_opt.clone()));
+        let uci_entity = uci_entity::UciEntity::new(
+            uci_reader,
+            game_manager_actor.clone(),
+            debug_actor_opt.clone(),
+        );
+        let uci_entity_actor = uci_entity.start();
+        for _i in 0..inputs.len() {
+            let _ = uci_entity_actor
+                .send(uci_entity::handler_read::ReadUserInput)
+                .await;
+        }
+        let game_opt = get_game_state(&game_manager_actor).await;
+        assert!(game_opt.is_some());
+        println!(
+            "{}",
+            game_opt.clone().unwrap().bit_position().to().chessboard()
+        );
+        let moves: Vec<String> = game_opt
+            .as_ref()
+            .unwrap()
+            .moves()
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect();
+        println!("{:?}", moves);
+        assert!(!moves.contains(&"a6h6".to_string()));
+    }
+
+    #[actix::test]
+    async fn test_game_pawns_en_passant_out_of_board_black() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
         let position = "position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 e1g1 c8g4 b1c3 b8b6 c3a4 b6b4 a4c5 b4b6 c2c3 g4h5 d1d3 a6a5 h2h4";

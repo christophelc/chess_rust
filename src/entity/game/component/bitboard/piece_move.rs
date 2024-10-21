@@ -1026,8 +1026,8 @@ fn gen_pawn_non_attacker_moves(
             }
             // capture en passant
             if let Some(en_passant_idx) = capture_en_passant {
-                if index.col() < 7 && index.up().left() == *en_passant_idx
-                    || index.col() > 0 && index.up().right() == *en_passant_idx
+                if index.col() > 0 && index.up().left() == *en_passant_idx
+                    || index.col() < 7 && index.up().right() == *en_passant_idx
                 {
                     moves |= en_passant_idx.bitboard();
                 }
