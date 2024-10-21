@@ -11,6 +11,8 @@ use crate::{entity::game::component::bitboard, monitoring::debug};
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 
+const ROOT_ID: &str = "root";
+
 #[derive(Clone)]
 struct Score(i32);
 impl fmt::Display for Score {
@@ -35,6 +37,9 @@ impl NodeNameAndScore {
             move_str,
             score: Score(0),
         }
+    }
+    fn is_root(&self) -> bool {
+        self.move_str == ROOT_ID.to_string()
     }
     fn set_score(&mut self, score: Score) {
         self.score = score;
@@ -90,7 +95,7 @@ impl EngineMinimax {
     }
     fn minimax(&self, game: &game_state::GameState) -> bitboard::BitBoardMove {
         let mut graph = petgraph::Graph::<NodeNameAndScore, ()>::new();
-        let root_content = NodeNameAndScore::new("root".to_string());
+        let root_content = NodeNameAndScore::new(ROOT_ID.to_string());
         let root_node_id = graph.add_node(root_content);
         let (best_move, _) = self.minimax_rec("", &game, 0, &root_node_id, &mut graph);
         // FIXME: send graph to actor
@@ -149,7 +154,10 @@ impl EngineMinimax {
                     }
                 }
                 // the last mave wins => it is a very good move
-                game_state::EndGame::Mat(_color) => Score(i32::MAX),
+                game_state::EndGame::Mat(_color) => {
+                    //println!("Mat found for {}", updated_variant);
+                    Score(i32::MAX)
+                }
                 game_state::EndGame::TimeOutLost(color)
                     if color
                         == game_clone
@@ -169,7 +177,11 @@ impl EngineMinimax {
                 // update aggregated score in the parent node
                 if let Some(node_parent) = graph.node_weight_mut(*node_parent_id) {
                     let mut content = NodeNameAndScore::new(node_parent.move_str.clone());
-                    content.set_score(Score(max_score));
+                    if node_parent.is_root() {
+                        content.set_score(Score(max_score));
+                    } else {
+                        content.set_score(Score(-max_score));
+                    }
                     *node_parent = content;
                 }
             }
