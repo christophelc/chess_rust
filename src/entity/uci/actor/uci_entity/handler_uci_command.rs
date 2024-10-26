@@ -4,12 +4,9 @@ use crate::entity::{
 };
 use actix::{dev::ContextFutureSpawner, AsyncContext, Handler, WrapFuture};
 
-use super::{handler_event, UciEntity, UciRead};
+use super::{handler_event, UciEntity};
 
-impl<R> Handler<command::Command> for UciEntity<R>
-where
-    R: UciRead + 'static,
-{
+impl Handler<command::Command> for UciEntity {
     type Result = ();
 
     fn handle(&mut self, msg: command::Command, ctx: &mut Self::Context) -> Self::Result {

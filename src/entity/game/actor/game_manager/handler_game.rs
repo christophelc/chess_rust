@@ -1,4 +1,4 @@
-use actix::{ActorContext, Addr, Handler, Message};
+use actix::{ActorContext, Handler, Message};
 
 use crate::{
     entity::{
@@ -14,28 +14,19 @@ use crate::entity::engine::component::engine_logic as logic;
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct GetBestMoveFromUci<R>
-where
-    R: uci_entity::UciRead + 'static,
-{
-    uci_caller: Addr<uci_entity::UciEntity<R>>,
+pub struct GetBestMoveFromUci {
+    uci_caller: uci_entity::UciActor,
 }
-impl<R> GetBestMoveFromUci<R>
-where
-    R: uci_entity::UciRead + 'static,
-{
-    pub fn new(uci_caller: Addr<uci_entity::UciEntity<R>>) -> Self {
+impl GetBestMoveFromUci {
+    pub fn new(uci_caller: uci_entity::UciActor) -> Self {
         Self { uci_caller }
     }
 }
 
-impl<R> Handler<GetBestMoveFromUci<R>> for GameManager
-where
-    R: uci_entity::UciRead + 'static,
-{
+impl Handler<GetBestMoveFromUci> for GameManager {
     type Result = ();
 
-    fn handle(&mut self, msg: GetBestMoveFromUci<R>, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetBestMoveFromUci, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(
                 "game_manager_actor receive GetBestMoveFromUci".to_string(),

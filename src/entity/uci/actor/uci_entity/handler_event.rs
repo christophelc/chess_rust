@@ -12,14 +12,14 @@ use crate::{
 };
 
 use super::{
-    handler_poll, handler_uci, HandleEventError, StatePollingUciEntity, UciEntity, UciRead,
+    handler_poll, handler_uci, HandleEventError, StatePollingUciEntity, UciEntity,
 };
 
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct ProcessEvents(pub Vec<event::Event>);
 
-impl<R: UciRead> Handler<ProcessEvents> for UciEntity<R> {
+impl Handler<ProcessEvents> for UciEntity {
     type Result = ();
 
     fn handle(&mut self, msg: ProcessEvents, ctx: &mut Self::Context) -> Self::Result {
@@ -49,7 +49,7 @@ impl<R: UciRead> Handler<ProcessEvents> for UciEntity<R> {
     }
 }
 
-impl<R: UciRead> Handler<event::Event> for UciEntity<R> {
+impl Handler<event::Event> for UciEntity {
     type Result = ();
 
     fn handle(&mut self, msg: event::Event, ctx: &mut Self::Context) -> Self::Result {

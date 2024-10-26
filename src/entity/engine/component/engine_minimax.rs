@@ -310,7 +310,7 @@ mod tests {
         //let debug_actor_opt: Option<debug::DebugActor> = None;
         let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
         let inputs = vec!["position startpos moves e2e4 b8a6 f1a6 b7a6 d2d4 d7d5 e4e5 c7c6 g1f3 a8b8 e1g1 c8g4 d1d3 b8b4 c2c3 b4a4 b2b3 a4a5 c1d2 g4f3 g2f3 a5b5 c3c4 b5b7 c4d5 d8d5 d3c3 b7b5 d2e3 d5f3 c3c6 f3c6 b1a3 b5b4 a1c1 c6e6 a3c4 b4b5 f1d1 b5b4 d4d5 e6g4 g1f1 b4b7 d5d6 g4h3 f1g1 h3g4 g1f1 g4h3 f1e1 h3h2 d6e7 g8f6", "go"];
-        let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
         let mut engine_player1 = engine_minimax::EngineMinimax::new(

@@ -2,7 +2,7 @@ use actix::{ActorContext, Handler, Message};
 
 use crate::{entity::game::actor::game_manager, monitoring::debug};
 
-use super::{StatePollingUciEntity, UciEntity, UciRead};
+use super::{StatePollingUciEntity, UciEntity};
 use crate::entity::engine::component::engine_logic as logic;
 
 use std::io::{self, Write};
@@ -11,7 +11,7 @@ use std::io::{self, Write};
 #[rtype(result = "Result<(), io::Error>")]
 pub struct DisplayEngineId(pub logic::EngineId);
 
-impl<R: UciRead> Handler<DisplayEngineId> for UciEntity<R> {
+impl Handler<DisplayEngineId> for UciEntity {
     type Result = Result<(), io::Error>;
 
     fn handle(&mut self, msg: DisplayEngineId, _ctx: &mut Self::Context) -> Self::Result {
@@ -31,7 +31,7 @@ pub enum UciResult {
     Err(super::HandleEventError),
 }
 
-impl<R: UciRead> Handler<UciResult> for UciEntity<R> {
+impl Handler<UciResult> for UciEntity {
     type Result = ();
 
     fn handle(&mut self, msg: UciResult, ctx: &mut Self::Context) -> Self::Result {

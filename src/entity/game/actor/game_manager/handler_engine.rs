@@ -8,27 +8,18 @@ use super::GameManager;
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct GetCurrentEngineAsync<R>
-where
-    R: uci_entity::UciRead + 'static,
-{
-    uci_caller: Addr<uci_entity::UciEntity<R>>,
+pub struct GetCurrentEngineAsync {
+    uci_caller: uci_entity::UciActor,
 }
-impl<R> GetCurrentEngineAsync<R>
-where
-    R: uci_entity::UciRead + 'static,
-{
-    pub fn new(uci_caller: Addr<uci_entity::UciEntity<R>>) -> Self {
+impl GetCurrentEngineAsync {
+    pub fn new(uci_caller: uci_entity::UciActor) -> Self {
         Self { uci_caller }
     }
 }
-impl<R> Handler<GetCurrentEngineAsync<R>> for GameManager
-where
-    R: uci_entity::UciRead + 'static,
-{
+impl Handler<GetCurrentEngineAsync> for GameManager {
     type Result = ();
 
-    fn handle(&mut self, msg: GetCurrentEngineAsync<R>, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetCurrentEngineAsync, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(
                 "game_manager_actor receive GetCurrentEngineAsync".to_string(),

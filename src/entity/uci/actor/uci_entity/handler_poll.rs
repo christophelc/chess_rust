@@ -6,7 +6,7 @@ use crate::{
 };
 use actix::{AsyncContext, Handler, Message};
 
-use super::{StatePollingUciEntity, UciEntity, UciRead};
+use super::{StatePollingUciEntity, UciEntity};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -14,10 +14,7 @@ pub struct PollBestMove;
 
 // TODO: Uci is in charge of polling game_engine_actor for best move each 100ms
 // Handle polling requests from UCI actor
-impl<R> Handler<PollBestMove> for UciEntity<R>
-where
-    R: UciRead + 'static,
-{
+impl Handler<PollBestMove> for UciEntity {
     type Result = ();
 
     fn handle(&mut self, _msg: PollBestMove, ctx: &mut Self::Context) -> Self::Result {

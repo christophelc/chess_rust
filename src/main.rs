@@ -38,7 +38,7 @@ fn fen() {
 async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     println!("Inital position with move e4");
     let inputs = vec!["position startpos moves e2e4 "];
-    let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+    let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
     let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None);
     let uci_entity_actor = uci_entity.start();
     uci_entity_actor.do_send(uci_entity::handler_read::ReadUserInput);
@@ -75,7 +75,7 @@ fn uci_loop(
     game_manager_actor: &game_manager::GameManagerActor,
     stdin: &mut Arc<Mutex<io::Stdin>>,
 ) {
-    let uci_reader = uci_entity::UciReadWrapper::new(stdin.clone());
+    let uci_reader = Box::new(uci_entity::UciReadWrapper::new(stdin.clone()));
     let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None);
     let uci_entity_actor = uci_entity.start();
     uci_entity_actor.do_send(uci_entity::handler_read::ReadUserInput);
@@ -90,7 +90,7 @@ async fn tui_loop(
 ) {
     // init the game
     let inputs = vec!["position startpos"];
-    let uci_reader = uci_entity::UciReadVecStringWrapper::new(&inputs);
+    let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
     // we don't ignore error in tui mode
     let debug_actor = debug::DebugEntity::default().start();
     let uci_entity =
@@ -173,7 +173,7 @@ async fn main() {
     let players = player::Players::new(player1, player2);
     game_manager.set_players(players);
     let game_manager_actor = game_manager.start();
-    let uci_reader = uci_entity::UciReadWrapper::new(stdin.clone());
+    let uci_reader = Box::new(uci_entity::UciReadWrapper::new(stdin.clone()));
     let uci_entity = uci_entity::UciEntity::new(
         uci_reader,
         game_manager_actor.clone(),

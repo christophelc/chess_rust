@@ -2,13 +2,13 @@ use actix::{AsyncContext, Handler, Message};
 
 use crate::{entity::uci::component::command::parser, monitoring::debug};
 
-use super::{UciEntity, UciRead};
+use super::UciEntity;
 
 #[derive(Message)]
 #[rtype(result = "Result<(), Vec<String>> ")]
 pub struct ReadUserInput;
 
-impl<R: UciRead> Handler<ReadUserInput> for UciEntity<R> {
+impl Handler<ReadUserInput> for UciEntity {
     type Result = Result<(), Vec<String>>;
 
     fn handle(&mut self, _msg: ReadUserInput, ctx: &mut Self::Context) -> Self::Result {

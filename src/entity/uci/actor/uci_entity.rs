@@ -4,7 +4,7 @@ pub mod handler_read;
 pub mod handler_uci;
 pub mod handler_uci_command;
 
-use actix::{Actor, Context};
+use actix::{Actor, Addr, Context};
 use std::{
     error::Error,
     io::{self, Stdin, Stdout},
@@ -24,20 +24,16 @@ pub enum StatePollingUciEntity {
     Polling,
 }
 
-pub struct UciEntity<R>
-where
-    R: UciRead + 'static,
-{
+pub struct UciEntity {
     stdout: Stdout,
     state_polling: StatePollingUciEntity,
-    uci_reader: R,
+    uci_reader: Box<dyn UciRead + 'static>,
     game_manager_actor: game_manager::GameManagerActor,
     debug_actor_opt: Option<debug::DebugActor>,
 }
-impl<R> Actor for UciEntity<R>
-where
-    R: UciRead + 'static,
-{
+pub type UciActor = Addr<UciEntity>;
+
+impl Actor for UciEntity {
     type Context = Context<Self>;
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {
@@ -49,12 +45,9 @@ where
     }
 }
 
-impl<R> UciEntity<R>
-where
-    R: UciRead + 'static,
-{
+impl UciEntity {
     pub fn new(
-        uci_reader: R,
+        uci_reader: Box<dyn UciRead + 'static>,
         game_manager_actor: game_manager::GameManagerActor,
         debug_actor_opt: Option<debug::DebugActor>,
     ) -> Self {
@@ -155,14 +148,14 @@ mod tests {
     use crate::entity::game::component::{game_state, parameters, player};
     use crate::entity::uci::component::command::{self, parser};
     use crate::ui::notation::fen::{self, EncodeUserInput};
-    use actix::{Actor, Addr};
+    use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
     use crate::entity::engine::component::engine_dummy as dummy;
 
     // read all inputs and execute UCI commands
     async fn exec_inputs(
-        uci_entity_actor: Addr<UciEntity<UciReadVecStringWrapper>>,
+        uci_entity_actor: UciActor,
         inputs: Vec<&str>,
     ) {
         for _i in 0..inputs.len() {
@@ -193,7 +186,7 @@ mod tests {
         let input = "position startpos";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -218,7 +211,7 @@ mod tests {
         let input = "position startpos moves e2e4 e7e5 g1f3";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -244,7 +237,7 @@ mod tests {
         let input = format!("position fen {}", fen::FEN_START_POSITION);
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _) = init(&input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -271,7 +264,7 @@ mod tests {
         );
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -299,7 +292,7 @@ mod tests {
         );
         let inputs = vec![input.as_str()];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -323,7 +316,7 @@ mod tests {
         let input = "position startpos";
         let inputs = vec![input];
         let (game_manager_actor, _command) = init(&input).await;
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,
             game_manager_actor.clone(),
@@ -347,7 +340,7 @@ mod tests {
             "position startpos",
             "go depth 3 movetime 5000 wtime 3600000 btime 3600001",
         ];
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
         let engine_player1_dispatcher =
@@ -424,7 +417,7 @@ mod tests {
             "position startpos",
             "go wtime 246000 btime 240000 winc 6000 binc 6000",
         ];
-        let uci_reader = UciReadVecStringWrapper::new(&inputs);
+        let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
         engine_player1.set_id_number("white");

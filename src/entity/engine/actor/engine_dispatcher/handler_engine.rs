@@ -1,4 +1,4 @@
-use actix::{Addr, Handler, Message};
+use actix::{Handler, Message};
 
 use crate::entity::engine::component::engine_logic as logic;
 use crate::entity::game::component::game_state;
@@ -32,27 +32,19 @@ impl Handler<EngineGetId> for EngineDispatcher {
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct EngineGetIdAsync<R>
-where
-    R: uci_entity::UciRead + 'static,
-{
-    uci_caller: Addr<uci_entity::UciEntity<R>>,
+pub struct EngineGetIdAsync {
+    uci_caller: uci_entity::UciActor,
 }
-impl<R> EngineGetIdAsync<R>
-where
-    R: uci_entity::UciRead + 'static,
+impl EngineGetIdAsync
 {
-    pub fn new(uci_caller: Addr<uci_entity::UciEntity<R>>) -> Self {
+    pub fn new(uci_caller: uci_entity::UciActor) -> Self {
         Self { uci_caller }
     }
 }
-impl<R> Handler<EngineGetIdAsync<R>> for EngineDispatcher
-where
-    R: uci_entity::UciRead + 'static,
-{
+impl Handler<EngineGetIdAsync> for EngineDispatcher {
     type Result = ();
 
-    fn handle(&mut self, msg: EngineGetIdAsync<R>, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: EngineGetIdAsync, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "EngineDispatcher for engine id {:?} receive EngineGetIdAsync",
