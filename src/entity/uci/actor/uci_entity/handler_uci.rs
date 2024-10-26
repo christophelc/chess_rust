@@ -1,8 +1,8 @@
 use actix::{ActorContext, Handler, Message};
 
-use crate::{entity::game::actor::game_manager, monitoring::debug};
+use crate::{entity::{engine::component::ts_best_move, game::actor::game_manager}, monitoring::debug};
 
-use super::{StatePollingUciEntity, UciEntity};
+use super::UciEntity;
 use crate::entity::engine::component::engine_logic as logic;
 
 use std::io::{self, Write};
@@ -27,7 +27,7 @@ impl Handler<DisplayEngineId> for UciEntity {
 #[rtype(result = "()")]
 pub enum UciResult {
     Quit,
-    DisplayBestMove(Option<game_manager::TimestampedBestMove>, bool), // maybe move, display in uci ui 'bestmove ...': bool
+    DisplayBestMove(Option<ts_best_move::TimestampedBestMove>, bool), // maybe move, display in uci ui 'bestmove ...': bool
     Err(super::HandleEventError),
 }
 
@@ -54,7 +54,6 @@ impl Handler<UciResult> for UciEntity {
                         let _ = writeln!(self.stdout, "{}", msg);
                         self.stdout.flush().unwrap();
                     }
-                    self.state_polling = StatePollingUciEntity::Pending;
                 }
             }
             UciResult::Err(err) => {

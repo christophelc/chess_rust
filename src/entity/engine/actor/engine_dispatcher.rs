@@ -5,17 +5,19 @@ use std::sync::Arc;
 use actix::prelude::*;
 use tokio::task::{spawn_local, JoinHandle};
 
-use crate::entity::engine::component::engine_logic as logic;
+use crate::entity::engine::component::{engine_logic as logic, ts_bitboard_move};
 use crate::entity::game::actor::game_manager;
 use crate::entity::game::component::bitboard::BitBoardMove;
 use crate::entity::game::component::game_state;
+use crate::entity::uci::actor::uci_entity;
 use crate::monitoring::debug;
 
 pub struct EngineDispatcher {
     engine: Arc<dyn logic::Engine + Send + Sync>, // EngineActor dans un Arc
     debug_actor_opt: Option<debug::DebugActor>,
+    uci_caller_opt: Option<uci_entity::UciActor>,
     engine_status: EngineStatus,
-    ts_best_move_opt: Option<game_manager::handler_game::TimestampedBitBoardMove>,
+    ts_best_move_opt: Option<ts_bitboard_move::TimestampedBitBoardMove>,
     self_actor_opt: Option<Addr<EngineDispatcher>>,
     game_manager_actor_opt: Option<game_manager::GameManagerActor>,
     game_opt: Option<game_state::GameState>, // initial game to be played
@@ -29,6 +31,7 @@ impl EngineDispatcher {
         Self {
             engine,
             debug_actor_opt,
+            uci_caller_opt: None,
             engine_status: EngineStatus::default(),
             game_manager_actor_opt: None,
             ts_best_move_opt: None,
@@ -37,12 +40,12 @@ impl EngineDispatcher {
             thread_find_best_move_opt: None,
         }
     }
-    fn get_best_move(&self) -> Option<game_manager::handler_game::TimestampedBitBoardMove> {
+    fn get_best_move(&self) -> Option<ts_bitboard_move::TimestampedBitBoardMove> {
         self.ts_best_move_opt.clone()
     }
     fn set_best_move(&mut self, best_move_opt: Option<BitBoardMove>) {
         self.ts_best_move_opt = best_move_opt.map(|best_move| {
-            game_manager::handler_game::TimestampedBitBoardMove::new(best_move, self.engine.id())
+            ts_bitboard_move::TimestampedBitBoardMove::new(best_move, self.engine.id())
         });
     }
     fn set_is_thinking(&mut self, is_thinking: bool) {

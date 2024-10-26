@@ -4,7 +4,9 @@ use actix::{
 use actix::{Actor, Addr};
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+use crate::entity::engine::component::ts_bitboard_move;
 use crate::entity::game::component::square::{self, Switch};
+use crate::entity::uci::actor::uci_entity;
 use crate::{
     entity::{clock::actor::chessclock, game::component::game_state},
     monitoring::debug,
@@ -12,7 +14,7 @@ use crate::{
 };
 
 use super::handler_clock;
-use super::{handler_game::TimestampedBitBoardMove, GameManager};
+use super::GameManager;
 
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
@@ -21,7 +23,7 @@ pub enum UciCommand {
     BtimeInc(u64),                                             // Update increment clock for black
     CleanResources,                                            // Clean resources
     DepthFinite(u32),                                          // Set depth
-    EngineStartThinking,                                       // Go command: start calculating
+    EngineStartThinking(uci_entity::UciActor),                                       // Go command: start calculatin(g
     EngineStopThinking,                                        // Stop command: retrieve best move
     InitPosition,                                              // Set starting position
     MaxTimePerMoveInMs(u32),                                   // Set maximum time per move
@@ -144,7 +146,7 @@ impl Handler<UciCommand> for GameManager {
             UciCommand::ValidMoves { moves } => {
                 result = self.play_moves(moves);
             }
-            UciCommand::EngineStartThinking => {
+            UciCommand::EngineStartThinking(uci_caller) => {
                 if let Some(ref game_state) = &self.game_state_opt {
                     let color = game_state
                         .bit_position()
@@ -156,6 +158,7 @@ impl Handler<UciCommand> for GameManager {
                             let msg = dispatcher::handler_engine::EngineStartThinking::new(
                                 game_state.clone(),
                                 ctx.address().clone(),
+                                uci_caller,
                             );
                             if let Some(debug_actor) = &self.debug_actor_opt {
                                 debug_actor.do_send(debug::AddMessage(format!(
@@ -227,7 +230,7 @@ impl Handler<UciCommand> for GameManager {
                                 .send(engine_msg)
                                 .into_actor(self)
                                 .map(
-                                    move |result: Result<Option<TimestampedBitBoardMove>, _>,
+                                    move |result: Result<Option<ts_bitboard_move::TimestampedBitBoardMove>, _>,
                                           act,
                                           _ctx| {
                                         match result {

@@ -1,7 +1,8 @@
 use actix::{Handler, Message};
 
-use crate::entity::engine::component::engine_logic as logic;
+use crate::entity::engine::component::{engine_logic as logic, ts_best_move, ts_bitboard_move};
 use crate::entity::game::component::game_state;
+use crate::ui::notation::long_notation;
 use crate::{
     entity::{
         game::{actor::game_manager, component::bitboard},
@@ -75,10 +76,10 @@ impl Handler<EngineGetStatus> for EngineDispatcher {
 }
 
 #[derive(Debug, Message, Default)]
-#[rtype(result = "Option<game_manager::handler_game::TimestampedBitBoardMove>")]
+#[rtype(result = "Option<ts_bitboard_move::TimestampedBitBoardMove>")]
 pub struct EngineGetBestMove;
 impl Handler<EngineGetBestMove> for EngineDispatcher {
-    type Result = Option<game_manager::handler_game::TimestampedBitBoardMove>;
+    type Result = Option<ts_bitboard_move::TimestampedBitBoardMove>;
 
     fn handle(&mut self, msg: EngineGetBestMove, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(debug_actor) = &self.debug_actor_opt {
@@ -94,31 +95,74 @@ impl Handler<EngineGetBestMove> for EngineDispatcher {
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct EngineBestMoveFound(pub bitboard::BitBoardMove);
-impl Handler<EngineBestMoveFound> for EngineDispatcher {
+pub struct EngineEndOfAnalysis(pub bitboard::BitBoardMove);
+impl Handler<EngineEndOfAnalysis> for EngineDispatcher {
     type Result = ();
 
-    fn handle(&mut self, msg: EngineBestMoveFound, _ctx: &mut Self::Context) -> Self::Result {
-        self.reset_thinking();
-        let forward = game_manager::handler_game::SetBestMove::new(msg.0, self.engine.id());
+    fn handle(&mut self, msg: EngineEndOfAnalysis, _ctx: &mut Self::Context) -> Self::Result {
+        self.reset_thinking();        
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "EngineDispatcher for engine id {:?} receive {:?}",
                 self.engine.id(),
                 msg
             )));
+        }
+        // send best move to game manager
+        send_best_move(msg.0, self.engine.id(), self.debug_actor_opt.as_ref(), self.game_manager_actor_opt.as_ref().unwrap().clone());        
+        // display bestmove in uci console
+        let ts_best_move = ts_bitboard_move::TimestampedBitBoardMove::new(msg.0, self.engine.id());
+        let ts_best_move_cast = ts_best_move::TimestampedBestMove::build(
+            long_notation::LongAlgebricNotationMove::build_from_b_move(ts_best_move.best_move()),
+            ts_best_move.timestamp(),
+            ts_best_move.engine_id(),
+        );        
+        let forward = uci_entity::handler_uci::UciResult::DisplayBestMove(Some(ts_best_move_cast), true);
+        // send DisplayMove command
+        if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "EngineDispatcher for engine id {:?} send to game_manager: {:?}",
                 self.engine.id(),
                 forward
             )));
         }
-        self.game_manager_actor_opt
-            .as_ref()
-            .unwrap()
+        if let Some(uci_caller) = &self.uci_caller_opt {
+            uci_caller
             .do_send(forward);
+            self.set_best_move(Some(msg.0));        
+        }
+    }
+}
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct EngineSendBestMove(pub bitboard::BitBoardMove);
+impl Handler<EngineSendBestMove> for EngineDispatcher {
+    type Result = ();
+
+    fn handle(&mut self, msg: EngineSendBestMove, _ctx: &mut Self::Context) -> Self::Result {
+        if let Some(debug_actor) = &self.debug_actor_opt {
+            debug_actor.do_send(debug::AddMessage(format!(
+                "EngineDispatcher for engine id {:?} receive {:?}",
+                self.engine.id(),
+                msg
+            )));
+        }        
+        send_best_move(msg.0, self.engine.id(), self.debug_actor_opt.as_ref(), self.game_manager_actor_opt.as_ref().unwrap().clone());
         self.set_best_move(Some(msg.0));
     }
+}
+
+fn send_best_move(best_move: bitboard::BitBoardMove, engine_id: logic::EngineId, debug_actor_opt: Option<&debug::DebugActor>, game_manager: game_manager::GameManagerActor) {
+    let forward = game_manager::handler_game::SetBestMove::new(best_move, engine_id.clone());
+    if let Some(debug_actor) = debug_actor_opt {
+        debug_actor.do_send(debug::AddMessage(format!(
+            "EngineDispatcher for engine id {:?} send to game_manager: {:?}",
+            engine_id,
+            forward
+        )));
+    }
+    game_manager.do_send(forward);
 }
 
 #[derive(Debug, Message)]
@@ -144,15 +188,18 @@ impl Handler<EngineSetStatus> for EngineDispatcher {
 pub struct EngineStartThinking {
     game: game_state::GameState,
     game_manager_actor: game_manager::GameManagerActor,
+    uci_caller: uci_entity::UciActor,
 }
 impl EngineStartThinking {
     pub fn new(
         game: game_state::GameState,
         game_manager_actor: game_manager::GameManagerActor,
+        uci_caller: uci_entity::UciActor,
     ) -> Self {
         EngineStartThinking {
             game,
             game_manager_actor,
+            uci_caller,
         }
     }
 }
@@ -160,6 +207,7 @@ impl Handler<EngineStartThinking> for EngineDispatcher {
     type Result = ();
 
     fn handle(&mut self, msg: EngineStartThinking, _ctx: &mut Self::Context) {
+        self.uci_caller_opt = Some(msg.uci_caller.clone());
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "EngineDispatcher for engine id {:?} receive {:?}",

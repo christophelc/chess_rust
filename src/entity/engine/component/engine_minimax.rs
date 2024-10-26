@@ -8,7 +8,6 @@ use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
-
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 
 const ROOT_ID: &str = "root";
@@ -70,6 +69,7 @@ impl EngineMinimax {
     pub fn set_id_number(&mut self, id_number: &str) {
         self.id_number = id_number.to_string();
     }
+    #[allow(dead_code)]
     fn display_tree(
         graph: &petgraph::Graph<NodeNameAndScore, ()>,
         node: petgraph::graph::NodeIndex,
@@ -93,11 +93,11 @@ impl EngineMinimax {
             }
         }
     }
-    fn minimax(&self, game: &game_state::GameState) -> bitboard::BitBoardMove {
+    fn minimax(&self, game: &game_state::GameState, self_actor: Addr<dispatcher::EngineDispatcher>,) -> bitboard::BitBoardMove {
         let mut graph = petgraph::Graph::<NodeNameAndScore, ()>::new();
         let root_content = NodeNameAndScore::new(ROOT_ID.to_string());
         let root_node_id = graph.add_node(root_content);
-        let (best_move, _) = self.minimax_rec("", &game, 0, &root_node_id, &mut graph);
+        let (best_move, _) = self.minimax_rec("", &game, 0, &root_node_id, &mut graph, self_actor);
         // FIXME: send graph to actor
         if self.debug_actor_opt.is_some() {
             //Self::display_tree(&graph, root_node_id, 0);
@@ -111,6 +111,7 @@ impl EngineMinimax {
         current_depth: u8,
         node_parent_id: &petgraph::graph::NodeIndex,
         graph: &mut petgraph::Graph<NodeNameAndScore, ()>,
+        self_actor: Addr<dispatcher::EngineDispatcher>,        
     ) -> (bitboard::BitBoardMove, Score) {
         let mut max_score = i32::MIN;
         let mut best_move = game.moves()[0];
@@ -141,6 +142,7 @@ impl EngineMinimax {
                             current_depth + 1,
                             &node_id,
                             graph,
+                            self_actor.clone(),
                         );
                         Score(-score.0)
                     } else {
@@ -172,6 +174,7 @@ impl EngineMinimax {
                 _ => Score(0),
             };
             if score.0 > max_score {
+                // Send best move
                 best_move = *m;
                 max_score = score.0;
                 // update aggregated score in the parent node
@@ -184,6 +187,9 @@ impl EngineMinimax {
                     }
                     *node_parent = content;
                 }
+                let msg = dispatcher::handler_engine::EngineSendBestMove(best_move);
+                self_actor.do_send(msg);
+                // TODO: debug
             }
         }
         (best_move, Score(max_score))
@@ -215,12 +221,12 @@ impl logic::Engine for EngineMinimax {
         // First generate moves
         let moves = logic::gen_moves(&game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.minimax(&game);
+            let best_move = self.minimax(&game, self_actor.clone());
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
-            let reply = dispatcher::handler_engine::EngineBestMoveFound(best_move);
+            let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(
-                    "Engine pf id {:?} reply is: '{:?}'",
+                    "Engine of id {:?} reply is: '{:?}'",
                     self.id(),
                     reply
                 )));

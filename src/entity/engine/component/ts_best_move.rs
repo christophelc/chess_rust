@@ -8,7 +8,7 @@ pub struct TimestampedBestMove {
     engine_id: logic::EngineId,               // which engine has found the best move
 }
 impl TimestampedBestMove {
-    fn build(
+    pub fn build(
         best_move: long_notation::LongAlgebricNotationMove,
         timestamp: chrono::DateTime<chrono::Utc>,
         engine_id: logic::EngineId,
@@ -28,7 +28,7 @@ impl TimestampedBestMove {
     pub fn origin(&self) -> logic::EngineId {
         self.engine_id.clone()
     }
-    fn is_more_recent_best_move_than(&self, timestamped_best_move: &TimestampedBestMove) -> bool {
+    pub fn is_more_recent_best_move_than(&self, timestamped_best_move: &TimestampedBestMove) -> bool {
         self.timestamp > timestamped_best_move.timestamp
     }
 }

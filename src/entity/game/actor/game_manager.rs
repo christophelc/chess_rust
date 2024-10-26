@@ -5,15 +5,14 @@ pub mod handler_uci_command;
 
 use actix::{Actor, Addr, Context};
 
-use crate::entity::game::component::{
+use crate::entity::{engine::component::ts_best_move, game::component::{
     bitboard::{self, zobrist},
     square,
-};
+}};
 use crate::ui::notation::fen;
-use crate::ui::notation::long_notation::{self, LongAlgebricNotationMove};
+use crate::ui::notation::long_notation::LongAlgebricNotationMove;
 
 use crate::entity::clock::actor::chessclock;
-use crate::entity::engine::component::engine_logic as logic;
 use crate::entity::game::component::{game_state::GameState, parameters, player};
 use crate::monitoring::debug;
 
@@ -37,43 +36,10 @@ impl History {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TimestampedBestMove {
-    best_move: long_notation::LongAlgebricNotationMove,
-    timestamp: chrono::DateTime<chrono::Utc>, // date of best_move initialization
-    engine_id: logic::EngineId,               // which engine has found the best move
-}
-impl TimestampedBestMove {
-    fn build(
-        best_move: long_notation::LongAlgebricNotationMove,
-        timestamp: chrono::DateTime<chrono::Utc>,
-        engine_id: logic::EngineId,
-    ) -> Self {
-        Self {
-            best_move,
-            timestamp,
-            engine_id,
-        }
-    }
-    pub fn best_move(&self) -> long_notation::LongAlgebricNotationMove {
-        self.best_move
-    }
-    pub fn timestamp(&self) -> chrono::DateTime<chrono::Utc> {
-        self.timestamp
-    }
-    pub fn origin(&self) -> logic::EngineId {
-        self.engine_id.clone()
-    }
-    fn is_more_recent_best_move_than(&self, timestamped_best_move: &TimestampedBestMove) -> bool {
-        self.timestamp > timestamped_best_move.timestamp
-    }
-}
-
-#[derive(Default)]
 pub struct GameManager {
     game_state_opt: Option<GameState>,
     debug_actor_opt: Option<debug::DebugActor>,
-    ts_best_move_opt: Option<TimestampedBestMove>,
+    ts_best_move_opt: Option<ts_best_move::TimestampedBestMove>,
     history: History,
     parameters: parameters::Parameters,
     players: player::Players,
@@ -84,10 +50,17 @@ pub struct GameManager {
 
 impl GameManager {
     pub fn new(debug_actor_opt: Option<debug::DebugActor>) -> Self {
-        let mut game_manager = GameManager::default();
-        game_manager.debug_actor_opt = debug_actor_opt;
-        game_manager.zobrist_table = zobrist::Zobrist::new();
-        game_manager
+        Self {
+            game_state_opt: None,
+            debug_actor_opt,
+            ts_best_move_opt: None,
+            history: History::default(),
+            parameters: parameters::Parameters::default(),
+            players: player::Players::default(),
+            white_clock_actor_opt: None,
+            black_clock_actor_opt: None,
+            zobrist_table: zobrist::Zobrist::new(),
+        }
     }
     pub fn game_state(&self) -> Option<&GameState> {
         self.game_state_opt.as_ref()

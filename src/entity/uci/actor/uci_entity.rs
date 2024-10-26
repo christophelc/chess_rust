@@ -1,5 +1,4 @@
 pub mod handler_event;
-pub mod handler_poll;
 pub mod handler_read;
 pub mod handler_uci;
 pub mod handler_uci_command;
@@ -15,18 +14,8 @@ use crate::entity::game::actor::game_manager;
 use crate::entity::uci::component::event;
 use crate::monitoring::debug;
 
-// should be less than the sleep timer in the loop in main.rs
-const POLLING_INTERVAL_MS: u64 = 50;
-
-#[derive(Debug, PartialEq)]
-pub enum StatePollingUciEntity {
-    Pending,
-    Polling,
-}
-
 pub struct UciEntity {
     stdout: Stdout,
-    state_polling: StatePollingUciEntity,
     uci_reader: Box<dyn UciRead + 'static>,
     game_manager_actor: game_manager::GameManagerActor,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -53,7 +42,6 @@ impl UciEntity {
     ) -> Self {
         Self {
             stdout: io::stdout(),
-            state_polling: StatePollingUciEntity::Pending,
             uci_reader,
             game_manager_actor,
             debug_actor_opt,

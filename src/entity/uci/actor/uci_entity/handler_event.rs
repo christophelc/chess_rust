@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    handler_poll, handler_uci, HandleEventError, StatePollingUciEntity, UciEntity,
+    handler_uci, HandleEventError, UciEntity,
 };
 
 #[derive(Message)]
@@ -145,9 +145,7 @@ impl Handler<event::Event> for UciEntity {
             }
             event::Event::StartEngineThinking => {
                 self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking);
-                self.state_polling = StatePollingUciEntity::Polling;
-                ctx.address().do_send(handler_poll::PollBestMove);
+                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking(actor_self));
             }
             event::Event::StopEngine => {
                 self.game_manager_actor

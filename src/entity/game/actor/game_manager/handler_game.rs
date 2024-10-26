@@ -2,14 +2,13 @@ use actix::{ActorContext, Handler, Message};
 
 use crate::{
     entity::{
-        game::component::{bitboard, game_state, parameters},
-        uci::actor::uci_entity,
+        engine::component::{ts_best_move, ts_bitboard_move}, game::component::{bitboard, game_state, parameters}, uci::actor::uci_entity
     },
     monitoring::debug,
     ui::notation::long_notation,
 };
 
-use super::{GameManager, TimestampedBestMove};
+use super::GameManager;
 use crate::entity::engine::component::engine_logic as logic;
 
 #[derive(Debug, Message)]
@@ -47,12 +46,14 @@ impl Handler<GetBestMoveFromUci> for GameManager {
     }
 }
 
+pub struct SendBestMoveToUci;
+
 #[derive(Debug, Message)]
-#[rtype(result = "Option<TimestampedBestMove>")]
+#[rtype(result = "Option<ts_best_move::TimestampedBestMove>")]
 pub struct GetBestMove;
 
 impl Handler<GetBestMove> for GameManager {
-    type Result = Option<TimestampedBestMove>;
+    type Result = Option<ts_best_move::TimestampedBestMove>;
 
     fn handle(&mut self, msg: GetBestMove, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(debug_actor) = &self.debug_actor_opt {
@@ -123,34 +124,14 @@ impl Handler<GetParameters> for GameManager {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TimestampedBitBoardMove {
-    best_move: bitboard::BitBoardMove,
-    timestamp: chrono::DateTime<chrono::Utc>,
-    engine_id: logic::EngineId,
-}
-impl TimestampedBitBoardMove {
-    pub fn new(best_move: bitboard::BitBoardMove, engine_id: logic::EngineId) -> Self {
-        Self {
-            best_move,
-            timestamp: chrono::Utc::now(),
-            engine_id,
-        }
-    }
-    pub fn to_ts_best_move(&self) -> TimestampedBestMove {
-        let best_move = long_notation::LongAlgebricNotationMove::build_from_b_move(self.best_move);
-        TimestampedBestMove::build(best_move, self.timestamp, self.engine_id.clone())
-    }
-}
-
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct SetBestMove(pub TimestampedBitBoardMove);
+pub struct SetBestMove(pub ts_bitboard_move::TimestampedBitBoardMove);
 impl SetBestMove {
     pub fn new(best_move: bitboard::BitBoardMove, engine_id: logic::EngineId) -> Self {
-        Self(TimestampedBitBoardMove::new(best_move, engine_id))
+        Self(ts_bitboard_move::TimestampedBitBoardMove::new(best_move, engine_id))
     }
-    pub fn from_ts_move(ts_move: TimestampedBitBoardMove) -> Self {
+    pub fn from_ts_move(ts_move: ts_bitboard_move::TimestampedBitBoardMove) -> Self {
         Self(ts_move)
     }
 }
@@ -166,10 +147,10 @@ impl Handler<SetBestMove> for GameManager {
             )));
         }
         let ts_best_move = msg.0;
-        let ts_best_move_cast = TimestampedBestMove::build(
-            long_notation::LongAlgebricNotationMove::build_from_b_move(ts_best_move.best_move),
-            ts_best_move.timestamp,
-            ts_best_move.engine_id,
+        let ts_best_move_cast = ts_best_move::TimestampedBestMove::build(
+            long_notation::LongAlgebricNotationMove::build_from_b_move(ts_best_move.best_move()),
+            ts_best_move.timestamp(),
+            ts_best_move.engine_id(),
         );
         let mut is_update = true;
         if let Some(ts_best_move) = &self.ts_best_move_opt {
