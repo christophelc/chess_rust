@@ -110,13 +110,13 @@ impl Handler<command::Command> for UciEntity {
             }
             command::Command::Stop => {
                 events.push(event::Event::WriteDebug("Stopping search.".to_string()));
-                events.push(event::Event::StopEngine);
+                events.push(event::Event::StopEngine(self.stat_actor_opt.clone()));
             }
             command::Command::Quit => {
                 events.push(event::Event::WriteDebug(
                     "Stopping search (Quit).".to_string(),
                 ));
-                events.push(event::Event::StopEngine);
+                events.push(event::Event::StopEngine(self.stat_actor_opt.clone()));
                 events.push(event::Event::WriteDebug("Exiting engine".to_string()));
                 events.push(event::Event::Quit);
             }

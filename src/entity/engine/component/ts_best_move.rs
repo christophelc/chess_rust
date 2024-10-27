@@ -1,5 +1,5 @@
-use crate::ui::notation::long_notation;
 use crate::entity::engine::component::engine_logic as logic;
+use crate::ui::notation::long_notation;
 
 #[derive(Debug, Clone)]
 pub struct TimestampedBestMove {
@@ -28,7 +28,10 @@ impl TimestampedBestMove {
     pub fn origin(&self) -> logic::EngineId {
         self.engine_id.clone()
     }
-    pub fn is_more_recent_best_move_than(&self, timestamped_best_move: &TimestampedBestMove) -> bool {
+    pub fn is_more_recent_best_move_than(
+        &self,
+        timestamped_best_move: &TimestampedBestMove,
+    ) -> bool {
         self.timestamp > timestamped_best_move.timestamp
     }
 }

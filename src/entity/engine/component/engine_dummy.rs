@@ -6,6 +6,7 @@ use rand_chacha::ChaCha12Rng;
 use super::engine_logic as logic;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::game_state;
+use crate::entity::stat::actor::stat_entity;
 use crate::monitoring::debug;
 
 #[derive(Debug)]
@@ -40,13 +41,14 @@ impl logic::Engine for EngineDummy {
     fn find_best_move(
         &self,
         self_actor: Addr<dispatcher::EngineDispatcher>,
+        _stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
     ) {
         let moves = game.moves();
         let mut rng = ChaCha12Rng::from_entropy();
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
-            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
+            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(None));
             let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(

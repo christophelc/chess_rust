@@ -1,4 +1,5 @@
 use chess_actix::entity::engine::component::engine_minimax;
+use chess_actix::entity::stat::actor::stat_entity;
 use chess_actix::{entity, monitoring, ui};
 
 use actix::Actor;
@@ -39,7 +40,7 @@ async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     println!("Inital position with move e4");
     let inputs = vec!["position startpos moves e2e4 "];
     let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
-    let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None);
+    let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None, None);
     let uci_entity_actor = uci_entity.start();
     uci_entity_actor.do_send(uci_entity::handler_read::ReadUserInput);
     let game_state = game_manager_actor
@@ -76,7 +77,7 @@ fn uci_loop(
     stdin: &mut Arc<Mutex<io::Stdin>>,
 ) {
     let uci_reader = Box::new(uci_entity::UciReadWrapper::new(stdin.clone()));
-    let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None);
+    let uci_entity = uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), None, None);
     let uci_entity_actor = uci_entity.start();
     uci_entity_actor.do_send(uci_entity::handler_read::ReadUserInput);
     // // we ignore errors (according to uci specifications)
@@ -93,8 +94,12 @@ async fn tui_loop(
     let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
     // we don't ignore error in tui mode
     let debug_actor = debug::DebugEntity::default().start();
-    let uci_entity =
-        uci_entity::UciEntity::new(uci_reader, game_manager_actor.clone(), Some(debug_actor));
+    let uci_entity = uci_entity::UciEntity::new(
+        uci_reader,
+        game_manager_actor.clone(),
+        Some(debug_actor),
+        None,
+    );
     let uci_entity_actor = uci_entity.start();
     // read all inputs and execute UCI commands
     for _idx in 0..inputs.len() {
@@ -143,6 +148,7 @@ async fn tui_loop(
 #[actix::main]
 async fn main() {
     let debug_actor_opt: Option<debug::DebugActor> = None;
+    let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());
     //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
@@ -154,7 +160,7 @@ async fn main() {
     );
     engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
-        dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone(), None);
     //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
     let mut engine_player2 = engine_minimax::EngineMinimax::new(
         debug_actor_opt.clone(),
@@ -163,7 +169,7 @@ async fn main() {
     );
     engine_player2.set_id_number("black");
     let engine_player2_dispatcher =
-        dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone(), None);
     let player1 = player::Player::Human {
         engine_opt: Some(engine_player1_dispatcher.start()),
     };
@@ -178,6 +184,7 @@ async fn main() {
         uci_reader,
         game_manager_actor.clone(),
         debug_actor_opt.clone(),
+        stat_actor_opt.clone(),
     );
     let uci_entity_actor = uci_entity.start();
 

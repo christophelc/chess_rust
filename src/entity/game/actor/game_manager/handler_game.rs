@@ -2,7 +2,9 @@ use actix::{ActorContext, Handler, Message};
 
 use crate::{
     entity::{
-        engine::component::{ts_best_move, ts_bitboard_move}, game::component::{bitboard, game_state, parameters}, uci::actor::uci_entity
+        engine::component::{ts_best_move, ts_bitboard_move},
+        game::component::{bitboard, game_state, parameters},
+        uci::actor::uci_entity,
     },
     monitoring::debug,
     ui::notation::long_notation,
@@ -129,7 +131,9 @@ impl Handler<GetParameters> for GameManager {
 pub struct SetBestMove(pub ts_bitboard_move::TimestampedBitBoardMove);
 impl SetBestMove {
     pub fn new(best_move: bitboard::BitBoardMove, engine_id: logic::EngineId) -> Self {
-        Self(ts_bitboard_move::TimestampedBitBoardMove::new(best_move, engine_id))
+        Self(ts_bitboard_move::TimestampedBitBoardMove::new(
+            best_move, engine_id,
+        ))
     }
     pub fn from_ts_move(ts_move: ts_bitboard_move::TimestampedBitBoardMove) -> Self {
         Self(ts_move)

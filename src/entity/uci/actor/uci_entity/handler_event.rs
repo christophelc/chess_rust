@@ -11,9 +11,7 @@ use crate::{
     },
 };
 
-use super::{
-    handler_uci, HandleEventError, UciEntity,
-};
+use super::{handler_uci, HandleEventError, UciEntity};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -144,12 +142,19 @@ impl Handler<event::Event> for UciEntity {
                 }
             }
             event::Event::StartEngineThinking => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStartThinking(actor_self));
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::EngineStartThinking {
+                        uci_actor: actor_self,
+                        stat_actor_opt: self.stat_actor_opt.clone(),
+                    },
+                );
             }
-            event::Event::StopEngine => {
-                self.game_manager_actor
-                    .do_send(game_manager::handler_uci_command::UciCommand::EngineStopThinking);
+            event::Event::StopEngine(stat_actor_opt) => {
+                self.game_manager_actor.do_send(
+                    game_manager::handler_uci_command::UciCommand::EngineStopThinking {
+                        stat_actor_opt,
+                    },
+                );
             }
             event::Event::Quit => {
                 actor_self.do_send(handler_uci::UciResult::Quit);

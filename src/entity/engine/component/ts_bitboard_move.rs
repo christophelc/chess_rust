@@ -1,7 +1,7 @@
-use crate::entity::game::component::bitboard;
-use crate::ui::notation::long_notation;
 use super::engine_logic as logic;
 use super::ts_best_move;
+use crate::entity::game::component::bitboard;
+use crate::ui::notation::long_notation;
 
 #[derive(Debug, Clone)]
 pub struct TimestampedBitBoardMove {

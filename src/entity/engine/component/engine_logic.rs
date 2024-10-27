@@ -3,8 +3,9 @@ use actix::prelude::*;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::{bitboard, game_state};
+use crate::entity::stat::actor::stat_entity;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EngineId {
     name: String,
     author: String,
@@ -26,6 +27,7 @@ pub trait Engine {
     fn find_best_move(
         &self,
         self_actor: Addr<dispatcher::EngineDispatcher>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
     );
 }

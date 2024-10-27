@@ -9,12 +9,14 @@ use crate::entity::engine::component::{engine_logic as logic, ts_bitboard_move};
 use crate::entity::game::actor::game_manager;
 use crate::entity::game::component::bitboard::BitBoardMove;
 use crate::entity::game::component::game_state;
+use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
 use crate::monitoring::debug;
 
 pub struct EngineDispatcher {
     engine: Arc<dyn logic::Engine + Send + Sync>, // EngineActor dans un Arc
     debug_actor_opt: Option<debug::DebugActor>,
+    stat_actor_opt: Option<stat_entity::StatActor>,
     uci_caller_opt: Option<uci_entity::UciActor>,
     engine_status: EngineStatus,
     ts_best_move_opt: Option<ts_bitboard_move::TimestampedBitBoardMove>,
@@ -27,11 +29,13 @@ impl EngineDispatcher {
     pub fn new(
         engine: Arc<dyn logic::Engine + Send + Sync>,
         debug_actor_opt: Option<debug::DebugActor>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> Self {
         Self {
             engine,
             debug_actor_opt,
             uci_caller_opt: None,
+            stat_actor_opt,
             engine_status: EngineStatus::default(),
             game_manager_actor_opt: None,
             ts_best_move_opt: None,
@@ -75,10 +79,11 @@ impl EngineDispatcher {
 
         // start non blocking task find_best_move
         let self_actor = self.self_actor_opt.as_ref().unwrap().clone();
+        let stat_actor_opt = self.stat_actor_opt.as_ref().cloned();
         let game = game.clone();
         let engine = self.engine.clone();
         let thread_find_best_move = spawn_local(async move {
-            engine.find_best_move(self_actor, game);
+            engine.find_best_move(self_actor, stat_actor_opt, game);
         });
         self.thread_find_best_move_opt = Some(thread_find_best_move);
         if let Some(debug_actor) = &self.debug_actor_opt {

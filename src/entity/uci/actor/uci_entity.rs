@@ -10,8 +10,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::entity::game::actor::game_manager;
 use crate::entity::uci::component::event;
+use crate::entity::{game::actor::game_manager, stat::actor::stat_entity};
 use crate::monitoring::debug;
 
 pub struct UciEntity {
@@ -19,6 +19,7 @@ pub struct UciEntity {
     uci_reader: Box<dyn UciRead + 'static>,
     game_manager_actor: game_manager::GameManagerActor,
     debug_actor_opt: Option<debug::DebugActor>,
+    stat_actor_opt: Option<stat_entity::StatActor>,
 }
 pub type UciActor = Addr<UciEntity>;
 
@@ -39,12 +40,14 @@ impl UciEntity {
         uci_reader: Box<dyn UciRead + 'static>,
         game_manager_actor: game_manager::GameManagerActor,
         debug_actor_opt: Option<debug::DebugActor>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> Self {
         Self {
             stdout: io::stdout(),
             uci_reader,
             game_manager_actor,
             debug_actor_opt,
+            stat_actor_opt,
         }
     }
 }
@@ -142,10 +145,7 @@ mod tests {
     use crate::entity::engine::component::engine_dummy as dummy;
 
     // read all inputs and execute UCI commands
-    async fn exec_inputs(
-        uci_entity_actor: UciActor,
-        inputs: Vec<&str>,
-    ) {
+    async fn exec_inputs(uci_entity_actor: UciActor, inputs: Vec<&str>) {
         for _i in 0..inputs.len() {
             let _ = uci_entity_actor.send(handler_read::ReadUserInput).await;
         }
@@ -179,6 +179,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_actor = uci_entity.start();
         uci_actor
@@ -204,6 +205,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_actor = uci_entity.start();
         uci_actor
@@ -230,6 +232,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_actor = uci_entity.start();
         uci_actor
@@ -257,6 +260,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_actor = uci_entity.start();
         uci_actor
@@ -285,6 +289,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         exec_inputs(uci_entity_actor, inputs).await;
@@ -309,6 +314,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         exec_inputs(uci_entity_actor, inputs).await;
@@ -331,11 +337,17 @@ mod tests {
         let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
-        let engine_player1_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player1),
+            debug_actor_opt.clone(),
+            None,
+        );
         let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
-        let engine_player2_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        let engine_player2_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player2),
+            debug_actor_opt.clone(),
+            None,
+        );
         let player1 = player::Player::Human {
             engine_opt: Some(engine_player1_dispatcher.start()),
         };
@@ -358,6 +370,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         exec_inputs(uci_entity_actor, inputs).await;
@@ -409,14 +422,20 @@ mod tests {
         let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
         engine_player1.set_id_number("white");
-        let engine_player1_dispatcher_actor =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone())
-                .start();
+        let engine_player1_dispatcher_actor = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player1),
+            debug_actor_opt.clone(),
+            None,
+        )
+        .start();
         let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
         engine_player2.set_id_number("black");
-        let engine_player2_dispatcher_actor =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone())
-                .start();
+        let engine_player2_dispatcher_actor = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player2),
+            debug_actor_opt.clone(),
+            None,
+        )
+        .start();
         let player1 = player::Player::Human {
             engine_opt: Some(engine_player1_dispatcher_actor.clone()),
         };
@@ -430,6 +449,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         exec_inputs(uci_entity_actor, inputs).await;

@@ -2,13 +2,15 @@ use std::fmt;
 
 use actix::Addr;
 
-use super::engine_logic as logic;
+use super::engine_logic::{self as logic, Engine};
+use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;
+use crate::entity::stat::actor::stat_entity;
+use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
-use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 
 const ROOT_ID: &str = "root";
 
@@ -93,11 +95,26 @@ impl EngineMinimax {
             }
         }
     }
-    fn minimax(&self, game: &game_state::GameState, self_actor: Addr<dispatcher::EngineDispatcher>,) -> bitboard::BitBoardMove {
+    fn minimax(
+        &self,
+        game: &game_state::GameState,
+        self_actor: Addr<dispatcher::EngineDispatcher>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
+    ) -> bitboard::BitBoardMove {
         let mut graph = petgraph::Graph::<NodeNameAndScore, ()>::new();
         let root_content = NodeNameAndScore::new(ROOT_ID.to_string());
         let root_node_id = graph.add_node(root_content);
-        let (best_move, _) = self.minimax_rec("", &game, 0, &root_node_id, &mut graph, self_actor);
+        let mut n_positions_evaluated: u64 = 0;
+        let (best_move, _) = self.minimax_rec(
+            "",
+            &game,
+            0,
+            &root_node_id,
+            &mut graph,
+            self_actor,
+            stat_actor_opt,
+            &mut n_positions_evaluated,
+        );
         // FIXME: send graph to actor
         if self.debug_actor_opt.is_some() {
             //Self::display_tree(&graph, root_node_id, 0);
@@ -111,7 +128,9 @@ impl EngineMinimax {
         current_depth: u8,
         node_parent_id: &petgraph::graph::NodeIndex,
         graph: &mut petgraph::Graph<NodeNameAndScore, ()>,
-        self_actor: Addr<dispatcher::EngineDispatcher>,        
+        self_actor: Addr<dispatcher::EngineDispatcher>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
+        n_positions_evaluted: &mut u64,
     ) -> (bitboard::BitBoardMove, Score) {
         let mut max_score = i32::MIN;
         let mut best_move = game.moves()[0];
@@ -143,9 +162,23 @@ impl EngineMinimax {
                             &node_id,
                             graph,
                             self_actor.clone(),
+                            stat_actor_opt.clone(),
+                            n_positions_evaluted,
                         );
                         Score(-score.0)
                     } else {
+                        *n_positions_evaluted += 1;
+                        if *n_positions_evaluted % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED
+                            == 0
+                        {
+                            if let Some(stat_actor) = &stat_actor_opt {
+                                let msg = stat_entity::handler_stat::StatUpdate::new(
+                                    self.id(),
+                                    *n_positions_evaluted,
+                                );
+                                stat_actor.do_send(msg);
+                            }
+                        }
                         let score = evaluate(game_clone.bit_position());
                         // update current leaf node_id with score
                         if let Some(node) = graph.node_weight_mut(node_id) {
@@ -216,13 +249,16 @@ impl logic::Engine for EngineMinimax {
     fn find_best_move(
         &self,
         self_actor: Addr<dispatcher::EngineDispatcher>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
     ) {
         // First generate moves
         let moves = logic::gen_moves(&game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.minimax(&game, self_actor.clone());
-            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
+            let best_move = self.minimax(&game, self_actor.clone(), stat_actor_opt.clone());
+            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
+                stat_actor_opt,
+            ));
             let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
             if let Some(debug_actor) = &self.debug_actor_opt {
                 debug_actor.do_send(debug::AddMessage(format!(
@@ -325,8 +361,11 @@ mod tests {
             MINIMAX_DEPTH,
         );
         engine_player1.set_id_number("white");
-        let engine_player1_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player1),
+            debug_actor_opt.clone(),
+            None,
+        );
         //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
         let mut engine_player2 = engine_minimax::EngineMinimax::new(
             debug_actor_opt.clone(),
@@ -334,8 +373,11 @@ mod tests {
             MINIMAX_DEPTH,
         );
         engine_player2.set_id_number("black");
-        let engine_player2_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        let engine_player2_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player2),
+            debug_actor_opt.clone(),
+            None,
+        );
         let player1 = player::Player::Human {
             engine_opt: Some(engine_player1_dispatcher.start()),
         };
@@ -349,6 +391,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {

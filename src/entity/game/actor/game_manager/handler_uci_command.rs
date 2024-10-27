@@ -6,6 +6,7 @@ use actix::{Actor, Addr};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::ts_bitboard_move;
 use crate::entity::game::component::square::{self, Switch};
+use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
 use crate::{
     entity::{clock::actor::chessclock, game::component::game_state},
@@ -16,15 +17,27 @@ use crate::{
 use super::handler_clock;
 use super::GameManager;
 
+// if let Some(stat_actor) = &self.stat_actor_opt {
+//     let msg = stat_entity::handler_stat::StatReset;
+//     stat_actor.do_send(msg);
+// }
+
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
 pub enum UciCommand {
-    Btime(u64),                                                // Update clock for black
-    BtimeInc(u64),                                             // Update increment clock for black
-    CleanResources,                                            // Clean resources
-    DepthFinite(u32),                                          // Set depth
-    EngineStartThinking(uci_entity::UciActor),                                       // Go command: start calculatin(g
-    EngineStopThinking,                                        // Stop command: retrieve best move
+    Btime(u64),       // Update clock for black
+    BtimeInc(u64),    // Update increment clock for black
+    CleanResources,   // Clean resources
+    DepthFinite(u32), // Set depth
+    EngineStartThinking {
+        // Go command: start calculation
+        uci_actor: uci_entity::UciActor,
+        stat_actor_opt: Option<stat_entity::StatActor>,
+    },
+    EngineStopThinking {
+        // Stop command: retrieve best move
+        stat_actor_opt: Option<stat_entity::StatActor>,
+    },
     InitPosition,                                              // Set starting position
     MaxTimePerMoveInMs(u32),                                   // Set maximum time per move
     SearchMoves(Vec<long_notation::LongAlgebricNotationMove>), // Focus on a list of moves for analysis
@@ -146,7 +159,10 @@ impl Handler<UciCommand> for GameManager {
             UciCommand::ValidMoves { moves } => {
                 result = self.play_moves(moves);
             }
-            UciCommand::EngineStartThinking(uci_caller) => {
+            UciCommand::EngineStartThinking {
+                uci_actor,
+                stat_actor_opt,
+            } => {
                 if let Some(ref game_state) = &self.game_state_opt {
                     let color = game_state
                         .bit_position()
@@ -158,7 +174,8 @@ impl Handler<UciCommand> for GameManager {
                             let msg = dispatcher::handler_engine::EngineStartThinking::new(
                                 game_state.clone(),
                                 ctx.address().clone(),
-                                uci_caller,
+                                uci_actor,
+                                stat_actor_opt,
                             );
                             if let Some(debug_actor) = &self.debug_actor_opt {
                                 debug_actor.do_send(debug::AddMessage(format!(
@@ -208,73 +225,83 @@ impl Handler<UciCommand> for GameManager {
                     }
                 }
             }
-            UciCommand::EngineStopThinking => match &self.game_state_opt {
-                None => {
-                    self.ts_best_move_opt = None;
-                    result =
-                        Err("No bestmove since no valid position has been entered.".to_string());
-                }
-                Some(game_state) => {
-                    match self.players.get_engine(
-                        game_state
-                            .bit_position()
-                            .bit_position_status()
-                            .player_turn(),
-                    ) {
-                        Ok(engine_actor) => {
-                            // stop thinking
-                            engine_actor.do_send(dispatcher::handler_engine::EngineStopThinking);
-                            let engine_msg = dispatcher::handler_engine::EngineGetBestMove;
-                            let debug_actor_opt = self.debug_actor_opt.clone();
-                            engine_actor
-                                .send(engine_msg)
-                                .into_actor(self)
-                                .map(
-                                    move |result: Result<Option<ts_bitboard_move::TimestampedBitBoardMove>, _>,
-                                          act,
-                                          _ctx| {
-                                        match result {
-                                            Ok(Some(best_move)) => {
-                                                if let Some(debug_actor) = &debug_actor_opt {
-                                                    debug_actor.do_send(debug::AddMessage(
-                                                        "Best move updated successfully"
-                                                            .to_string(),
-                                                    ));
+            UciCommand::EngineStopThinking { stat_actor_opt } => {
+                match &self.game_state_opt {
+                    None => {
+                        self.ts_best_move_opt = None;
+                        result = Err(
+                            "No bestmove since no valid position has been entered.".to_string()
+                        );
+                    }
+                    Some(game_state) => {
+                        match self.players.get_engine(
+                            game_state
+                                .bit_position()
+                                .bit_position_status()
+                                .player_turn(),
+                        ) {
+                            Ok(engine_actor) => {
+                                // stop thinking
+                                engine_actor.do_send(
+                                    dispatcher::handler_engine::EngineStopThinking::new(
+                                        stat_actor_opt,
+                                    ),
+                                );
+                                let engine_msg = dispatcher::handler_engine::EngineGetBestMove;
+                                let debug_actor_opt = self.debug_actor_opt.clone();
+                                engine_actor
+                                    .send(engine_msg)
+                                    .into_actor(self)
+                                    .map(
+                                        move |result: Result<
+                                            Option<ts_bitboard_move::TimestampedBitBoardMove>,
+                                            _,
+                                        >,
+                                              act,
+                                              _ctx| {
+                                            match result {
+                                                Ok(Some(best_move)) => {
+                                                    if let Some(debug_actor) = &debug_actor_opt {
+                                                        debug_actor.do_send(debug::AddMessage(
+                                                            "Best move updated successfully"
+                                                                .to_string(),
+                                                        ));
+                                                    }
+                                                    act.ts_best_move_opt =
+                                                        Some(best_move.to_ts_best_move());
                                                 }
-                                                act.ts_best_move_opt =
-                                                    Some(best_move.to_ts_best_move());
-                                            }
-                                            Ok(None) => {
-                                                if let Some(debug_actor) = &debug_actor_opt {
-                                                    debug_actor.do_send(debug::AddMessage(
-                                                        "No move found.".to_string(),
-                                                    ));
+                                                Ok(None) => {
+                                                    if let Some(debug_actor) = &debug_actor_opt {
+                                                        debug_actor.do_send(debug::AddMessage(
+                                                            "No move found.".to_string(),
+                                                        ));
+                                                    }
+                                                    act.ts_best_move_opt = None;
                                                 }
-                                                act.ts_best_move_opt = None;
-                                            }
-                                            Err(e) => {
-                                                if let Some(debug_actor) = &debug_actor_opt {
-                                                    debug_actor.do_send(debug::AddMessage(
-                                                        format!(
+                                                Err(e) => {
+                                                    if let Some(debug_actor) = &debug_actor_opt {
+                                                        debug_actor.do_send(debug::AddMessage(
+                                                            format!(
                                                             "Error sending message to engine: {:?}",
                                                             e
                                                         ),
-                                                    ));
+                                                        ));
+                                                    }
+                                                    act.ts_best_move_opt = None;
                                                 }
-                                                act.ts_best_move_opt = None;
                                             }
-                                        }
-                                    },
-                                )
-                                .wait(ctx); // Wait for the future to complete within the actor context
-                        }
-                        Err(err) => {
-                            println!("Failed to retrieve engine actor: {:?}", err);
-                            self.ts_best_move_opt = None;
+                                        },
+                                    )
+                                    .wait(ctx); // Wait for the future to complete within the actor context
+                            }
+                            Err(err) => {
+                                println!("Failed to retrieve engine actor: {:?}", err);
+                                self.ts_best_move_opt = None;
+                            }
                         }
                     }
                 } // Stop engine search
-            },
+            }
         }
         result
     }

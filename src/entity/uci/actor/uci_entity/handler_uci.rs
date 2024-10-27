@@ -1,6 +1,9 @@
 use actix::{ActorContext, Handler, Message};
 
-use crate::{entity::{engine::component::ts_best_move, game::actor::game_manager}, monitoring::debug};
+use crate::{
+    entity::{engine::component::ts_best_move, game::actor::game_manager},
+    monitoring::debug,
+};
 
 use super::UciEntity;
 use crate::entity::engine::component::engine_logic as logic;

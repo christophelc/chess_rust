@@ -1,4 +1,4 @@
-use crate::monitoring::debug;
+use crate::{entity::stat::actor::stat_entity, monitoring::debug};
 use actix::Message;
 
 #[derive(Debug, Clone, Message)]
@@ -16,7 +16,7 @@ pub enum Event {
     SearchMoves(Vec<String>),
     StartEngineThinking,
     StartPos,
-    StopEngine,
+    StopEngine(Option<stat_entity::StatActor>),
     Write(String),
     WriteDebug(String),
     Wtime(u64),

@@ -5,10 +5,13 @@ pub mod handler_uci_command;
 
 use actix::{Actor, Addr, Context};
 
-use crate::entity::{engine::component::ts_best_move, game::component::{
-    bitboard::{self, zobrist},
-    square,
-}};
+use crate::entity::{
+    engine::component::ts_best_move,
+    game::component::{
+        bitboard::{self, zobrist},
+        square,
+    },
+};
 use crate::ui::notation::fen;
 use crate::ui::notation::long_notation::LongAlgebricNotationMove;
 
@@ -158,10 +161,10 @@ pub async fn build_game_manager_actor(inputs: Vec<&str>) -> GameManagerActor {
     let mut game = GameManager::new(debug_actor_opt.clone());
     let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
     let engine_player1_dispatcher =
-        dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone(), None);
     let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
     let engine_player2_dispatcher =
-        dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone(), None);
     let player1 = player::Player::Human {
         engine_opt: Some(engine_player1_dispatcher.start()),
     };
@@ -176,6 +179,7 @@ pub async fn build_game_manager_actor(inputs: Vec<&str>) -> GameManagerActor {
         uci_reader,
         game_manager_actor.clone(),
         debug_actor_opt.clone(),
+        None,
     );
     let uci_entity_actor = uci_entity.start();
     for _i in 0..inputs.len() {
@@ -240,6 +244,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -275,6 +280,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -300,6 +306,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -327,6 +334,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -363,6 +371,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -400,6 +409,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -429,6 +439,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -453,6 +464,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -479,6 +491,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -503,6 +516,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         let mut is_error = false;
@@ -528,6 +542,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -556,6 +571,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -584,6 +600,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -620,6 +637,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         let mut is_error = false;
@@ -645,6 +663,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -673,6 +692,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -697,6 +717,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -726,6 +747,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -759,6 +781,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -789,6 +812,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -825,6 +849,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -855,6 +880,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -894,6 +920,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -922,6 +949,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -951,6 +979,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
@@ -991,11 +1020,17 @@ mod tests {
         let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
         let mut game_manager = super::GameManager::new(debug_actor_opt.clone());
         let engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
-        let engine_player1_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone());
+        let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player1),
+            debug_actor_opt.clone(),
+            None,
+        );
         let engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
-        let engine_player2_dispatcher =
-            dispatcher::EngineDispatcher::new(Arc::new(engine_player2), debug_actor_opt.clone());
+        let engine_player2_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player2),
+            debug_actor_opt.clone(),
+            None,
+        );
         let player1 = player::Player::Human {
             engine_opt: Some(engine_player1_dispatcher.start()),
         };
@@ -1019,6 +1054,7 @@ mod tests {
             uci_reader,
             game_manager_actor.clone(),
             debug_actor_opt.clone(),
+            None,
         );
         let uci_entity_actor = uci_entity.start();
         for _i in 0..inputs.len() {
