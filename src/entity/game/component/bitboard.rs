@@ -157,6 +157,23 @@ pub struct BitPosition {
     bit_position_status: BitPositionStatus,
     hash_positions: zobrist::ZobristHistory,
 }
+impl BitPosition {
+    pub fn play_back(
+        &mut self,
+        bit_position_status: BitPositionStatus,
+        bitboards_white_and_black_mask: BitBoardsWhiteAndBlack,
+    ) {
+        self.bit_position_status = bit_position_status;
+        self.bit_boards_white_and_black
+            .xor_mut(bitboards_white_and_black_mask);
+    }
+    pub fn tuple(&self) -> (BitBoardsWhiteAndBlack, BitPositionStatus) {
+        (
+            self.bit_boards_white_and_black.clone(),
+            self.bit_position_status.clone(),
+        )
+    }
+}
 impl PartialEq for BitPosition {
     fn eq(&self, other: &Self) -> bool {
         self.hash_positions == other.hash_positions
@@ -282,6 +299,22 @@ pub struct BitBoardsWhiteAndBlack {
 }
 
 impl BitBoardsWhiteAndBlack {
+    pub fn xor(&self, bitboard_white_and_black: BitBoardsWhiteAndBlack) -> BitBoardsWhiteAndBlack {
+        BitBoardsWhiteAndBlack {
+            bit_board_white: self
+                .bit_board_white
+                .xor(&bitboard_white_and_black.bit_board_white),
+            bit_board_black: self
+                .bit_board_black
+                .xor(&bitboard_white_and_black.bit_board_black),
+        }
+    }
+    pub fn xor_mut(&mut self, bitboard_white_and_black: BitBoardsWhiteAndBlack) {
+        self.bit_board_white
+            .xor_mut(bitboard_white_and_black.bit_board_white);
+        self.bit_board_black
+            .xor_mut(bitboard_white_and_black.bit_board_black);
+    }
     pub fn peek(&self, index: BitIndex) -> Square {
         let bit_square = index.bitboard();
         let mut square: Square = Square::Empty;
@@ -558,8 +591,11 @@ impl Iterator for BitIterator {
 }
 
 impl BitBoard {
-    pub fn xor(&mut self, mask_xor: BitBoard) {
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
         *self = *self ^ mask_xor
+    }
+    pub fn xor(&self, bitboard: &BitBoard) -> BitBoard {
+        *self ^ *bitboard
     }
     fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         *self = (*self ^ mask_switch) | mask_promotion
@@ -704,25 +740,55 @@ pub struct BitBoards {
     pawns: piece_move::PawnsBitBoard,
 }
 impl BitBoards {
+    pub fn xor(&self, bitboard: &BitBoards) -> BitBoards {
+        BitBoards {
+            rooks: piece_move::RooksBitBoard::new(
+                self.rooks.bitboard().xor(bitboard.rooks().bitboard()),
+            ),
+            bishops: piece_move::BishopsBitBoard::new(
+                self.bishops.bitboard().xor(bitboard.bishops().bitboard()),
+            ),
+            knights: piece_move::KnightsBitBoard::new(
+                self.knights.bitboard().xor(bitboard.knights().bitboard()),
+            ),
+            king: piece_move::KingBitBoard::new(
+                self.king.bitboard().xor(bitboard.king().bitboard()),
+            ),
+            queens: piece_move::QueensBitBoard::new(
+                self.queens.bitboard().xor(bitboard.queens().bitboard()),
+            ),
+            pawns: piece_move::PawnsBitBoard::new(
+                self.pawns.bitboard().xor(bitboard.pawns().bitboard()),
+            ),
+        }
+    }
+    pub fn xor_mut(&mut self, bitboard: BitBoards) {
+        self.rooks.xor_mut(bitboard.rooks.bitboard().clone());
+        self.bishops.xor_mut(bitboard.bishops.bitboard().clone());
+        self.knights.xor_mut(bitboard.knights.bitboard().clone());
+        self.king.xor_mut(bitboard.king.bitboard().clone());
+        self.queens.xor_mut(bitboard.queens.bitboard().clone());
+        self.pawns.xor_mut(bitboard.pawns.bitboard().clone());
+    }
     pub fn xor_piece(&mut self, type_piece: square::TypePiece, mask_xor: BitBoard) {
         match type_piece {
             TypePiece::Rook => {
-                self.rooks.xor(mask_xor);
+                self.rooks.xor_mut(mask_xor);
             }
             TypePiece::Bishop => {
-                self.bishops.xor(mask_xor);
+                self.bishops.xor_mut(mask_xor);
             }
             TypePiece::Knight => {
-                self.knights.xor(mask_xor);
+                self.knights.xor_mut(mask_xor);
             }
             TypePiece::Queen => {
-                self.queens.xor(mask_xor);
+                self.queens.xor_mut(mask_xor);
             }
             TypePiece::King => {
-                self.king.xor(mask_xor);
+                self.king.xor_mut(mask_xor);
             }
             TypePiece::Pawn => {
-                self.pawns.xor(mask_xor);
+                self.pawns.xor_mut(mask_xor);
             }
         }
     }

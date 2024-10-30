@@ -97,8 +97,8 @@ impl RooksBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -135,8 +135,8 @@ impl BishopsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -172,8 +172,8 @@ impl KnightsBitBoard {
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -199,15 +199,14 @@ pub struct KingBitBoard {
     bitboard: BitBoard,
 }
 impl KingBitBoard {
-    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
         KingBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -247,15 +246,14 @@ pub struct QueensBitBoard {
     bitboard: BitBoard,
 }
 impl QueensBitBoard {
-    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
         QueensBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
@@ -284,15 +282,14 @@ pub struct PawnsBitBoard {
     bitboard: BitBoard,
 }
 impl PawnsBitBoard {
-    #[cfg(test)]
     pub fn new(bitboard: BitBoard) -> Self {
         PawnsBitBoard { bitboard }
     }
     pub fn bitboard(&self) -> &BitBoard {
         &self.bitboard
     }
-    pub fn xor(&mut self, mask_xor: BitBoard) {
-        self.bitboard.xor(mask_xor);
+    pub fn xor_mut(&mut self, mask_xor: BitBoard) {
+        self.bitboard.xor_mut(mask_xor);
     }
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);

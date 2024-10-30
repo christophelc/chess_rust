@@ -48,6 +48,10 @@ impl ZobristHistory {
     pub fn push(&mut self, hash: ZobristHash) {
         self.hashes.push(hash);
     }
+    pub fn pop(&mut self) {
+        assert!(!self.hashes.is_empty());
+        self.hashes.pop();
+    }
 }
 impl PartialEq for ZobristHistory {
     fn eq(&self, other: &Self) -> bool {

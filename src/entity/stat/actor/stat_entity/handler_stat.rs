@@ -108,7 +108,7 @@ pub struct GetStat(logic::EngineId);
 
 impl Handler<GetStat> for StatEntity {
     type Result = Option<stat_data::StatData>;
-    fn handle(&mut self, msg: GetStat, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetStat, _ctx: &mut Self::Context) -> Self::Result {
         self.stats.get(&msg.0).cloned()
     }
 }
