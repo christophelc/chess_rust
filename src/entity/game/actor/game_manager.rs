@@ -82,7 +82,6 @@ impl Actor for GameManager {
 
 impl GameManager {
     fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
-        println!("xxxx");
         let result: Option<Result<Vec<bitboard::BitBoardMove>, String>> = self
             .game_state_opt
             .as_mut()
@@ -91,6 +90,7 @@ impl GameManager {
                     &valid_moves,
                     &self.zobrist_table,
                     self.debug_actor_opt.clone(),
+                    true,
                 );
                 let color = &game_state
                     .bit_position()

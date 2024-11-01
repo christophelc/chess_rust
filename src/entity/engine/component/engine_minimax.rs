@@ -1,4 +1,6 @@
-use std::fmt;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::{env, fmt};
 
 use actix::Addr;
 
@@ -14,6 +16,7 @@ use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
 const ROOT_ID: &str = "root";
+const TREE_FILE_PATH: &str = "tree.txt";
 
 #[derive(Clone, Debug)]
 struct Score {
@@ -91,11 +94,28 @@ impl EngineMinimax {
         self.id_number = id_number.to_string();
     }
     #[allow(dead_code)]
+    fn write_tree(graph: &petgraph::Graph<NodeNameAndScore, ()>, node: petgraph::graph::NodeIndex) {
+        let exe_path = env::current_exe().expect("Failed to find executable path");
+        let folder_exe_path = exe_path
+            .parent()
+            .expect("Failed to get folder executable path");
+        let path = format!("{}/{}", folder_exe_path.display(), TREE_FILE_PATH);
+        let mut file = OpenOptions::new()
+            .write(true) // Set append mode
+            .create(true) // Create file if it doesn't exist
+            .open(path)
+            .expect("Failed to open or create file");
+        let indent = 0;
+        Self::display_tree(graph, node, indent, 0, &mut file)
+    }
+
+    #[allow(dead_code)]
     fn display_tree(
         graph: &petgraph::Graph<NodeNameAndScore, ()>,
         node: petgraph::graph::NodeIndex,
         indent: usize,
         level: i8,
+        file: &mut std::fs::File,
     ) {
         // Vérifier si le nœud est une feuille (pas de voisins sortants)
         if graph
@@ -103,17 +123,16 @@ impl EngineMinimax {
             .next()
             .is_none()
         {
-            // Si c'est une feuille, utiliser `print!`
-            print!("{:indent$}{}", "", graph[node], indent = indent);
-            println!("");
+            let output = format!("{:indent$}{}\n", "", graph[node], indent = indent);
+            let _ = file.write_all(output.as_bytes());
         } else {
-            // Si ce n'est pas une feuille, utiliser `println!`
-            println!("{:indent$}{}", "", graph[node], indent = indent);
-
+            let output = format!("{:indent$}{}\n", "", graph[node], indent = indent);
+            let _ = file.write_all(output.as_bytes());
             if level < 5 {
                 // Parcourir les nœuds enfants (successeurs)
                 for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
-                    Self::display_tree(graph, neighbor, indent + 3, level + 1); // Augmenter l'indentation pour les enfants
+                    Self::display_tree(graph, neighbor, indent + 3, level + 1, file);
+                    // Augmenter l'indentation pour les enfants
                 }
             }
         }
@@ -142,7 +161,7 @@ impl EngineMinimax {
         if self.debug_actor_opt.is_some() {
             //Self::display_tree(&graph, root_node_id, 0);
         }
-        //Self::display_tree(&graph, root_node_id, 0, 0);
+        //Self::write_tree(&graph, root_node_id);
         best_move
     }
     fn minimax_rec(
@@ -173,7 +192,7 @@ impl EngineMinimax {
             graph.add_edge(*node_parent_id, node_id, ());
             //println!("{}",game_clone.bit_position().to().chessboard());
             let _ = game_clone
-                .play_moves(&[long_algebric_move], &self.zobrist_table, None)
+                .play_moves(&[long_algebric_move], &self.zobrist_table, None, false)
                 .unwrap();
             let color = &game_clone
                 .bit_position()

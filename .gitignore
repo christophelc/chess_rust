@@ -4,3 +4,4 @@ spec*.md
 tarpaulin-report.html
 flamegraph.svg
 perf.data*
+profile.json

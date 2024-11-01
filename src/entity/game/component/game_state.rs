@@ -193,12 +193,13 @@ impl GameState {
         valid_moves: &[long_notation::LongAlgebricNotationMove],
         zobrist_table: &zobrist::Zobrist,
         debug_actor_opt: Option<debug::DebugActor>,
+        is_uci_origin: bool,
     ) -> Result<Vec<BitBoardMove>, String> {
         let mut summary = vec![];
         let mut result: Result<(), String> = Ok(());
         for m in valid_moves {
             let color = self.bit_position.bit_position_status().player_turn();
-            match check_move(color, *m, &self.bit_position) {
+            match check_move(color, *m, &self.bit_position, is_uci_origin) {
                 Err(err) => {
                     println!("{:?}", err);
                     if let Some(debug_actor) = &debug_actor_opt {
@@ -247,6 +248,7 @@ fn check_move(
     player_turn: square::Color,
     m: long_notation::LongAlgebricNotationMove,
     bitboard_position: &bitboard::BitPosition,
+    is_move_uci_origin: bool,
 ) -> Result<BitBoardMove, String> {
     let bit_boards_white_and_black = bitboard_position.bit_boards_white_and_black();
     let start_square = bit_boards_white_and_black.peek(m.start());
@@ -255,11 +257,19 @@ fn check_move(
         (square::Square::Empty, _) => Err(format!("empty start square {}", m.start().value())),
         (square::Square::NonEmpty(piece), square::Square::Empty) => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), None, m.opt_promotion());
-            check_move_level2(b_move, bitboard_position)
+            if is_move_uci_origin {
+                check_move_level2(b_move, bitboard_position)
+            } else {
+                Ok(b_move)
+            }
         },
         (square::Square::NonEmpty(piece), square::Square::NonEmpty(capture)) if capture.color() != piece.color() => {
             let b_move = BitBoardMove::new(player_turn, piece.type_piece(), m.start(), m.end(), Some(capture.type_piece()), m.opt_promotion());
-            check_move_level2(b_move, bitboard_position)
+            if is_move_uci_origin {
+                check_move_level2(b_move, bitboard_position)
+            } else {
+                Ok(b_move)
+            }
         },
         (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start().value(), m.end().value())),
     }
@@ -328,7 +338,7 @@ mod tests {
             .into_iter()
             .map(|m| long_notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
             .collect();
-        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone());
+        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone(), true);
         //println!("{}", game.bit_position().to().chessboard());
         let fen_pos_final = fen::Fen::encode(&game.bit_position.to()).unwrap();
         let fen_pos_final_expected =
@@ -359,7 +369,7 @@ mod tests {
             .into_iter()
             .map(|m| long_notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
             .collect();
-        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone());
+        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone(), true);
         game.play_back();
         game.play_back();
         game.play_back();
