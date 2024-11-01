@@ -358,6 +358,13 @@ pub trait GenMoves {
     ) -> Vec<bitboard::BitBoardMove>;
 
     fn check_status(&self, color: &square::Color) -> CheckStatus;
+    fn can_move(
+        &self,
+        color: &square::Color,
+        check_status: CheckStatus,
+        capture_en_passant: Option<&bitboard::BitIndex>,
+        bit_position_status: &bitboard::BitPositionStatus,
+    ) -> bool;
 }
 
 fn moves2bitboard_moves(
@@ -626,6 +633,97 @@ fn gen_moves_for_all_simple_check(
 }
 
 impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
+    fn can_move(
+        &self,
+        color: &square::Color,
+        check_status: CheckStatus,
+        capture_en_passant: Option<&bitboard::BitIndex>,
+        bit_position_status: &bitboard::BitPositionStatus,
+    ) -> bool {
+        let bit_board = self.bit_board(color);
+        let bit_board_opponent = self.bit_board(&color.switch());
+        match check_status {
+            CheckStatus::None => {
+                let can_castle_king_side =
+                    bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), color);
+                let can_castle_queen_side =
+                    bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), color);
+                let moves_piece =
+                    bit_board
+                        .rooks
+                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                let mut moves = moves2bitboard_moves(*color, moves_piece, self);
+                if moves.is_empty() {
+                    let moves_piece =
+                        bit_board
+                            .bishops
+                            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                    moves = moves2bitboard_moves(*color, moves_piece, self);
+                }
+                if moves.is_empty() {
+                    let moves_piece =
+                        bit_board
+                            .knights
+                            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                    moves = moves2bitboard_moves(*color, moves_piece, self);
+                }
+                if moves.is_empty() {
+                    let moves_piece = bit_board.king.gen_moves_no_check(
+                        color,
+                        bit_board,
+                        bit_board_opponent,
+                        can_castle_king_side,
+                        can_castle_queen_side,
+                    );
+                    moves = moves2bitboard_moves(*color, moves_piece, self);
+                }
+                if moves.is_empty() {
+                    let moves_piece =
+                        bit_board
+                            .queens
+                            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+                    moves = moves2bitboard_moves(*color, moves_piece, self);
+                }
+                if moves.is_empty() {
+                    let moves_piece = bit_board.pawns.gen_moves_no_check(
+                        color,
+                        bit_board,
+                        bit_board_opponent,
+                        capture_en_passant,
+                    );
+                    moves = moves2bitboard_moves(*color, moves_piece, self);
+                }
+                !moves.is_empty()
+            }
+            CheckStatus::Simple {
+                attacker: _,
+                attacker_index,
+            } => {
+                let moves = gen_moves_for_all_simple_check(
+                    color,
+                    attacker_index,
+                    bit_board,
+                    bit_board_opponent,
+                    capture_en_passant,
+                );
+                !moves2bitboard_moves(*color, moves, self).is_empty()
+            }
+            CheckStatus::Double => {
+                let index = bit_board.king().bitboard.index();
+                let moves = gen_moves_for_king_except_castle(index, &bit_board.concat_bit_boards());
+                let moves = if moves.empty() {
+                    vec![]
+                } else {
+                    vec![PieceMoves {
+                        type_piece: TypePiece::King,
+                        index,
+                        moves,
+                    }]
+                };
+                !moves2bitboard_moves(*color, moves, self).is_empty()
+            }
+        }
+    }
     fn gen_moves_for_all(
         &self,
         color: &square::Color,

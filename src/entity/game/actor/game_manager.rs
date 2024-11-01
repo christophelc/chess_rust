@@ -8,7 +8,7 @@ use actix::{Actor, Addr, Context};
 use crate::entity::{
     engine::component::ts_best_move,
     game::component::{
-        bitboard::{self, zobrist},
+        bitboard::{self, piece_move::GenMoves, zobrist},
         square,
     },
 };
@@ -82,15 +82,40 @@ impl Actor for GameManager {
 
 impl GameManager {
     fn play_moves(&mut self, valid_moves: Vec<LongAlgebricNotationMove>) -> Result<(), String> {
+        println!("xxxx");
         let result: Option<Result<Vec<bitboard::BitBoardMove>, String>> = self
             .game_state_opt
             .as_mut()
             .map(|game_state: &mut GameState| {
-                game_state.play_moves(
+                let res = game_state.play_moves(
                     &valid_moves,
                     &self.zobrist_table,
                     self.debug_actor_opt.clone(),
-                )
+                );
+                let color = &game_state
+                    .bit_position()
+                    .bit_position_status()
+                    .player_turn();
+                let check_status = game_state
+                    .bit_position()
+                    .bit_boards_white_and_black()
+                    .check_status(color);
+                let can_move = game_state
+                    .bit_position()
+                    .bit_boards_white_and_black()
+                    .can_move(
+                        color,
+                        check_status,
+                        game_state
+                            .bit_position()
+                            .bit_position_status()
+                            .pawn_en_passant()
+                            .as_ref(),
+                        game_state.bit_position().bit_position_status(),
+                    );
+                let end_game = game_state.check_end_game(check_status, !can_move);
+                game_state.set_end_game(end_game);
+                res
             });
         match result {
             Some(Ok(b_moves)) => {
@@ -261,9 +286,9 @@ mod tests {
         let moves: Vec<String> = game_opt
             .as_ref()
             .unwrap()
-            .moves()
+            .gen_moves()
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect();
         println!("{:?}", moves);
         assert!(moves.contains(&"c2c3".to_string()));
@@ -347,9 +372,9 @@ mod tests {
         let moves: Vec<String> = game_opt
             .as_ref()
             .unwrap()
-            .moves()
+            .gen_moves()
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect();
         assert!(!moves.contains(&"d7e6".to_string()));
         let fen = fen::Fen::encode(&game_opt.unwrap().bit_position().to())
@@ -388,9 +413,9 @@ mod tests {
         let moves: Vec<String> = game_opt
             .as_ref()
             .unwrap()
-            .moves()
+            .gen_moves()
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect();
         println!("{:?}", moves);
         assert!(!moves.contains(&"a6h6".to_string()));
@@ -422,9 +447,9 @@ mod tests {
         let moves: Vec<String> = game_opt
             .as_ref()
             .unwrap()
-            .moves()
+            .gen_moves()
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect();
         assert!(!moves.contains(&"a5h3".to_string()));
     }
@@ -482,6 +507,7 @@ mod tests {
     #[actix::test]
     async fn test_game_pat_black_first() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
+        //let debug_actor_opt = Some( debug::DebugEntity::new(true).start());
         let inputs = vec!["position fen k7/7R/1R6/8/8/8/8/7K b - - 0 1"];
         let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
         let game_manager_actor = game_manager::GameManager::start(game_manager::GameManager::new(
@@ -613,7 +639,7 @@ mod tests {
         let game = game_opt.clone().unwrap();
         println!("{:?}", game.bit_position().to().check_status());
         let moves: Vec<String> = game
-            .moves()
+            .gen_moves()
             .into_iter()
             .map(|b_move| {
                 long_notation::LongAlgebricNotationMove::build_from_b_move(b_move.clone()).cast()
@@ -728,10 +754,10 @@ mod tests {
         let game_opt = get_game_state(&game_manager_actor).await;
         assert!(game_opt.is_some());
         let game = game_opt.as_ref().unwrap();
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         assert!(!moves.contains(&"h3h2".to_string()));
@@ -761,10 +787,10 @@ mod tests {
         let game = game_opt.as_ref().unwrap();
         let check_status = game.bit_position().to().check_status();
         assert_eq!(check_status, piece_move::CheckStatus::Double);
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         println!("{:?}", moves);
@@ -792,10 +818,10 @@ mod tests {
         let game_opt = get_game_state(&game_manager_actor).await;
         assert!(game_opt.is_some());
         let game = game_opt.as_ref().unwrap();
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         println!("{:?}", moves);
@@ -829,10 +855,10 @@ mod tests {
             game.bit_position().bit_position_status().player_turn(),
             square::Color::White
         );
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         println!("{:?}", moves);
@@ -860,10 +886,10 @@ mod tests {
         let game_opt = get_game_state(&game_manager_actor).await;
         assert!(game_opt.is_some());
         let game = game_opt.as_ref().unwrap();
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         println!("{:?}", moves);

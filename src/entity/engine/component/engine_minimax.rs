@@ -4,6 +4,7 @@ use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;
@@ -14,36 +15,54 @@ use crate::{entity::game::component::bitboard, monitoring::debug};
 
 const ROOT_ID: &str = "root";
 
-#[derive(Clone)]
-struct Score(i32);
+#[derive(Clone, Debug)]
+struct Score {
+    value: i32,
+    path_length: u8,
+}
+impl Score {
+    pub fn new(value: i32, path_length: u8) -> Self {
+        Self { value, path_length }
+    }
+    pub fn is_better_than(&self, score: &Score) -> bool {
+        self.value > score.value
+            || self.value == score.value && self.path_length < score.path_length
+    }
+    pub fn opposite(&self) -> Self {
+        Self {
+            value: -self.value,
+            path_length: self.path_length,
+        }
+    }
+}
 impl fmt::Display for Score {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{} - path length: {}", self.value, self.path_length)
     }
 }
 
 #[derive(Clone)]
 struct NodeNameAndScore {
     move_str: String,
-    score: Score,
+    score_opt: Option<Score>,
 }
 impl fmt::Display for NodeNameAndScore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.move_str, self.score)
+        write!(f, "{}:{:?}", self.move_str, self.score_opt)
     }
 }
 impl NodeNameAndScore {
     fn new(move_str: String) -> Self {
         Self {
             move_str,
-            score: Score(0),
+            score_opt: None,
         }
     }
     fn is_root(&self) -> bool {
         self.move_str == ROOT_ID.to_string()
     }
     fn set_score(&mut self, score: Score) {
-        self.score = score;
+        self.score_opt = Some(score);
     }
 }
 
@@ -76,6 +95,7 @@ impl EngineMinimax {
         graph: &petgraph::Graph<NodeNameAndScore, ()>,
         node: petgraph::graph::NodeIndex,
         indent: usize,
+        level: i8,
     ) {
         // Vérifier si le nœud est une feuille (pas de voisins sortants)
         if graph
@@ -85,13 +105,16 @@ impl EngineMinimax {
         {
             // Si c'est une feuille, utiliser `print!`
             print!("{:indent$}{}", "", graph[node], indent = indent);
+            println!("");
         } else {
             // Si ce n'est pas une feuille, utiliser `println!`
             println!("{:indent$}{}", "", graph[node], indent = indent);
 
-            // Parcourir les nœuds enfants (successeurs)
-            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
-                Self::display_tree(graph, neighbor, indent + 4); // Augmenter l'indentation pour les enfants
+            if level < 5 {
+                // Parcourir les nœuds enfants (successeurs)
+                for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                    Self::display_tree(graph, neighbor, indent + 3, level + 1); // Augmenter l'indentation pour les enfants
+                }
             }
         }
     }
@@ -119,6 +142,7 @@ impl EngineMinimax {
         if self.debug_actor_opt.is_some() {
             //Self::display_tree(&graph, root_node_id, 0);
         }
+        //Self::display_tree(&graph, root_node_id, 0, 0);
         best_move
     }
     fn minimax_rec(
@@ -132,12 +156,13 @@ impl EngineMinimax {
         stat_actor_opt: Option<stat_entity::StatActor>,
         n_positions_evaluted: &mut u64,
     ) -> (bitboard::BitBoardMove, Score) {
-        let mut max_score = i32::MIN;
-        let mut best_move = game.moves()[0];
-        for m in game.moves() {
+        let mut max_score_opt: Option<Score> = None;
+        let moves = game.gen_moves();
+        let mut best_move = moves[0];
+        for m in moves {
             //for m in game.moves().into_iter().filter(|m| current_depth > 0 || long_notation::LongAlgebricNotationMove::build_from_b_move(**m).cast() == "e7f8B") {
             // TODO: optimize that
-            let long_algebric_move = long_notation::LongAlgebricNotationMove::build_from_b_move(*m);
+            let long_algebric_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
             let updated_variant = format!("{} {}", variant, long_algebric_move.cast());
             let mut move_score = NodeNameAndScore::new(long_algebric_move.cast());
             // update graph with new child with score equals to zero
@@ -152,6 +177,29 @@ impl EngineMinimax {
             let _ = game_clone
                 .play_moves(&[long_algebric_move], &self.zobrist_table, None)
                 .unwrap();
+            let color = &game_clone
+                .bit_position()
+                .bit_position_status()
+                .player_turn();
+            let check_status = game_clone
+                .bit_position()
+                .bit_boards_white_and_black()
+                .check_status(color);
+            let can_move = game_clone
+                .bit_position()
+                .bit_boards_white_and_black()
+                .can_move(
+                    color,
+                    check_status,
+                    game_clone
+                        .bit_position()
+                        .bit_position_status()
+                        .pawn_en_passant()
+                        .as_ref(),
+                    game_clone.bit_position().bit_position_status(),
+                );
+            let end_game = game_clone.check_end_game(check_status, !can_move);
+            game_clone.set_end_game(end_game);
             let score = match game_clone.end_game() {
                 game_state::EndGame::None => {
                     if current_depth < self.max_depth {
@@ -165,7 +213,7 @@ impl EngineMinimax {
                             stat_actor_opt.clone(),
                             n_positions_evaluted,
                         );
-                        Score(-score.0)
+                        Score::new(-score.value, score.path_length + 1)
                     } else {
                         *n_positions_evaluted += 1;
                         if *n_positions_evaluted % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED
@@ -179,7 +227,7 @@ impl EngineMinimax {
                                 stat_actor.do_send(msg);
                             }
                         }
-                        let score = evaluate(game_clone.bit_position());
+                        let score = Score::new(evaluate(game_clone.bit_position()), current_depth);
                         // update current leaf node_id with score
                         if let Some(node) = graph.node_weight_mut(node_id) {
                             move_score.set_score(score.clone());
@@ -191,7 +239,7 @@ impl EngineMinimax {
                 // the last mave wins => it is a very good move
                 game_state::EndGame::Mat(_color) => {
                     //println!("Mat found for {}", updated_variant);
-                    Score(i32::MAX)
+                    Score::new(i32::MAX, current_depth)
                 }
                 game_state::EndGame::TimeOutLost(color)
                     if color
@@ -200,23 +248,24 @@ impl EngineMinimax {
                             .bit_position_status()
                             .player_turn() =>
                 {
-                    Score(i32::MAX)
+                    Score::new(i32::MAX, current_depth)
                 }
-                // the last move loses
-                game_state::EndGame::TimeOutLost(_color) => Score(i32::MIN),
-                _ => Score(0),
+                // the last move loses (score for timeout score not relevant)
+                game_state::EndGame::TimeOutLost(_color) => Score::new(i32::MIN, current_depth),
+                _ => Score::new(0, current_depth),
             };
-            if score.0 > max_score {
+            //if current_depth == 0 && long_algebric_move.cast() == "c6c8" {
+            if max_score_opt.is_none() || score.is_better_than(max_score_opt.as_ref().unwrap()) {
                 // Send best move
-                best_move = *m;
-                max_score = score.0;
+                best_move = m;
+                max_score_opt = Some(score);
                 // update aggregated score in the parent node
                 if let Some(node_parent) = graph.node_weight_mut(*node_parent_id) {
                     let mut content = NodeNameAndScore::new(node_parent.move_str.clone());
                     if node_parent.is_root() {
-                        content.set_score(Score(max_score));
+                        content.set_score(max_score_opt.clone().unwrap());
                     } else {
-                        content.set_score(Score(-max_score));
+                        content.set_score(max_score_opt.clone().unwrap().opposite());
                     }
                     *node_parent = content;
                 }
@@ -225,7 +274,7 @@ impl EngineMinimax {
                 // TODO: debug
             }
         }
-        (best_move, Score(max_score))
+        (best_move, max_score_opt.unwrap())
     }
 }
 unsafe impl Send for EngineMinimax {}
@@ -286,7 +335,7 @@ fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
     score
 }
 
-fn evaluate(bit_position: &bitboard::BitPosition) -> Score {
+fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
     let color = bit_position.bit_position_status().player_turn().switch();
     let score_current =
         evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board(&color));
@@ -298,7 +347,7 @@ fn evaluate(bit_position: &bitboard::BitPosition) -> Score {
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
     let score = score_current as i32 - score_opponent as i32;
-    Score(score)
+    score
 }
 
 #[cfg(test)]
@@ -404,10 +453,10 @@ mod tests {
         let game_opt = get_game_state(&game_manager_actor).await;
         assert!(game_opt.is_some());
         let game = game_opt.as_ref().unwrap();
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let moves: Vec<String> = (*moves
             .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
             .collect::<Vec<String>>())
         .to_vec();
         assert!(!moves.contains(&"h3h2".to_string()));

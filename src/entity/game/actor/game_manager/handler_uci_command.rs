@@ -5,6 +5,7 @@ use actix::{Actor, Addr};
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::ts_bitboard_move;
+use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::square::{self, Switch};
 use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
@@ -136,8 +137,31 @@ impl Handler<UciCommand> for GameManager {
                 self.parameters.set_time_per_move_in_ms(time);
             }
             UciCommand::UpdatePosition(fen, position) => {
-                self.game_state_opt =
-                    Some(game_state::GameState::new(position, &self.zobrist_table));
+                let mut game_state = game_state::GameState::new(position, &self.zobrist_table);
+                let color = &game_state
+                    .bit_position()
+                    .bit_position_status()
+                    .player_turn();
+                let check_status = game_state
+                    .bit_position()
+                    .bit_boards_white_and_black()
+                    .check_status(color);
+                let can_move = game_state
+                    .bit_position()
+                    .bit_boards_white_and_black()
+                    .can_move(
+                        color,
+                        check_status,
+                        game_state
+                            .bit_position()
+                            .bit_position_status()
+                            .pawn_en_passant()
+                            .as_ref(),
+                        game_state.bit_position().bit_position_status(),
+                    );
+                let end_game = game_state.check_end_game(check_status, !can_move);
+                game_state.set_end_game(end_game);
+                self.game_state_opt = Some(game_state);
                 self.history.set_fen(&fen);
                 self.ts_best_move_opt = None;
                 if let Some(debug_actor) = &self.debug_actor_opt {

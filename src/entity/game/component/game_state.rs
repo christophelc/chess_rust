@@ -41,8 +41,6 @@ impl BackMove {
 #[derive(Debug, Clone)]
 pub struct GameState {
     bit_position: bitboard::BitPosition,
-    // Once a move is played, we update moves for the next player
-    moves: Vec<BitBoardMove>,
     is_regenerate_moves: bool,
     hash_positions: zobrist::ZobristHistory,
     back: Vec<BackMove>,
@@ -53,14 +51,12 @@ impl GameState {
     pub fn new(position: fen::Position, zobrist_table: &zobrist::Zobrist) -> Self {
         let mut game_state = GameState {
             bit_position: bitboard::BitPosition::from(position),
-            moves: vec![],
             hash_positions: zobrist::ZobristHistory::default(),
             back: vec![],
             is_regenerate_moves: false,
             end_game: EndGame::None,
         };
         // init moves and game status
-        game_state.update_moves();
         game_state.init_hash_table(zobrist_table);
         game_state
     }
@@ -103,37 +99,42 @@ impl GameState {
         self.end_game.clone()
     }
 
-    pub fn moves(&self) -> &Vec<BitBoardMove> {
-        &self.moves
+    pub fn check_end_game(&self, check_status: CheckStatus, moves_is_empty: bool) -> EndGame {
+        let bit_position_status = self.bit_position.bit_position_status();
+        let end_game = if moves_is_empty {
+            match check_status {
+                CheckStatus::None => EndGame::Pat,
+                _ => EndGame::Mat(bit_position_status.player_turn()),
+            }
+        } else if bit_position_status.n_half_moves() >= 100 {
+            EndGame::NoPawnAndCapturex50
+        } else if self.check_insufficient_material(self.bit_position.bit_boards_white_and_black()) {
+            EndGame::InsufficientMaterial
+        } else if self
+            .hash_positions
+            .check_3x(bit_position_status.n_half_moves())
+        {
+            EndGame::Repetition3x
+        } else {
+            EndGame::None
+        };
+        end_game
     }
 
-    pub fn update_moves(&mut self) {
+    pub fn gen_moves(&self) -> Vec<BitBoardMove> {
         let bit_position_status = self.bit_position.bit_position_status();
         let color = bit_position_status.player_turn();
         let bit_boards_white_and_black = self.bit_position.bit_boards_white_and_black();
         let check_status = bit_boards_white_and_black.check_status(&color);
         let capture_en_passant = bit_position_status.pawn_en_passant();
-        self.moves = bit_boards_white_and_black.gen_moves_for_all(
+        let moves = bit_boards_white_and_black.gen_moves_for_all(
             &color,
             check_status,
             capture_en_passant.as_ref(),
             bit_position_status,
         );
-        if self.moves.is_empty() {
-            match check_status {
-                CheckStatus::None => self.end_game = EndGame::Pat,
-                _ => self.end_game = EndGame::Mat(color),
-            }
-        } else if bit_position_status.n_half_moves() >= 100 {
-            self.end_game = EndGame::NoPawnAndCapturex50
-        } else if self.check_insufficient_material(bit_boards_white_and_black) {
-            self.end_game = EndGame::InsufficientMaterial
-        } else if self
-            .hash_positions
-            .check_3x(bit_position_status.n_half_moves())
-        {
-            self.end_game = EndGame::Repetition3x
-        }
+        //self.set_end_game(self.check_end_game(check_status, moves.is_empty()));
+        moves
     }
     pub fn check_insufficient_material_for_color(
         &self,
@@ -185,7 +186,6 @@ impl GameState {
             back_info.bitboard_white_and_black_mask,
         );
         self.hash_positions.pop();
-        self.moves.pop();
     }
     // play n moves from the current position
     pub fn play_moves(
@@ -235,7 +235,6 @@ impl GameState {
                             self.bit_position.to().chessboard()
                         )));
                     }
-                    self.update_moves();
                 }
             }
         }
@@ -335,7 +334,7 @@ mod tests {
         let fen_pos_final_expected =
             "2rqkbn1/p3pppr/n2p3p/1pp5/3P1PbP/BPPQ1NP1/P3P3/RN2KBR1 w Q - 1 12";
         assert_eq!(fen_pos_final, fen_pos_final_expected);
-        let moves = game.moves;
+        let moves = game.gen_moves();
         let algebric_moves_expected = vec![
             "g1h1", "g1g2", "f1g2", "f1h3", "a3c1", "a3b2", "a3b4", "a3c5", "b1d2", "f3d2", "f3h2",
             "f3e5", "f3g5", "e1d1", "e1d2", "e1f2", "d3d1", "d3c2", "d3d2", "d3e3", "d3c4", "d3e4",

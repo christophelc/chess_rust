@@ -44,7 +44,7 @@ impl logic::Engine for EngineDummy {
         _stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
     ) {
-        let moves = game.moves();
+        let moves = game.gen_moves();
         let mut rng = ChaCha12Rng::from_entropy();
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
