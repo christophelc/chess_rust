@@ -130,7 +130,7 @@ impl EngineMinimax {
         let mut n_positions_evaluated: u64 = 0;
         let (best_move, _) = self.minimax_rec(
             "",
-            &game,
+            &mut game.clone(),
             0,
             &root_node_id,
             &mut graph,
@@ -148,7 +148,7 @@ impl EngineMinimax {
     fn minimax_rec(
         &self,
         variant: &str,
-        game: &game_state::GameState,
+        game_clone: &mut game_state::GameState,
         current_depth: u8,
         node_parent_id: &petgraph::graph::NodeIndex,
         graph: &mut petgraph::Graph<NodeNameAndScore, ()>,
@@ -157,7 +157,7 @@ impl EngineMinimax {
         n_positions_evaluted: &mut u64,
     ) -> (bitboard::BitBoardMove, Score) {
         let mut max_score_opt: Option<Score> = None;
-        let moves = game.gen_moves();
+        let moves = game_clone.gen_moves();
         let mut best_move = moves[0];
         for m in moves {
             //for m in game.moves().into_iter().filter(|m| current_depth > 0 || long_notation::LongAlgebricNotationMove::build_from_b_move(**m).cast() == "e7f8B") {
@@ -171,8 +171,6 @@ impl EngineMinimax {
                 println!("{}", updated_variant);
             }
             graph.add_edge(*node_parent_id, node_id, ());
-            // TODO: implement 'go back' feature instead of cloning game_state
-            let mut game_clone = game.clone();
             //println!("{}",game_clone.bit_position().to().chessboard());
             let _ = game_clone
                 .play_moves(&[long_algebric_move], &self.zobrist_table, None)
@@ -205,7 +203,7 @@ impl EngineMinimax {
                     if current_depth < self.max_depth {
                         let (_, score) = self.minimax_rec(
                             &updated_variant,
-                            &game_clone,
+                            game_clone,
                             current_depth + 1,
                             &node_id,
                             graph,
@@ -254,7 +252,7 @@ impl EngineMinimax {
                 game_state::EndGame::TimeOutLost(_color) => Score::new(i32::MIN, current_depth),
                 _ => Score::new(0, current_depth),
             };
-            //if current_depth == 0 && long_algebric_move.cast() == "c6c8" {
+            game_clone.play_back();
             if max_score_opt.is_none() || score.is_better_than(max_score_opt.as_ref().unwrap()) {
                 // Send best move
                 best_move = m;
