@@ -15,7 +15,6 @@ use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
-const ROOT_ID: &str = "root";
 const TREE_FILE_PATH: &str = "tree.txt";
 
 #[derive(Clone, Debug)]
@@ -44,25 +43,55 @@ impl fmt::Display for Score {
     }
 }
 
-#[derive(Clone)]
-struct NodeNameAndScore {
-    move_str: String,
-    score_opt: Option<Score>,
+enum NodeType {
+    Root(RootNodeContent),
+    Regular(RegularNodeContent),
 }
-impl fmt::Display for NodeNameAndScore {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{:?}", self.move_str, self.score_opt)
+impl NodeType {
+    fn new_root() -> Self {
+        NodeType::Root(RootNodeContent::default())
     }
 }
-impl NodeNameAndScore {
-    fn new(move_str: String) -> Self {
-        Self {
-            move_str,
-            score_opt: None,
+impl fmt::Display for NodeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NodeType::Root(root_node_content) => {
+                write!(f, "root with score: {}", root_node_content)
+            }
+            NodeType::Regular(regular_node_content) => {
+                write!(f, "root with score: {}", regular_node_content)
+            }
         }
     }
-    fn is_root(&self) -> bool {
-        self.move_str == ROOT_ID.to_string()
+}
+#[derive(Clone, Default)]
+struct RootNodeContent {
+    score_opt: Option<Score>,
+}
+impl fmt::Display for RootNodeContent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "root with score: {:?}", self.score_opt)
+    }
+}
+
+#[derive(Clone)]
+struct RegularNodeContent {
+    b_move: bitboard::BitBoardMove,
+    score_opt: Option<Score>,
+}
+impl fmt::Display for RegularNodeContent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let move_long_notation =
+            long_notation::LongAlgebricNotationMove::build_from_b_move(self.b_move);
+        write!(f, "{}:{:?}", move_long_notation.cast(), self.score_opt)
+    }
+}
+impl RegularNodeContent {
+    fn new(b_move: bitboard::BitBoardMove) -> Self {
+        Self {
+            b_move,
+            score_opt: None,
+        }
     }
     fn set_score(&mut self, score: Score) {
         self.score_opt = Some(score);
@@ -94,7 +123,7 @@ impl EngineMinimax {
         self.id_number = id_number.to_string();
     }
     #[allow(dead_code)]
-    fn write_tree(graph: &petgraph::Graph<NodeNameAndScore, ()>, node: petgraph::graph::NodeIndex) {
+    fn write_tree(graph: &petgraph::Graph<NodeType, ()>, node: petgraph::graph::NodeIndex) {
         let exe_path = env::current_exe().expect("Failed to find executable path");
         let folder_exe_path = exe_path
             .parent()
@@ -111,7 +140,7 @@ impl EngineMinimax {
 
     #[allow(dead_code)]
     fn display_tree(
-        graph: &petgraph::Graph<NodeNameAndScore, ()>,
+        graph: &petgraph::Graph<NodeType, ()>,
         node: petgraph::graph::NodeIndex,
         indent: usize,
         level: i8,
@@ -123,10 +152,10 @@ impl EngineMinimax {
             .next()
             .is_none()
         {
-            let output = format!("{:indent$}{}\n", "", graph[node], indent = indent);
+            let output = format!("{:indent$}{} {}\n", "", level, graph[node], indent = indent);
             let _ = file.write_all(output.as_bytes());
         } else {
-            let output = format!("{:indent$}{}\n", "", graph[node], indent = indent);
+            let output = format!("{:indent$}{} {}\n", "", level, graph[node], indent = indent);
             let _ = file.write_all(output.as_bytes());
             if level < 5 {
                 // Parcourir les nœuds enfants (successeurs)
@@ -143,13 +172,15 @@ impl EngineMinimax {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> bitboard::BitBoardMove {
-        let mut graph = petgraph::Graph::<NodeNameAndScore, ()>::new();
-        let root_content = NodeNameAndScore::new(ROOT_ID.to_string());
+        let mut graph = petgraph::Graph::<NodeType, ()>::new();
+        let root_content = NodeType::new_root();
         let root_node_id = graph.add_node(root_content);
         let mut n_positions_evaluated: u64 = 0;
+        let mut game_clone = game.clone();
+        self.prepare_tree_level(&mut game_clone, &root_node_id, &mut graph);
         let (best_move, _) = self.minimax_rec(
             "",
-            &mut game.clone(),
+            &mut game_clone,
             0,
             &root_node_id,
             &mut graph,
@@ -167,131 +198,114 @@ impl EngineMinimax {
     fn minimax_rec(
         &self,
         variant: &str,
-        game_clone: &mut game_state::GameState,
+        game: &mut game_state::GameState,
         current_depth: u8,
         node_parent_id: &petgraph::graph::NodeIndex,
-        graph: &mut petgraph::Graph<NodeNameAndScore, ()>,
+        graph: &mut petgraph::Graph<NodeType, ()>,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
-        n_positions_evaluted: &mut u64,
+        n_positions_evaluated: &mut u64,
     ) -> (bitboard::BitBoardMove, Score) {
         let mut max_score_opt: Option<Score> = None;
-        let moves = game_clone.gen_moves();
-        let mut best_move = moves[0];
+        let mut best_move_opt: Option<bitboard::BitBoardMove> = None;
+        let moves: Vec<bitboard::BitBoardMove> = graph
+            .neighbors_directed(*node_parent_id, petgraph::Direction::Outgoing)
+            .into_iter()
+            .filter_map(|child_idx| {
+                if let Some(NodeType::Regular(content)) = graph.node_weight(child_idx) {
+                    Some(content.b_move.clone())
+                } else {
+                    None // Skip Root nodes
+                }
+            })
+            .collect();
         for m in moves {
-            //for m in game.moves().into_iter().filter(|m| current_depth > 0 || long_notation::LongAlgebricNotationMove::build_from_b_move(**m).cast() == "e7f8B") {
-            // TODO: optimize that
-            let long_algebric_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
-            let updated_variant = format!("{} {}", variant, long_algebric_move.cast());
-            let mut move_score = NodeNameAndScore::new(long_algebric_move.cast());
-            // update graph with new child with score equals to zero
-            let node_id: petgraph::graph::NodeIndex = graph.add_node(move_score.clone());
-            if current_depth == 0 {
-                println!("{}", updated_variant);
-            }
-            graph.add_edge(*node_parent_id, node_id, ());
-            //println!("{}",game_clone.bit_position().to().chessboard());
-            let _ = game_clone
-                .play_moves(&[long_algebric_move], &self.zobrist_table, None, false)
-                .unwrap();
-            let color = &game_clone
-                .bit_position()
-                .bit_position_status()
-                .player_turn();
-            let check_status = game_clone
-                .bit_position()
-                .bit_boards_white_and_black()
-                .check_status(color);
-            let can_move = game_clone
-                .bit_position()
-                .bit_boards_white_and_black()
-                .can_move(
-                    color,
-                    check_status,
-                    game_clone
-                        .bit_position()
-                        .bit_position_status()
-                        .pawn_en_passant()
-                        .as_ref(),
-                    game_clone.bit_position().bit_position_status(),
-                );
-            let end_game = game_clone.check_end_game(check_status, !can_move);
-            game_clone.set_end_game(end_game);
-            let score = match game_clone.end_game() {
-                game_state::EndGame::None => {
-                    if current_depth < self.max_depth {
-                        let (_, score) = self.minimax_rec(
-                            &updated_variant,
-                            game_clone,
-                            current_depth + 1,
-                            &node_id,
-                            graph,
-                            self_actor.clone(),
-                            stat_actor_opt.clone(),
-                            n_positions_evaluted,
-                        );
-                        Score::new(-score.value, score.path_length + 1)
-                    } else {
-                        *n_positions_evaluted += 1;
-                        if *n_positions_evaluted % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED
-                            == 0
-                        {
-                            if let Some(stat_actor) = &stat_actor_opt {
-                                let msg = stat_entity::handler_stat::StatUpdate::new(
-                                    self.id(),
-                                    *n_positions_evaluted,
-                                );
-                                stat_actor.do_send(msg);
-                            }
-                        }
-                        let score = Score::new(evaluate(game_clone.bit_position()), current_depth);
-                        // update current leaf node_id with score
-                        if let Some(node) = graph.node_weight_mut(node_id) {
-                            move_score.set_score(score.clone());
-                            *node = move_score;
-                        }
-                        score
-                    }
-                }
-                // the last mave wins => it is a very good move
-                game_state::EndGame::Mat(_color) => {
-                    //println!("Mat found for {}", updated_variant);
-                    Score::new(i32::MAX, current_depth)
-                }
-                game_state::EndGame::TimeOutLost(color)
-                    if color
-                        == game_clone
-                            .bit_position()
-                            .bit_position_status()
-                            .player_turn() =>
-                {
-                    Score::new(i32::MAX, current_depth)
-                }
-                // the last move loses (score for timeout score not relevant)
-                game_state::EndGame::TimeOutLost(_color) => Score::new(i32::MIN, current_depth),
-                _ => Score::new(0, current_depth),
-            };
-            game_clone.play_back();
+            let score = self.process_move(
+                game,
+                m,
+                variant,
+                node_parent_id,
+                graph,
+                self_actor.clone(),
+                stat_actor_opt.clone(),
+                n_positions_evaluated,
+                current_depth,
+            );
             if max_score_opt.is_none() || score.is_better_than(max_score_opt.as_ref().unwrap()) {
                 // Send best move
-                best_move = m;
+                best_move_opt = Some(m);
                 max_score_opt = Some(score);
-                // update aggregated score in the parent node
-                if let Some(node_parent) = graph.node_weight_mut(*node_parent_id) {
-                    let mut content = NodeNameAndScore::new(node_parent.move_str.clone());
-                    if node_parent.is_root() {
-                        content.set_score(max_score_opt.clone().unwrap());
-                    } else {
-                        content.set_score(max_score_opt.clone().unwrap().opposite());
-                    }
-                    *node_parent = content;
-                }
-                let msg = dispatcher::handler_engine::EngineSendBestMove(best_move);
-                self_actor.do_send(msg);
-                // TODO: debug
+                update_parent_node_score(graph, node_parent_id, max_score_opt.clone().unwrap());
+                send_best_move(self_actor.clone(), best_move_opt.unwrap());
             }
         }
-        (best_move, max_score_opt.unwrap())
+        (best_move_opt.unwrap(), max_score_opt.unwrap())
+    }
+
+    fn prepare_tree_level(
+        &self,
+        game: &mut game_state::GameState,
+        node_parent_id: &petgraph::graph::NodeIndex,
+        graph: &mut petgraph::Graph<NodeType, ()>,
+    ) {
+        let mut moves = game.gen_moves();
+        // reverse just to keep the same behavior as before
+        moves.reverse();
+        for b_move in moves {
+            let move_score = RegularNodeContent::new(b_move);
+            add_graph_node(graph, *node_parent_id, move_score);
+        }
+    }
+    fn process_move(
+        &self,
+        game: &mut game_state::GameState,
+        m: bitboard::BitBoardMove,
+        variant: &str,
+        node_parent_id: &petgraph::graph::NodeIndex,
+        graph: &mut petgraph::Graph<NodeType, ()>,
+        self_actor: Addr<dispatcher::EngineDispatcher>,
+        stat_actor_opt: Option<stat_entity::StatActor>,
+        n_positions_evaluated: &mut u64,
+        current_depth: u8,
+    ) -> Score {
+        let move_score = RegularNodeContent::new(m);
+        let node_id = add_graph_node(graph, *node_parent_id, move_score.clone());
+
+        let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
+        let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
+
+        game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
+            .unwrap();
+        update_game_status(game);
+
+        let score = if game.end_game() == game_state::EndGame::None {
+            if current_depth < self.max_depth {
+                self.prepare_tree_level(game, &node_id, graph);
+                let (_, score) = self.minimax_rec(
+                    &updated_variant,
+                    game,
+                    current_depth + 1,
+                    &node_id,
+                    graph,
+                    self_actor.clone(),
+                    stat_actor_opt.clone(),
+                    n_positions_evaluated,
+                );
+                Score::new(-score.value, score.path_length + 1)
+            } else {
+                let score = Score::new(
+                    evaluate_position(game, n_positions_evaluated, &stat_actor_opt, self.id()),
+                    current_depth,
+                );
+                update_score(graph, node_id, score.clone());
+                score
+            }
+        } else {
+            handle_end_game_scenario(&game, current_depth)
+        };
+
+        game.play_back();
+        score
     }
 }
 unsafe impl Send for EngineMinimax {}
@@ -339,6 +353,110 @@ impl logic::Engine for EngineMinimax {
             panic!("To be implemented. When EndGame detected in game_manager, stop the engines")
         }
     }
+}
+
+fn update_parent_node_score(
+    graph: &mut petgraph::Graph<NodeType, ()>,
+    node_parent_id: &petgraph::graph::NodeIndex,
+    score: Score,
+) {
+    if let Some(node_parent) = graph.node_weight_mut(*node_parent_id) {
+        match node_parent {
+            NodeType::Root(root) => {
+                root.score_opt = Some(score);
+            }
+            NodeType::Regular(regular) => {
+                regular.score_opt = Some(score.opposite());
+            }
+        }
+    }
+}
+
+fn send_best_move(
+    self_actor: Addr<dispatcher::EngineDispatcher>,
+    best_move: bitboard::BitBoardMove,
+) {
+    let msg = dispatcher::handler_engine::EngineSendBestMove(best_move);
+    self_actor.do_send(msg);
+}
+
+fn handle_end_game_scenario(game: &game_state::GameState, current_depth: u8) -> Score {
+    match game.end_game() {
+        game_state::EndGame::Mat(_) => {
+            // If the game ends in a checkmate, it is a favorable outcome for the player who causes the checkmate.
+            Score::new(i32::MAX, current_depth)
+        }
+        game_state::EndGame::TimeOutLost(color)
+            if color == game.bit_position().bit_position_status().player_turn() =>
+        {
+            // If the current player loses by timeout, it is an unfavorable outcome.
+            Score::new(i32::MIN, current_depth)
+        }
+        game_state::EndGame::TimeOutLost(_) => {
+            // If the opponent times out, it is a favorable outcome for the current player.
+            Score::new(i32::MAX, current_depth)
+        }
+        _ => {
+            // In other cases (stalemate, etc.), it might be neutral or need specific scoring based on the game rules.
+            Score::new(0, current_depth)
+        }
+    }
+}
+
+fn update_game_status(game: &mut game_state::GameState) {
+    let color = game.bit_position().bit_position_status().player_turn();
+    let check_status = game
+        .bit_position()
+        .bit_boards_white_and_black()
+        .check_status(&color);
+    // we could generate moves here if current_depth < self.max_depth
+    let can_move = game.bit_position().bit_boards_white_and_black().can_move(
+        &color,
+        check_status,
+        game.bit_position()
+            .bit_position_status()
+            .pawn_en_passant()
+            .as_ref(),
+        game.bit_position().bit_position_status(),
+    );
+    let end_game = game.check_end_game(check_status, !can_move);
+    game.set_end_game(end_game);
+}
+
+fn add_graph_node(
+    graph: &mut petgraph::Graph<NodeType, ()>,
+    parent_node_id: petgraph::graph::NodeIndex,
+    node_content: RegularNodeContent,
+) -> petgraph::graph::NodeIndex {
+    let node_id = graph.add_node(NodeType::Regular(node_content));
+    graph.add_edge(parent_node_id, node_id, ());
+    node_id
+}
+
+fn update_score(
+    graph: &mut petgraph::Graph<NodeType, ()>,
+    node_id: petgraph::graph::NodeIndex,
+    score: Score,
+) {
+    if let Some(NodeType::Regular(regular_node_content)) = graph.node_weight_mut(node_id) {
+        regular_node_content.set_score(score);
+    }
+}
+
+fn evaluate_position(
+    game: &mut game_state::GameState,
+    n_positions_evaluated: &mut u64,
+    stat_actor_opt: &Option<stat_entity::StatActor>,
+    engine_id: logic::EngineId,
+) -> i32 {
+    *n_positions_evaluated += 1;
+    if *n_positions_evaluated % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED == 0 {
+        if let Some(stat_actor) = stat_actor_opt {
+            let msg = stat_entity::handler_stat::StatUpdate::new(engine_id, *n_positions_evaluated);
+            stat_actor.do_send(msg);
+        }
+    }
+    evaluate(game.bit_position()) // Assuming `evaluate` is a function that computes the score for the current game position
 }
 
 fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
