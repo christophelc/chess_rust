@@ -66,12 +66,13 @@ impl Handler<StatUpdate> for StatEntity {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!("Stat actor receive {:?}", msg)));
         }
-        let (engine_id, n) = (msg.engine_id, msg.n_position_evaluted);
+        let (engine_id, n_delta) = (msg.engine_id, msg.n_position_evaluted);
         let data_opt = self.stats.get_mut(&engine_id);
         match data_opt {
-            Some(data) => data.set(n),
+            Some(data) => data.set(n_delta + data.n_positions_evaluated()),
             None => {
-                self.stats.insert(engine_id, stat_data::StatData::new(n));
+                self.stats
+                    .insert(engine_id, stat_data::StatData::new(n_delta));
             }
         };
     }

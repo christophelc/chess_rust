@@ -1,4 +1,4 @@
-pub const SEND_STAT_EVERY_N_POSITION_EVALUATED: u64 = 100;
+pub const SEND_STAT_EVERY_N_POSITION_EVALUATED: u64 = 5000;
 
 #[derive(Debug, Clone)]
 pub struct StatData {
