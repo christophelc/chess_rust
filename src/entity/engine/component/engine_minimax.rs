@@ -54,9 +54,6 @@ impl NodeType {
     fn new_root() -> Self {
         NodeType::Root(RootNodeContent::default())
     }
-    fn build_root(score: Score) -> Self {
-        NodeType::Root(RootNodeContent::new(score))
-    }
 }
 impl fmt::Display for NodeType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -73,13 +70,6 @@ impl fmt::Display for NodeType {
 #[derive(Clone, Default)]
 struct RootNodeContent {
     score_opt: Option<Score>,
-}
-impl RootNodeContent {
-    fn new(score: Score) -> Self {
-        Self {
-            score_opt: Some(score),
-        }
-    }
 }
 impl fmt::Display for RootNodeContent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -185,22 +175,21 @@ impl EngineMinimax {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> bitboard::BitBoardMove {
-        let mut graph = petgraph::Graph::<NodeType, ()>::new();
+        let num_cpus = num_cpus::get();        
         // for each level 1 move, we add a node parent
-        let level_1_nodes_root = self.prepare_tree_level_1(game, &mut graph);
+        let level_1_nodes_root = self.prepare_tree_level_1(game, num_cpus);
         let results: Vec<_> = level_1_nodes_root
             .clone()
             .into_par_iter()
-            .map(|node_id| {
+            .map(|(mut subgraph, node_id)| {
                 let mut game_clone = game.clone();
-                let mut graph_clone = graph.clone();
                 let mut n_positions_evaluated: u64 = 0;
                 let (best_move, score) = self.minimax_rec(
                     "",
                     &mut game_clone,
                     0,
                     &node_id,
-                    &mut graph_clone,
+                    &mut subgraph,
                     self_actor.clone(),
                     stat_actor_opt.clone(),
                     &mut n_positions_evaluated,
@@ -210,47 +199,16 @@ impl EngineMinimax {
                     //Self::display_tree(&graph, root_node_id, 0);
                 }
                 //Self::write_tree(&graph_clone, node_id);
-                (best_move, score, graph_clone)
+                (best_move, score, subgraph)
             })
             .collect();
-        // FIXME: merge trees => simplify
-        // remove old root and get one child (i.e. one subgraph) per root node
-        let children_id_level_1 = Self::remove_child_edges(&mut graph, &level_1_nodes_root);
+        // TODO: merge subtrees into main tree for debug
         // merge new root
-        let (best_move, score) = Self::merge_subtrees(&results).unwrap();
-        // create new root
-        let root_content = NodeType::build_root(score);
-        let root_node_id = graph.add_node(root_content);
-        for child_id in children_id_level_1 {
-            graph.add_edge(root_node_id, child_id, ());
-        }
+        let (best_move, _score) = Self::merge_subtrees(&results).unwrap();
         //Self::write_tree(&graph, root_node_id);
         best_move
     }
 
-    fn remove_child_edges<T, E>(
-        graph: &mut petgraph::Graph<T, E>,
-        root_ids: &[petgraph::graph::NodeIndex],
-    ) -> Vec<petgraph::graph::NodeIndex>
-    where
-        T: Clone,
-        E: Clone,
-    {
-        let mut children: Vec<petgraph::graph::NodeIndex> = vec![];
-        for &root_id in root_ids {
-            // Find the unique child (assuming there is exactly one outgoing edge)
-            if let Some((edge_id, child_id)) = graph
-                .edges_directed(root_id, petgraph::Direction::Outgoing)
-                .next() // gets the first (and supposedly only) outgoing edge
-                .map(|edge| (edge.id(), edge.target()))
-            {
-                // Remove the edge from root to this child
-                graph.remove_edge(edge_id);
-                children.push(child_id);
-            }
-        }
-        children
-    }
     fn merge_subtrees(
         results: &[(bitboard::BitBoardMove, Score, petgraph::Graph<NodeType, ()>)],
     ) -> Option<(bitboard::BitBoardMove, Score)> {
@@ -317,16 +275,25 @@ impl EngineMinimax {
     fn prepare_tree_level_1(
         &self,
         game: &game_state::GameState,
-        graph: &mut petgraph::Graph<NodeType, ()>,
-    ) -> Vec<petgraph::graph::NodeIndex> {
+        num_cpus: usize,
+    ) -> Vec<(petgraph::Graph<NodeType, ()>, petgraph::graph::NodeIndex)> {
         let mut level_1_roots = Vec::new();
         let moves = game.gen_moves();
-        for b_move in moves {
-            let move_score = RegularNodeContent::new(b_move);
+        println!("cpus: {}", num_cpus);
+        let mut chunk_size = moves.len() / num_cpus;
+        if chunk_size <= 4 {
+            chunk_size = 4;
+        }
+        let chunks: Vec<Vec<_>> = moves.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect();
+        for chunk in chunks {
+            let mut subgraph = petgraph::Graph::<NodeType, ()>::new();            
             let root_content = NodeType::new_root();
-            let root_node_id = graph.add_node(root_content);
-            add_graph_node(graph, root_node_id, move_score);
-            level_1_roots.push(root_node_id);
+            let root_node_id = subgraph.add_node(root_content);
+            for b_move in chunk {
+                let move_score = RegularNodeContent::new(b_move);
+                add_graph_node(&mut subgraph, root_node_id, move_score);
+            }
+            level_1_roots.push((subgraph, root_node_id));
         }
         level_1_roots
     }
