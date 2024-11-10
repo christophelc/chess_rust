@@ -1,4 +1,4 @@
-use chess_actix::entity::engine::component::engine_minimax;
+use chess_actix::entity::engine::component::{engine_alphabeta, engine_minimax};
 use chess_actix::entity::stat::actor::stat_entity;
 use chess_actix::{entity, monitoring, ui};
 
@@ -153,16 +153,16 @@ async fn main() {
     let mut stdin = Arc::new(Mutex::new(io::stdin()));
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
     //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
-    let mut engine_player1 = engine_minimax::EngineMinimax::new(
+    let mut engine_player1 = engine_alphabeta::EngineAlphaBeta::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
         MINIMAX_DEPTH,
-    );
+    );    
     engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone(), None);
     //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
-    let mut engine_player2 = engine_minimax::EngineMinimax::new(
+    let mut engine_player2 = engine_alphabeta::EngineAlphaBeta::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
         MINIMAX_DEPTH,
