@@ -2,6 +2,7 @@ use actix::Addr;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use std::thread::current;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::engine_logic::{self as logic, Engine};
@@ -71,7 +72,7 @@ impl EngineAlphaBetaIterative {
         current_depth: u8,
     ) -> Vec<score::BitboardMoveScore> {
         //let num_cpus = num_cpus::get();
-        let num_cpus= 1; // no parallelism
+        let num_cpus= 1; // no parallelism (we should share alpha beta value)
         // for each level 1 move, we add a node parent
         let chunks = self.prepare_tree_level_1(game, num_cpus);
         let results: Vec<_> = chunks
@@ -80,12 +81,14 @@ impl EngineAlphaBetaIterative {
             .map(|chunk| {
                 let mut game_clone = game.clone();
                 let mut n_positions_evaluated: u64 = 0;
+                let mut moves_status: Vec<score::MoveStatus> = chunk.iter().map(|m| score::MoveStatus::NotEvaluated(m.clone())).collect();                
                 let bitboard_move_score = self.alphabeta_inc_rec_init(
                     "",
                     &mut game_clone,
                     current_depth,
                     self.max_depth,
-                    &chunk,
+                    &mut moves_status,
+                    None,
                     self_actor.clone(),
                     stat_actor_opt.clone(),
                     &mut n_positions_evaluated,
@@ -112,36 +115,26 @@ impl EngineAlphaBetaIterative {
         game: &mut game_state::GameState,
         current_depth: u8,
         max_depth: u8,
-        moves: &[bitboard::BitBoardMove],
+        moves_status: &mut [score::MoveStatus],
+        alpha_beta_opt_level_prec: Option<score::Score>,        
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         n_positions_evaluated: &mut u64,
     ) -> score::BitboardMoveScore {
-        let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(m.clone())).collect();
         let mut best_move_opt: Option<score::BitboardMoveScore> = None;
         for max_depth_iter in 0..=max_depth-1 {
-            println!("--------------------------");
-            println!("max_depth:  {}", max_depth_iter);
-            println!("--------------------------");
-            //println!("variant {} - current_depth {} / max_depth_iter: {} - alpha_beta {:?}", variant, current_depth, max_depth_iter, alpha_beta_opt);
             moves_status.sort_by(score::compare_move_status);
             let best_move_score_opt = self.alphabeta_inc_rec(
                 variant,
                 game,
                 current_depth,
                 max_depth_iter,
-                &mut moves_status,
-                None,
+                moves_status,
+                alpha_beta_opt_level_prec.clone(),
                 self_actor.clone(),
                 stat_actor_opt.clone(),
                 n_positions_evaluated,
             );
-            let sc: Vec<String> = moves_status
-                .iter()
-                .flat_map(|m_status| m_status.get_score())
-                .map(|m_score| m_score.clone().to_string())
-                .collect();
-            //println!("{} {}", variant, sc.join(", "));
             let best_move_score = best_move_score_opt.unwrap();
             best_move_opt = Some(best_move_score.clone());
         }
@@ -252,7 +245,8 @@ impl EngineAlphaBetaIterative {
             if current_depth < max_depth {
                 moves = game.gen_moves();
                 let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(m.clone())).collect();                
-                let move_score_opt = self.alphabeta_inc_rec(
+                //let move_score_opt = self.alphabeta_inc_rec(
+                    let move_score = self.alphabeta_inc_rec_init(                    
                     &updated_variant,
                     game,
                     current_depth + 1,
@@ -263,7 +257,8 @@ impl EngineAlphaBetaIterative {
                     stat_actor_opt.clone(),
                     n_positions_evaluated,
                 );
-                let score = move_score_opt.unwrap().score().opposite();
+                //let score = move_score_opt.unwrap().score().opposite();
+                let score = move_score.score().opposite();                
                 score::Score::new(score.value(), score.path_length() + 1)
             } else {
                 // evaluate position for the side that has just played the last move
@@ -280,9 +275,6 @@ impl EngineAlphaBetaIterative {
         };
 
         game.play_back();
-        if current_depth == max_depth {
-          //println!("{}:{}", updated_variant, score);        
-        }
         score
     }
 }
