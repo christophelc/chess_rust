@@ -1,9 +1,29 @@
 use std::fmt;
+use std::collections::HashMap;
 
 use crate::{
-    entity::game::component::bitboard::{self, BitBoardMove},
+    entity::game::component::bitboard::{self, zobrist},
     ui::notation::long_notation,
 };
+
+#[derive(Default)]
+pub struct TranspositionScore {
+    table: HashMap<zobrist::ZobristHash, BitboardMoveScore>
+}
+impl TranspositionScore {
+    pub fn get_move_score(&self, hash: &zobrist::ZobristHash, depth: u8) -> Option<BitboardMoveScore> {
+        let mut move_score_opt: Option<BitboardMoveScore> = None;
+        if let Some(move_score) = self.table.get(hash) {
+            if move_score.score().path_length() >= depth {
+                move_score_opt = Some(move_score.clone());
+            }
+        }
+        move_score_opt
+    }
+    pub fn set_move_score(&mut self, hash: &zobrist::ZobristHash, move_score: &BitboardMoveScore) {
+        self.table.insert(hash.clone(), move_score.clone());
+    }
+}
 
 pub enum MoveStatus {
     Evaluated(BitboardMoveScore),        // Fully evaluated move with a score

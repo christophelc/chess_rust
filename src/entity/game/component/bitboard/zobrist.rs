@@ -103,7 +103,7 @@ fn piece_to_index(piece: square::Piece) -> usize {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ZobristHash(u64);
 
 impl fmt::Display for ZobristHash {

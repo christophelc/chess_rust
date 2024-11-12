@@ -1,5 +1,5 @@
 pub mod engine_alphabeta;
-pub mod engine_alphabeta_inc;
+pub mod engine_alphabeta_iterative;
 pub mod engine_dummy;
 pub mod engine_logic;
 pub mod engine_minimax;
