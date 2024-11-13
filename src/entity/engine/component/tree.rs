@@ -75,6 +75,7 @@ fn write_tree(graph: &petgraph::Graph<NodeType, ()>, node: petgraph::graph::Node
     let mut file = OpenOptions::new()
         .write(true) // Set append mode
         .create(true) // Create file if it doesn't exist
+        .truncate(true)
         .open(path)
         .expect("Failed to open or create file");
     let indent = 0;

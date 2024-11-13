@@ -55,7 +55,7 @@ impl EngineAlphaBetaIterative {
         let current_depth = 0;
         let mut stat_eval = StatEval::default();
         let moves = game.gen_moves();        
-        let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(m.clone())).collect();                        
+        let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(*m)).collect();                        
         let bitboard_move_score = self.alphabeta_inc_rec_init(
             "",
             &mut game_clone,
@@ -68,7 +68,7 @@ impl EngineAlphaBetaIterative {
             &mut stat_eval,
             &mut transposition_table,
         );
-        bitboard_move_score.bitboard_move().clone()
+        *bitboard_move_score.bitboard_move()
     }
     fn alphabeta_inc_rec_init(
         &self,
@@ -122,7 +122,7 @@ impl EngineAlphaBetaIterative {
         let hash = game.last_hash();
         if let Some(move_score) = transposition_table.get_move_score(&hash, max_depth) {
             stat_eval.n_transposition_hit += 1;
-            if stat_eval.n_transposition_hit % 1000_000 == 0 {
+            if stat_eval.n_transposition_hit % 1_000_000 == 0 {
                 println!("hits: {}", stat_eval.n_transposition_hit);
             }
             return Some(move_score.clone())
@@ -151,10 +151,10 @@ impl EngineAlphaBetaIterative {
                     alpha_beta_opt_level_current = Some(move_score.score().clone());                    
                     // Send best move
                     best_move_score_opt = Some(move_score);
-                    send_best_move(self_actor.clone(), best_move_score_opt.as_ref().unwrap().bitboard_move().clone());
+                    send_best_move(self_actor.clone(), *best_move_score_opt.as_ref().unwrap().bitboard_move());
                     if current_depth == 0 {
                         let m = best_move_score_opt.as_ref().unwrap().clone();
-                        let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m.bitboard_move().clone());
+                        let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(*m.bitboard_move());
                         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());                
                         println!("best move:{}:{}", updated_variant, m.score().value());
                     }
@@ -169,13 +169,10 @@ impl EngineAlphaBetaIterative {
                         }
                     }
                 }
-            } else {
-                if 0 < max_depth {           
-                    *m_status = score::MoveStatus::Pruned(*m_status.get_move());
-                }
+            } else if 0 < max_depth {           
+                *m_status = score::MoveStatus::Pruned(*m_status.get_move());
             }
         }
-        let b = best_move_score_opt.as_ref().unwrap();
         transposition_table.set_move_score(&hash, best_move_score_opt.as_ref().unwrap());
         best_move_score_opt
     }
@@ -205,7 +202,7 @@ impl EngineAlphaBetaIterative {
             let mut moves: Vec<bitboard::BitBoardMove> = vec![];
             if 0 < max_depth {
                 moves = game.gen_moves();
-                let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(m.clone())).collect();                
+                let mut moves_status: Vec<score::MoveStatus> = moves.iter().map(|m| score::MoveStatus::NotEvaluated(*m)).collect();                
                 //let move_score_opt = self.alphabeta_inc_rec(
                     let move_score = self.alphabeta_inc_rec_init(                    
                     &updated_variant,
@@ -224,16 +221,13 @@ impl EngineAlphaBetaIterative {
                 score::Score::new(score.value(), score.path_length() + 1)
             } else {
                 // evaluate position for the side that has just played the last move
-                let score = score::Score::new(
+                score::Score::new(
                     evaluate_position(game, stat_eval, &stat_actor_opt, self.id()),
                     current_depth,
-                );
-                //println!("{}/{} < {} > - alpha_beta {:?}", current_depth, max_depth, updated_variant, alpha_beta_opt);                
-                // we want to evaluate for the current color (before move)
-                score
+                )
             }
         } else {
-            handle_end_game_scenario(&game, current_depth)
+            handle_end_game_scenario(game, current_depth)
         };
 
         game.play_back();
@@ -265,7 +259,7 @@ impl logic::Engine for EngineAlphaBetaIterative {
         game: game_state::GameState,
     ) {
         // First generate moves
-        let moves = logic::gen_moves(&game.bit_position());
+        let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
             let best_move = self.alphabeta_inc(&game, self_actor.clone(), stat_actor_opt.clone());
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
@@ -360,9 +354,7 @@ fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
     let n_bishops = bitboards.bishops().bitboard().iter().count() as u32;
     let n_queens = bitboards.queens().bitboard().iter().count() as u32;
     let n_pawns = bitboards.pawns().bitboard().iter().count() as u32;
-    let score = n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns;
-    //println!("r:{} n:{} b:{} q:{} p:{} -> {}", n_rooks, n_knights, n_bishops, n_queens, n_pawns, score);
-    score
+    n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns
 }
 
 fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
@@ -376,8 +368,7 @@ fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
     );
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
-    let score = score_current as i32 - score_opponent as i32;
-    score
+    score_current as i32 - score_opponent as i32
 }
 
 #[cfg(test)]

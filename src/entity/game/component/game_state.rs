@@ -101,7 +101,7 @@ impl GameState {
 
     pub fn check_end_game(&self, check_status: CheckStatus, moves_is_empty: bool) -> EndGame {
         let bit_position_status = self.bit_position.bit_position_status();
-        let end_game = if moves_is_empty {
+        if moves_is_empty {
             match check_status {
                 CheckStatus::None => EndGame::Pat,
                 _ => EndGame::Mat(bit_position_status.player_turn()),
@@ -117,8 +117,7 @@ impl GameState {
             EndGame::Repetition3x
         } else {
             EndGame::None
-        };
-        end_game
+        }
     }
 
     pub fn gen_moves(&self) -> Vec<BitBoardMove> {

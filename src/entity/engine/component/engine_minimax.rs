@@ -62,7 +62,7 @@ impl EngineMinimax {
                     &mut n_positions_evaluated,
                 );
                 let (best_move, score) = (
-                    bitboard_move_score.bitboard_move().clone(),
+                    *bitboard_move_score.bitboard_move(),
                     bitboard_move_score.score().clone(),
                 );
                 // FIXME: send graph to actor
@@ -85,9 +85,9 @@ impl EngineMinimax {
             return None;
         }
         let (mut best_move, mut best_score) = results[0].clone();
-        for &(ref b_move, ref score) in results.iter() {
+        for (b_move, score) in results.iter() {
             if score.value() > best_score.value() {
-                best_move = b_move.clone();
+                best_move = *b_move;
                 best_score = score.clone();
             }
         }
@@ -177,14 +177,13 @@ impl EngineMinimax {
                 let score = bitboard_move_score.score();
                 score::Score::new(-score.value(), score.path_length() + 1)
             } else {
-                let score = score::Score::new(
+                score::Score::new(
                     evaluate_position(game, n_positions_evaluated, &stat_actor_opt, self.id()),
                     current_depth,
-                );
-                score
+                )
             }
         } else {
-            handle_end_game_scenario(&game, current_depth)
+            handle_end_game_scenario(game, current_depth)
         };
 
         game.play_back();
@@ -216,7 +215,7 @@ impl logic::Engine for EngineMinimax {
         game: game_state::GameState,
     ) {
         // First generate moves
-        let moves = logic::gen_moves(&game.bit_position());
+        let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
             let best_move = self.minimax(&game, self_actor.clone(), stat_actor_opt.clone());
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
@@ -312,9 +311,7 @@ fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
     let n_bishops = bitboards.bishops().bitboard().iter().count() as u32;
     let n_queens = bitboards.queens().bitboard().iter().count() as u32;
     let n_pawns = bitboards.pawns().bitboard().iter().count() as u32;
-    let score = n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns;
-    //println!("r:{} n:{} b:{} q:{} p:{} -> {}", n_rooks, n_knights, n_bishops, n_queens, n_pawns, score);
-    score
+    n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns
 }
 
 fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
@@ -328,8 +325,7 @@ fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
     );
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
-    let score = score_current as i32 - score_opponent as i32;
-    score
+    score_current as i32 - score_opponent as i32
 }
 
 #[cfg(test)]

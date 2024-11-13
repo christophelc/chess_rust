@@ -208,16 +208,13 @@ impl Handler<UciCommand> for GameManager {
                                 )));
                             }
                             engine_actor.do_send(msg);
-                            match (&self.white_clock_actor_opt, &self.black_clock_actor_opt) {
-                                (Some(white_clock_actor), Some(black_clock_actor)) => {
-                                    start_or_switch_clock(
-                                        color,
-                                        &white_clock_actor,
-                                        &black_clock_actor,
-                                        self.debug_actor_opt.clone(),
-                                    );
-                                }
-                                _ => {}
+                            if let (Some(white_clock_actor), Some(black_clock_actor)) = (&self.white_clock_actor_opt, &self.black_clock_actor_opt) {
+                                start_or_switch_clock(
+                                    color,
+                                    white_clock_actor,
+                                    black_clock_actor,
+                                    self.debug_actor_opt.clone(),
+                                );
                             }
                         }
                         Err(err) => result = Err(err),

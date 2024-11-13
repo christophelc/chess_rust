@@ -170,7 +170,7 @@ impl BitPosition {
     pub fn tuple(&self) -> (BitBoardsWhiteAndBlack, BitPositionStatus) {
         (
             self.bit_boards_white_and_black.clone(),
-            self.bit_position_status.clone(),
+            self.bit_position_status,
         )
     }
 }
@@ -763,12 +763,12 @@ impl BitBoards {
         }
     }
     pub fn xor_mut(&mut self, bitboard: BitBoards) {
-        self.rooks.xor_mut(bitboard.rooks.bitboard().clone());
-        self.bishops.xor_mut(bitboard.bishops.bitboard().clone());
-        self.knights.xor_mut(bitboard.knights.bitboard().clone());
-        self.king.xor_mut(bitboard.king.bitboard().clone());
-        self.queens.xor_mut(bitboard.queens.bitboard().clone());
-        self.pawns.xor_mut(bitboard.pawns.bitboard().clone());
+        self.rooks.xor_mut(*bitboard.rooks.bitboard());
+        self.bishops.xor_mut(*bitboard.bishops.bitboard());
+        self.knights.xor_mut(*bitboard.knights.bitboard());
+        self.king.xor_mut(*bitboard.king.bitboard());
+        self.queens.xor_mut(*bitboard.queens.bitboard());
+        self.pawns.xor_mut(*bitboard.pawns.bitboard());
     }
     pub fn xor_piece(&mut self, type_piece: square::TypePiece, mask_xor: BitBoard) {
         match type_piece {
