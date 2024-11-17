@@ -47,7 +47,7 @@ pub trait Switch {
     fn switch(&self) -> Color;
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Color {
     White,
     Black,

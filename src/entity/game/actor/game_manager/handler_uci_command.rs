@@ -208,7 +208,9 @@ impl Handler<UciCommand> for GameManager {
                                 )));
                             }
                             engine_actor.do_send(msg);
-                            if let (Some(white_clock_actor), Some(black_clock_actor)) = (&self.white_clock_actor_opt, &self.black_clock_actor_opt) {
+                            if let (Some(white_clock_actor), Some(black_clock_actor)) =
+                                (&self.white_clock_actor_opt, &self.black_clock_actor_opt)
+                            {
                                 start_or_switch_clock(
                                     color,
                                     white_clock_actor,
