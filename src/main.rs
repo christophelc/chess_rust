@@ -24,7 +24,7 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
-const DEPTH: u8 = 3;
+const DEPTH: u8 = 4;
 
 #[allow(dead_code)]
 fn fen() {

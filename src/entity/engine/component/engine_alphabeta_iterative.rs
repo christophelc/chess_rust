@@ -81,44 +81,32 @@ impl EngineAlphaBetaIterative {
         *bitboard_move_score.bitboard_move()
     }
 
-    fn analyse_move_to_dig(
+    fn analyse_moves_to_dig(
         &self,
         eval_before: i32,
         moves_status: &mut [score::MoveStatus],
         current_depth: u8,
         max_depth: u8,
-    ) -> IddfsAction {
-        if let score::MoveStatus::Evaluated(move_score) = moves_status.first().unwrap() {
-            if move_score.score().path_length() >= max_depth {
-                // we have improved the evaluation ?
-                if eval_before < move_score.score().value() {
-                    IddfsAction::Stop
-                } else {
-                    // find other moves to explore
-                    let mut i_opt: Option<usize> = None;
-                    for (i, m_status) in moves_status.iter().enumerate().filter(|&(i, _)| i > 0) {
-                        if let score::MoveStatus::Evaluated(move_score) = m_status {
-                            if move_score.score().path_length() < max_depth {
-                                i_opt = Some(i);
-                                break;
-                            }
-                        }
-                    }
-                    if let Some(idx) = i_opt {
-                        IddfsAction::Dig(idx)
-                    } else {
-                        IddfsAction::Stop
-                    }
-                }
-            } else {
-                IddfsAction::Dig(0)
+        n_moves_to_consider: usize,
+    ) -> Option<(u8, Vec<usize>)> {
+        let moves_to_analyze_idx_depth: Vec<(usize, u8)> = moves_status.into_iter().enumerate().take(n_moves_to_consider).filter_map(|(index, m_status)| {
+            match m_status {
+                score::MoveStatus::Evaluated(m_score) if m_score.score().path_length() < max_depth => Some((index, m_score.score().path_length() + 1)),
+                score::MoveStatus::Evaluated(_) => None,
+                _ => Some((index, 0)),
             }
+        }).collect();
+        if moves_to_analyze_idx_depth.is_empty() {
+            None
         } else {
-            if current_depth < self.max_depth {
-                IddfsAction::Evaluate(0)
+            let first_depth = moves_to_analyze_idx_depth.first().unwrap().1;
+            // consider best moves first
+            let keep_moves: Vec<usize> = moves_to_analyze_idx_depth.into_iter().filter_map(|(idx, depth)| if depth == first_depth {
+                Some(idx)
             } else {
-                panic!("max_depth overflow error");
-            }
+                None
+            }).collect();
+            Some((first_depth, keep_moves))
         }
     }
     fn alphabeta_inc_rec_init(
@@ -151,72 +139,51 @@ impl EngineAlphaBetaIterative {
         //println!("{}", game.bit_position().to().chessboard());
         loop {
             moves_status.sort_by(score::compare_move_status);
-            //            if current_depth % 2 != 0 {
-            //                moves_status.reverse();
-            //            }
-            let s: Vec<_> = moves_status.iter().map(|m| m.to_string()).collect();
+            //let s: Vec<_> = moves_status.iter().map(|m| m.to_string()).collect();
             //println!("{}", s.join(", "));
-            let iddfs_action =
-                self.analyse_move_to_dig(init_eval, moves_status, current_depth, max_depth);
-            //println!("{:?}", iddfs_action);
-            match iddfs_action {
-                IddfsAction::Stop => break,
-                IddfsAction::Dig(id) => {
-                    let move_to_dig = moves_status.get(id).cloned().unwrap();
-                    let depth_iter = move_to_dig.get_score().unwrap().path_length() + 1;
-                    //println!("dig {} {:?}", depth_iter, move_to_dig);
-                    let mut moves_to_dig = vec![move_to_dig];
-                    let _ = self.alphabeta_inc_rec(
-                        variant,
-                        game,
-                        current_depth,
-                        depth_iter,
-                        &mut moves_to_dig,
-                        alpha_beta_opt_level_prec.clone(),
-                        self_actor.clone(),
-                        stat_actor_opt.clone(),
-                        stat_eval,
-                        transposition_table,
-                    );
-                    let m = moves_status.get_mut(id).unwrap();
-                    let updated_move = moves_to_dig.first().unwrap();
-                    //println!("{:?}", updated_move);
-                    assert!(depth_iter <= updated_move.get_score().unwrap().path_length());
-                    *m = score::MoveStatus::Evaluated(score::BitboardMoveScore::new(
-                        updated_move.get_move().clone(),
-                        updated_move.get_score().unwrap().clone(),
-                    ));
+            if let Some((depth_iter, moves_to_analyze)) =
+                self.analyse_moves_to_dig(init_eval, moves_status, current_depth, max_depth, 4) {
+                // TODO: uf current_depth == 0 => //
+                let mut moves_to_dig: Vec<score::MoveStatus> = moves_to_analyze.iter().map(|id| moves_status.get(*id).cloned().unwrap()).collect();
+                //let s: Vec<_> = moves_to_dig.iter().map(|m| m.to_string()).collect();
+                //println!("=> {}", s.join(","));
+                let _ = self.alphabeta_inc_rec(
+                    variant,
+                    game,
+                    current_depth,
+                    depth_iter,
+                    &mut moves_to_dig,
+                    alpha_beta_opt_level_prec.clone(),
+                    self_actor.clone(),
+                    stat_actor_opt.clone(),
+                    stat_eval,
+                    transposition_table,
+                );
+                for (move_to_dig_idx, move_id) in moves_to_analyze.iter().enumerate() {
+                    let m = moves_status.get_mut(*move_id).unwrap();
+                    let updated_move = moves_to_dig.get(move_to_dig_idx).unwrap();
+                    //println!("{} {}", depth_iter, updated_move);
+                    //let s: Vec<_> = moves_to_dig.iter().map(|m| m.to_string()).collect();
+                    //println!("updated => {}", s.join(","));
+                    // with alpha beta, a node may have been pruned 
+                    if let score::MoveStatus::Evaluated(move_status) = updated_move {
+                        if depth_iter <= move_status.score().path_length() {
+                            *m = score::MoveStatus::Evaluated(score::BitboardMoveScore::new(
+                                updated_move.get_move().clone(),
+                                updated_move.get_score().unwrap().clone(),
+                            ));    
+                        }
+                    }
                 }
-                IddfsAction::Evaluate(id) => {
-                    let move_to_evaluate = moves_status.get(id).cloned().unwrap();
-                    let depth_iter = 2;
-                    //println!("evaluate {:?}", move_to_evaluate);
-                    let mut moves_to_evaluate = vec![move_to_evaluate];
-                    let best_move_opt = self.alphabeta_inc_rec(
-                        variant,
-                        game,
-                        current_depth,
-                        depth_iter,
-                        &mut moves_to_evaluate,
-                        alpha_beta_opt_level_prec.clone(),
-                        self_actor.clone(),
-                        stat_actor_opt.clone(),
-                        stat_eval,
-                        transposition_table,
-                    );
-                    let m = moves_status.get_mut(id).unwrap();
-                    let updated_move = best_move_opt.unwrap();
-                    //println!("{}", depth_iter);
-                    assert!(updated_move.score().path_length() >= depth_iter);
-                    *m = score::MoveStatus::Evaluated(updated_move);
-                }
+            } else {
+                break;
             }
         }
         //moves_status.sort_by(score::compare_move_status);
         let best_move_score = moves_status.first().unwrap();
         if best_move_score.clone().get_score().unwrap().path_length() < max_depth {
             //println!("max depth: {}", max_depth);
-            let s: Vec<_> = moves_status.iter().map(|m| m.to_string()).collect();
+            //let s: Vec<_> = moves_status.iter().map(|m| m.to_string()).collect();
             //println!("{}", s.join(", "));
         }
         assert!(best_move_score.clone().get_score().unwrap().path_length() >= max_depth);
@@ -384,10 +351,6 @@ impl EngineAlphaBetaIterative {
         };
 
         game.play_back();
-        if score.path_length() < max_depth {
-            println!("{} max_depth:{}", score, max_depth);
-            println!("{}", game.bit_position().to().chessboard());
-        }
         assert!(score.path_length() >= max_depth);
         score
     }
