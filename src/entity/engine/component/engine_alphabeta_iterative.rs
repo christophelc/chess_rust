@@ -168,10 +168,12 @@ impl EngineAlphaBetaIterative {
                     // with alpha beta, a node may have been pruned 
                     if let score::MoveStatus::Evaluated(move_status) = updated_move {
                         if depth_iter <= move_status.score().path_length() {
-                            *m = score::MoveStatus::Evaluated(score::BitboardMoveScore::new(
-                                updated_move.get_move().clone(),
-                                updated_move.get_score().unwrap().clone(),
-                            ));    
+                            if depth_iter <= move_status.score().path_length() {                            
+                                *m = score::MoveStatus::Evaluated(score::BitboardMoveScore::new(
+                                    updated_move.get_move().clone(),
+                                    updated_move.get_score().unwrap().clone(),
+                                ));    
+                            }
                         }
                     }
                 }
