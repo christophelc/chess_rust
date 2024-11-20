@@ -4,69 +4,164 @@ use std::io::Write;
 use std::{env, fmt};
 
 use super::score;
-use crate::entity::game::component::bitboard;
+use crate::entity::game::component::bitboard::zobrist;
+use crate::entity::game::component::{bitboard, game_state};
 use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 
 const TREE_FILE_PATH: &str = "tree.txt";
 
-#[derive(Clone)]
-enum NodeType {
-    Root(RootNodeContent),
-    Regular(RegularNodeContent),
+pub type NodeIdx = petgraph::graph::NodeIndex;
+pub type graph = petgraph::graph::Graph<Node, EdgeMove>;
+pub struct EdgeMove(pub bitboard::BitBoardMove);
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    index: Option<NodeIdx>,
+    parent: Option<NodeIdx>,
+    children: Vec<NodeIdx>,
+    untried_moves: Vec<bitboard::BitBoardMove>,
+    game: game_state::GameState,
+    n_visits: u64,
+    n_wins: u64,
 }
-impl NodeType {
-    fn new_root() -> Self {
-        NodeType::Root(RootNodeContent::default())
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.n_wins, self.n_visits)
     }
 }
-impl fmt::Display for NodeType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NodeType::Root(root_node_content) => {
-                write!(f, "root with score: {}", root_node_content)
-            }
-            NodeType::Regular(regular_node_content) => {
-                write!(f, "root with score: {}", regular_node_content)
-            }
+impl Node {
+    pub fn index(&self) -> Option<NodeIdx> {
+        self.index
+    }
+    pub fn parent(&self) -> Option<NodeIdx> {
+        self.parent
+    }
+    pub fn game(&self) -> &game_state::GameState {
+        &self.game
+    }
+    pub fn children(&self) -> &Vec<NodeIdx> {
+        &self.children
+    }
+    pub fn untried_moves(&self) -> &Vec<bitboard::BitBoardMove> {
+        &self.untried_moves
+    }
+    pub fn n_wins(&self) -> u64 {
+        self.n_wins
+    }
+    pub fn visits(&self) -> u64 {
+        self.n_visits
+    }
+
+    pub fn add_child(
+        parent_idx: NodeIdx,
+        game: game_state::GameState,
+        moves: &[bitboard::BitBoardMove],
+    ) -> Self {
+        Self {
+            index: None,
+            parent: Some(parent_idx),
+            children: vec![],
+            untried_moves: vec![],
+            game,
+            n_visits: 0,
+            n_wins: 0,
         }
     }
-}
-#[derive(Clone, Default)]
-struct RootNodeContent {
-    score_opt: Option<score::Score>,
-}
-impl fmt::Display for RootNodeContent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "root with score: {:?}", self.score_opt)
+    pub fn build_root(game: game_state::GameState, moves: &[bitboard::BitBoardMove]) -> Self {
+        Self {
+            index: None,
+            parent: None,
+            children: vec![],
+            untried_moves: moves.into_iter().map(|b_move| b_move.clone()).collect(),
+            game,
+            n_visits: 0,
+            n_wins: 0,
+        }
+    }
+    pub fn get_node_mut(graph: &mut graph, node_idx: NodeIdx) -> &mut Node {
+        if let Some(node) = graph.node_weight_mut(node_idx) {
+            node
+        } else {
+            panic!("No node {:?}", node_idx);
+        }
+    }
+    pub fn argmax(graph: &graph, values: &[NodeIdx], c: f64) -> Option<usize> {
+        values
+            .iter()
+            .enumerate()
+            .fold(None, |max_index: Option<(usize, &Node)>, (i, node_idx)| {
+                let node = &graph[*node_idx];
+                match max_index {
+                    Some((max_i, max_value)) if node.ucb1(graph, c) <= max_value.ucb1(graph, c) => {
+                        Some((max_i, max_value))
+                    }
+                    _ => Some((i, &node)),
+                }
+            })
+            .map(|(i, _)| i)
+    }
+    pub fn ucb1(&self, graph: &graph, c: f64) -> f64 {
+        assert!(!self.is_root());
+        if self.n_visits == 0 {
+            // ensure a node is explored at least once
+            f64::INFINITY
+        } else {
+            let exploitation_rate = (self.n_wins as f64) / (self.n_visits as f64);
+            let mut exploration_rate = 0f64;
+            if let Some(node_parent) = graph.node_weight(self.parent.unwrap()) {
+                exploration_rate =
+                    c * ((node_parent.visits() as f64).ln() / (self.n_visits as f64));
+            }
+            exploitation_rate + exploration_rate
+        }
+    }
+    pub fn is_root(&self) -> bool {
+        self.parent.is_none()
+    }
+    pub fn is_terminal(&self) -> bool {
+        self.children.is_empty()
+            && self.untried_moves.is_empty()
+            && self.game.end_game() != game_state::EndGame::None
+    }
+    pub fn set_untried_moves(&mut self, untried_moves: Vec<bitboard::BitBoardMove>) {
+        self.untried_moves = untried_moves;
+    }
+    pub fn inc_stat(&mut self, n_new_wins: u64, n_new_visits: u64) {
+        self.n_wins += n_new_wins;
+        self.n_visits += n_new_visits;
+    }
+    // add a new child based on the untried_moves at index idx
+    pub fn exploration(
+        graph: &mut graph,
+        node_idx: NodeIdx,
+        idx: usize,
+        zobrist_table: &zobrist::Zobrist,
+    ) -> NodeIdx {
+        assert!(idx < graph[node_idx].untried_moves.len());
+        let selected_move = graph[node_idx].untried_moves.swap_remove(idx);
+        let long_algebraic_move =
+            long_notation::LongAlgebricNotationMove::build_from_b_move(selected_move);
+        let mut game_clone = graph[node_idx].game.clone();
+        game_clone
+            .play_moves(&[long_algebraic_move], zobrist_table, None, false)
+            .unwrap();
+        game_clone.update_game_status();
+        let moves = &game_clone.gen_moves();
+        // create child node
+        let new_node = Node::add_child(graph[node_idx].index.unwrap(), game_clone, moves);
+        let child_id = add_node_to_graph(graph, new_node);
+        let edge_move = EdgeMove(selected_move);
+        graph.add_edge(graph[node_idx].index.unwrap(), child_id, edge_move);
+        // Update the parent's children list
+        graph[node_idx].children.push(child_id);
+        //println!("node {:?} updated -> children: {:?}", node_idx, graph[node_idx].children());
+        child_id
     }
 }
 
-#[derive(Clone)]
-struct RegularNodeContent {
-    b_move: bitboard::BitBoardMove,
-    score_opt: Option<score::Score>,
-}
-impl fmt::Display for RegularNodeContent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let move_long_notation =
-            long_notation::LongAlgebricNotationMove::build_from_b_move(self.b_move);
-        write!(f, "{}:{:?}", move_long_notation.cast(), self.score_opt)
-    }
-}
-impl RegularNodeContent {
-    fn new(b_move: bitboard::BitBoardMove) -> Self {
-        Self {
-            b_move,
-            score_opt: None,
-        }
-    }
-    fn set_score(&mut self, score: score::Score) {
-        self.score_opt = Some(score);
-    }
-}
 #[allow(dead_code)]
-fn write_tree(graph: &petgraph::Graph<NodeType, ()>, node: petgraph::graph::NodeIndex) {
+fn write_tree(graph: &graph, node: NodeIdx) {
     let exe_path = env::current_exe().expect("Failed to find executable path");
     let folder_exe_path = exe_path
         .parent()
@@ -79,13 +174,13 @@ fn write_tree(graph: &petgraph::Graph<NodeType, ()>, node: petgraph::graph::Node
         .open(path)
         .expect("Failed to open or create file");
     let indent = 0;
-    display_tree(graph, node, indent, 0, &mut file)
+    display_tree_to_file(graph, node, indent, 0, &mut file)
 }
 
 #[allow(dead_code)]
-fn display_tree(
-    graph: &petgraph::Graph<NodeType, ()>,
-    node: petgraph::graph::NodeIndex,
+fn display_tree_to_file(
+    graph: &graph,
+    node: NodeIdx,
     indent: usize,
     level: i8,
     file: &mut std::fs::File,
@@ -104,18 +199,59 @@ fn display_tree(
         if level < 5 {
             // Parcourir les nœuds enfants (successeurs)
             for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
-                display_tree(graph, neighbor, indent + 3, level + 1, file);
+                display_tree(graph, neighbor, indent + 3, level + 1);
                 // Augmenter l'indentation pour les enfants
             }
         }
     }
 }
-fn add_graph_node(
-    graph: &mut petgraph::Graph<NodeType, ()>,
-    parent_node_id: petgraph::graph::NodeIndex,
-    node_content: RegularNodeContent,
-) -> petgraph::graph::NodeIndex {
-    let node_id = graph.add_node(NodeType::Regular(node_content));
-    graph.add_edge(parent_node_id, node_id, ());
-    node_id
+
+pub fn display_tree(graph: &graph, node: NodeIdx, indent: usize, level: i8) {
+    let mut m_as_str: String = "".to_string();
+    if let Some(parent) = graph[node].parent() {
+        if let Some(edge_index) = graph.find_edge(parent, node) {
+            let edge = graph.edge_weight(edge_index).unwrap();
+            let s = &long_notation::LongAlgebricNotationMove::build_from_b_move(edge.0);
+            m_as_str = s.cast().to_string();
+        }
+    }
+
+    // Vérifier si le nœud est une feuille (pas de voisins sortants)
+    if graph
+        .neighbors_directed(node, petgraph::Direction::Outgoing)
+        .next()
+        .is_none()
+    {
+        // only show explored nodes
+        if graph[node].visits() > 0 {
+            let output = format!("{:indent$}{} {}\n", "", level, graph[node], indent = indent);
+            println!("{}", output);
+        }
+    } else {
+        // only show explored nodes
+        if graph[node].visits() > 0 {
+            let output = format!(
+                "{:indent$}{} {} {}\n",
+                "",
+                level,
+                m_as_str,
+                graph[node],
+                indent = indent
+            );
+            println!("{}", output);
+        }
+        if level < 5 {
+            // Parcourir les nœuds enfants (successeurs)
+            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                display_tree(graph, neighbor, indent + 3, level + 1);
+            }
+        }
+    }
+}
+
+pub fn add_node_to_graph(graph: &mut graph, node: Node) -> NodeIdx {
+    let node_idx = graph.add_node(node);
+    // Update the `index` field after the node is added
+    graph[node_idx].index = Some(node_idx);
+    node_idx
 }

@@ -187,7 +187,7 @@ impl EngineAlphaBeta {
         }
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
-        update_game_status(game);
+        game.update_game_status();
 
         let score = if game.end_game() == game_state::EndGame::None {
             let mut moves: Vec<bitboard::BitBoardMove> = vec![];
@@ -309,26 +309,6 @@ fn handle_end_game_scenario(game: &game_state::GameState, current_depth: u8) -> 
             score::Score::new(0, current_depth)
         }
     }
-}
-
-fn update_game_status(game: &mut game_state::GameState) {
-    let color = game.bit_position().bit_position_status().player_turn();
-    let check_status = game
-        .bit_position()
-        .bit_boards_white_and_black()
-        .check_status(&color);
-    // we could generate moves here if current_depth < self.max_depth
-    let can_move = game.bit_position().bit_boards_white_and_black().can_move(
-        &color,
-        check_status,
-        game.bit_position()
-            .bit_position_status()
-            .pawn_en_passant()
-            .as_ref(),
-        game.bit_position().bit_position_status(),
-    );
-    let end_game = game.check_end_game(check_status, !can_move);
-    game.set_end_game(end_game);
 }
 
 fn evaluate_position(

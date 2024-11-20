@@ -13,13 +13,13 @@ pub enum EndGame {
     #[default]
     None,
     Pat,
-    Mat(square::Color),
-    NoPawnAndCapturex50,  // 50 moves rule
-    InsufficientMaterial, // King (+ bishop or knight) vs King (+ bishop or knight)
-    Repetition3x,         // 3x the same position
-    TimeOutLost(square::Color),
-    TimeOutDraw,   // Timeout but only a King, King + Bishop or Knight
-    NullAgreement, // Two players agree to end the game
+    Mat(square::Color),         // color of the player that has lost
+    NoPawnAndCapturex50,        // 50 moves rule
+    InsufficientMaterial,       // King (+ bishop or knight) vs King (+ bishop or knight)
+    Repetition3x,               // 3x the same position
+    TimeOutLost(square::Color), // color of the player that has lost
+    TimeOutDraw,                // Timeout but only a King, King + Bishop or Knight
+    NullAgreement,              // Two players agree to end the game
 }
 
 #[derive(Debug, Clone)]
@@ -239,6 +239,25 @@ impl GameState {
             }
         }
         result.map(|_| summary)
+    }
+
+    pub fn update_game_status(&mut self) {
+        let color = self.bit_position().bit_position_status().player_turn();
+        let check_status = self
+            .bit_position()
+            .bit_boards_white_and_black()
+            .check_status(&color);
+        let can_move = self.bit_position().bit_boards_white_and_black().can_move(
+            &color,
+            check_status,
+            self.bit_position()
+                .bit_position_status()
+                .pawn_en_passant()
+                .as_ref(),
+            self.bit_position().bit_position_status(),
+        );
+        let end_game = self.check_end_game(check_status, !can_move);
+        self.set_end_game(end_game);
     }
 }
 

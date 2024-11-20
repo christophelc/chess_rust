@@ -92,29 +92,7 @@ impl GameManager {
                     self.debug_actor_opt.clone(),
                     true,
                 );
-                let color = &game_state
-                    .bit_position()
-                    .bit_position_status()
-                    .player_turn();
-                let check_status = game_state
-                    .bit_position()
-                    .bit_boards_white_and_black()
-                    .check_status(color);
-                let can_move = game_state
-                    .bit_position()
-                    .bit_boards_white_and_black()
-                    .can_move(
-                        color,
-                        check_status,
-                        game_state
-                            .bit_position()
-                            .bit_position_status()
-                            .pawn_en_passant()
-                            .as_ref(),
-                        game_state.bit_position().bit_position_status(),
-                    );
-                let end_game = game_state.check_end_game(check_status, !can_move);
-                game_state.set_end_game(end_game);
+                game_state.update_game_status();
                 res
             });
         match result {
