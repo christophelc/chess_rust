@@ -1,5 +1,6 @@
 use actix::Addr;
 use rand::Rng;
+use std::fmt;
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::{engine_logic as logic, tree};
@@ -14,6 +15,26 @@ use crate::{entity::game::component::bitboard, monitoring::debug};
 const MAX_TREE_ITERATION: u64 = 1000;
 const IS_DEBUG: bool = false;
 
+#[derive(Default)]
+struct MctsStat {
+    n_simulation: u64,
+    n_moves_per_game: u64,
+    n_moves_gen: u64,
+}
+impl fmt::Display for MctsStat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let avg_moves_played = self.n_moves_per_game as f64 / (self.n_simulation as f64);
+        let avg_moves_generated: f64 = self.n_moves_gen as f64 / (self.n_simulation as f64);
+        write!(f, "n_simulation: {} - avg moves played per game: {}, avg number of moves generated per game: {}", self.n_simulation, avg_moves_played, avg_moves_generated)
+    }
+}
+impl MctsStat {
+    pub fn inc(&mut self, n_simulation: u64, n_moves_per_game: u64, n_moves_gen: u64) {
+        self.n_simulation += n_simulation;
+        self.n_moves_gen += n_moves_gen;
+        self.n_moves_per_game += n_moves_per_game;
+    }
+}
 pub struct EngineMcts {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -51,11 +72,12 @@ impl EngineMcts {
         let moves = game.gen_moves();
         let root = tree::Node::build_root(game.clone(), &moves);
         let root_id = tree::add_node_to_graph(&mut graph, root.clone());
+        let mut mcts_stat = MctsStat::default();
         for i in 0..MAX_TREE_ITERATION {
             if i % 100 == 0 {
                 println!("tree iteration number: {}", i);
             }
-            self.mcts_run(&mut graph, root_id);
+            self.mcts_run(&mut graph, root_id, &mut mcts_stat);
         }
         if let Some(idx) = tree::Node::argmax(&graph, graph[root_id].children(), self.c) {
             let best_move_id = graph[root_id].children().get(idx).unwrap();
@@ -65,14 +87,17 @@ impl EngineMcts {
             } else {
                 panic!("Graph error: edge not found");
             };
-            println!("best move: {:?}", best_move_id);
-            tree::display_tree(&graph, root_id, 0, 0);
+            tree::display_tree(&graph, root_id, 0, 0);            
+            let total: u64 = graph[root_id].children().iter().map(|n_idx| graph[*n_idx].visits()).sum();
+            println!("total visits in children level 1: {}", total);
+            println!("total visits root: {}", graph[root_id].visits());
+            println!("{}", mcts_stat);
             best_move
         } else {
             panic!("No move found")
         }
     }
-    pub fn mcts_run(&self, graph: &mut tree::graph, node_id: tree::NodeIdx) {
+    fn mcts_run(&self, graph: &mut tree::graph, node_id: tree::NodeIdx, mcts_stat: &mut MctsStat) {
         if graph[node_id].is_terminal() {
             let (n_white_wins, n_black_wins) = Self::evaluate_end_game(graph[node_id].game());
             self.mcts_back_propagation(graph, node_id, n_white_wins, n_black_wins);
@@ -106,7 +131,7 @@ impl EngineMcts {
                                 println!("found")
                             };
                             let selected_node_idx = node.children().get(idx).unwrap();
-                            self.mcts_run(graph, selected_node_idx.clone())
+                            self.mcts_run(graph, selected_node_idx.clone(), mcts_stat)
                         }
                     }
                 }
@@ -117,7 +142,7 @@ impl EngineMcts {
                 if self.is_debug {
                     println!("simulation")
                 };
-                let (n_white_wins, n_black_wins) = self.mcts_simulation(graph, expanded_node_idx);
+                let (n_white_wins, n_black_wins) = self.mcts_simulation(graph, expanded_node_idx, mcts_stat);
                 self.mcts_back_propagation(graph, expanded_node_idx, n_white_wins, n_black_wins);
             }
         }
@@ -131,22 +156,24 @@ impl EngineMcts {
         let random_index = rng.gen_range(0..node.untried_moves().len()); // Random index
         tree::Node::exploration(graph, node_id, random_index, &self.zobrist_table)
     }
-    fn mcts_simulation(&self, graph: &tree::graph, expanded_node_idx: tree::NodeIdx) -> (u64, u64) {
+    fn mcts_simulation(&self, graph: &tree::graph, expanded_node_idx: tree::NodeIdx, mcts_stat: &mut MctsStat) -> (u64, u64) {
         let mut n_white_wins: u64 = 0;
         let mut n_black_wins: u64 = 0;
         for _i in 0..self.iterations_per_move {
-            let (n_white_win, n_black_win) = self.mcts_one_simulation(graph, expanded_node_idx);
+            let (n_white_win, n_black_win) = self.mcts_one_simulation(graph, expanded_node_idx, mcts_stat);
             n_white_wins += n_white_win;
             n_black_wins += n_black_win;
         }
         (n_white_wins, n_black_wins)
     }
     // return None if Draw game, else return the winner
-    pub fn mcts_one_simulation(&self, graph: &tree::graph, node_id: tree::NodeIdx) -> (u64, u64) {
+    pub fn mcts_one_simulation(&self, graph: &tree::graph, node_id: tree::NodeIdx, mcts_stat: &mut MctsStat) -> (u64, u64) {
         let mut rng = rand::thread_rng();
         let mut game = graph[node_id].game().clone();
+        let mut n_moves_gen: u64 = 0;
         while game.end_game() == game_state::EndGame::None {
             let moves = game.gen_moves();
+            n_moves_gen += moves.len() as u64;
             let random_index = rng.gen_range(0..moves.len());
             let m = moves[random_index];
             let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
@@ -156,6 +183,7 @@ impl EngineMcts {
             }
             game.update_game_status();
         }
+        mcts_stat.inc(1, game.bit_position().bit_position_status().n_moves() as u64, n_moves_gen);
         Self::evaluate_end_game(&game)
     }
     pub fn evaluate_end_game(game: &game_state::GameState) -> (u64, u64) {
@@ -191,6 +219,7 @@ impl EngineMcts {
         } else {
             n_black_wins
         };
+        graph[node_id].inc_stat(n_wins, self.iterations_per_move);        
         let mut node_iter = node_id.clone();
         while let Some(node_id) = graph[node_iter].parent() {
             if self.is_debug {
