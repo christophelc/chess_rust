@@ -160,7 +160,7 @@ impl EngineMinimax {
         }
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
-        game.update_game_status();
+        game.update_endgame_status();
 
         let score = if game.end_game() == game_state::EndGame::None {
             if current_depth < self.max_depth {

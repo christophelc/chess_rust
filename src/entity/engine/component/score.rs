@@ -9,6 +9,27 @@ use crate::{
     ui::notation::long_notation,
 };
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum PreOrder {
+    Depth,
+    Capture { delta: i32 },
+    Mat { defender_color: square::Color },
+    Promotion(square::TypePiecePromotion),
+}
+impl PreOrder {
+    pub fn new_mat(defender_color: square::Color) -> Self {
+        PreOrder::Mat { defender_color }
+    }
+    fn promotion_value(promotion: &square::TypePiecePromotion) -> u8 {
+        match promotion {
+            square::TypePiecePromotion::Queen => 5,
+            square::TypePiecePromotion::Rook => 4,
+            square::TypePiecePromotion::Knight => 3,
+            square::TypePiecePromotion::Bishop => 3,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct TranspositionScore {
     table: HashMap<zobrist::ZobristHash, BitboardMoveScore>,
@@ -46,64 +67,100 @@ impl TranspositionScore {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum MoveStatus {
-    Evaluated(BitboardMoveScore),   // Fully evaluated move with a score
-    Pruned(bitboard::BitBoardMove), // Pruned move without an evaluation
-    NotEvaluated(bitboard::BitBoardMove), // Move yet to be evaluated
+pub struct MoveStatus {
+    b_move: bitboard::BitBoardMove,
+    score_opt: Option<Score>,
+    variant: String,
 }
 impl fmt::Display for MoveStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MoveStatus::Evaluated(move_score) => write!(f, "evaluated({})", move_score.to_string()),
-            MoveStatus::Pruned(b_move) => write!(
+        let m = long_notation::LongAlgebricNotationMove::build_from_b_move(self.b_move);
+        match &self.score_opt {
+            Some(score) => write!(
                 f,
-                "pruned({})",
-                long_notation::LongAlgebricNotationMove::build_from_b_move(*b_move).cast()
+                "{}/{}:{}",
+                m.cast(),
+                self.get_variant(),
+                score.to_string()
             ),
-            MoveStatus::NotEvaluated(b_move) => write!(
+            None => write!(
                 f,
                 "not_evaluated({})",
-                long_notation::LongAlgebricNotationMove::build_from_b_move(*b_move).cast()
+                long_notation::LongAlgebricNotationMove::build_from_b_move(self.b_move).cast()
             ),
         }
     }
 }
 impl MoveStatus {
-    pub fn get_move(&self) -> &bitboard::BitBoardMove {
-        match self {
-            Self::Evaluated(move_score) => move_score.bitboard_move(),
-            Self::Pruned(move_pruned) => move_pruned,
-            Self::NotEvaluated(move_not_evaluated) => move_not_evaluated,
+    pub fn from_move(b_move: bitboard::BitBoardMove) -> Self {
+        Self {
+            b_move,
+            score_opt: None,
+            variant: "".to_string(),
         }
+    }
+    pub fn get_move(&self) -> &bitboard::BitBoardMove {
+        &self.b_move
+    }
+    pub fn reset_score(&mut self) {
+        self.score_opt = None;
     }
     pub fn get_score(&self) -> Option<&Score> {
-        self.get_bitboard_move_score()
-            .map(|m_score| m_score.score())
+        self.score_opt.as_ref()
     }
-    pub fn get_bitboard_move_score(&self) -> Option<&BitboardMoveScore> {
-        match self {
-            Self::Evaluated(move_score) => Some(move_score),
-            _ => None,
+    pub fn get_bitboard_move_score(&self) -> Option<BitboardMoveScore> {
+        match self.score_opt.as_ref() {
+            None => None,
+            Some(score) => Some(BitboardMoveScore::new(self.b_move, score.clone())),
         }
     }
-    pub fn into_bitboard_move_score(self) -> Option<BitboardMoveScore> {
-        match self {
-            Self::Evaluated(move_score) => Some(move_score),
-            _ => None,
-        }
+    pub fn set_score(&mut self, score: Score) {
+        self.score_opt = Some(score)
+    }
+    pub fn get_variant(&self) -> String {
+        self.variant.to_string()
+    }
+    pub fn set_variant(&mut self, variant: &str) {
+        self.variant = variant.to_string()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct BitboardMoveScoreMat {
+    bitboard_move: bitboard::BitBoardMove,
+    mat_in: u8,
+    variant: String,
+}
+impl BitboardMoveScoreMat {
+    pub fn new(bitboard_move: bitboard::BitBoardMove, mat_in: u8, variant: &str) -> Self {
+        Self {
+            bitboard_move,
+            mat_in,
+            variant: variant.to_string(),
+        }
+    }
+    pub fn mat_in(&self) -> u8 {
+        self.mat_in
+    }
+    pub fn bitboard_move(&self) -> &bitboard::BitBoardMove {
+        &self.bitboard_move
+    }
+    pub fn variant(&self) -> String {
+        self.variant.clone()
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
 pub struct BitboardMoveScore {
     bitboard_move: bitboard::BitBoardMove,
     score: Score,
+    variant: String,
 }
 impl BitboardMoveScore {
     pub fn new(bitboard_move: bitboard::BitBoardMove, score: Score) -> Self {
         Self {
             bitboard_move,
             score,
+            variant: "".to_string(),
         }
     }
     pub fn score(&self) -> &Score {
@@ -113,10 +170,17 @@ impl BitboardMoveScore {
         BitboardMoveScore {
             bitboard_move: self.bitboard_move,
             score: self.score.opposite(),
+            variant: self.variant.clone(),
         }
     }
     pub fn bitboard_move(&self) -> &bitboard::BitBoardMove {
         &self.bitboard_move
+    }
+    pub fn get_variant(&self) -> String {
+        self.variant.to_string()
+    }
+    pub fn set_variant(&mut self, variant: &str) {
+        self.variant = variant.to_string();
     }
 }
 impl fmt::Display for BitboardMoveScore {
@@ -144,11 +208,15 @@ impl Score {
     }
     pub fn is_better_than(&self, score: &Score) -> bool {
         self.value > score.value
-            || self.value == score.value && self.path_length < score.path_length
+            || self.value == score.value && self.path_length > score.path_length
     }
     pub fn opposite(&self) -> Self {
         Self {
-            value: -self.value,
+            value: if self.value == i32::MIN {
+                i32::MAX
+            } else {
+                -self.value
+            },
             path_length: self.path_length,
         }
     }
@@ -172,23 +240,80 @@ pub fn find_max(vec: &[BitboardMoveScore]) -> Option<&BitboardMoveScore> {
     vec.iter().max_by(|a, b| compare(a, b))
 }
 
-pub fn compare_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
+fn value_type_piece(type_piece: square::TypePiece) -> i32 {
+    match type_piece {
+        square::TypePiece::Pawn => 1,
+        square::TypePiece::Knight | square::TypePiece::Bishop => 3,
+        square::TypePiece::Rook => 5,
+        square::TypePiece::Queen => 10,
+        _ => 0,
+    }
+}
+// first evaluate important capture by less important pieces
+pub fn biased_capture(
+    type_piece: square::TypePiece,
+    capture_opt: Option<square::TypePiece>,
+) -> i32 {
+    match capture_opt {
+        None => 0,
+        // +1 to evaluate first a piece that takes a piece of same value and then a non capture move
+        Some(capture) => value_type_piece(capture) - value_type_piece(type_piece) + 1,
+    }
+}
+// to be called before evaluation at depth 0 by IDDFS
+pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
+    if a == b {
+        return std::cmp::Ordering::Equal;
+    }
     match (a, b) {
-        (MoveStatus::Evaluated(score_a), MoveStatus::Evaluated(score_b)) => {
-            score_b.score.value().cmp(&score_a.score.value())
+        (PreOrder::Promotion(pa), PreOrder::Promotion(pb)) => {
+            PreOrder::promotion_value(pb).cmp(&PreOrder::promotion_value(pa))
         }
-        // put non evaluated node first
-        (MoveStatus::Evaluated(_score_a), _) => std::cmp::Ordering::Greater,
-        (_, MoveStatus::Evaluated(_score_b)) => std::cmp::Ordering::Less,
+        (PreOrder::Promotion(_), _) => std::cmp::Ordering::Less,
+        (_, PreOrder::Promotion(_)) => std::cmp::Ordering::Greater,
+        (PreOrder::Mat { defender_color: _ }, _) => std::cmp::Ordering::Less,
+        (_, PreOrder::Mat { defender_color: _ }) => std::cmp::Ordering::Greater,
+        (PreOrder::Capture { delta: delta_a }, PreOrder::Capture { delta: delta_b }) => {
+            delta_b.cmp(&delta_a)
+        }
+        (PreOrder::Capture { delta }, PreOrder::Depth) => {
+            if *delta >= 0 {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            }
+        }
+        (PreOrder::Depth, PreOrder::Capture { delta }) => {
+            if *delta >= 0 {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Less
+            }
+        }
+        _ => std::cmp::Ordering::Equal,
+    }
+}
+// to be called for depth >=1 by IDDFS
+pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
+    match (a.get_score(), b.get_score()) {
+        (Some(score_a), Some(score_b)) => {
+            let score_a = score_a;
+            let score_b = score_b;
+            score_b.value().cmp(&score_a.value())
+        }
+        // put non evaluated node at the end
+        (Some(_score_a), _) => std::cmp::Ordering::Less,
+        (_, Some(_score_b)) => std::cmp::Ordering::Greater,
         _ => std::cmp::Ordering::Equal,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::entity::engine::component::score::{order_move_status, PreOrder};
     use crate::entity::game::component::{bitboard, square};
 
-    use super::compare_move_status;
+    use super::preorder_compare;
     use super::BitboardMoveScore;
     use super::MoveStatus;
     use super::Score;
@@ -204,27 +329,112 @@ mod tests {
             None,
         );
         let path_length = 0;
-        let moves_status1 = MoveStatus::Evaluated(BitboardMoveScore::new(
-            m.clone(),
-            Score::new(0, path_length),
-        ));
-        let moves_status2 = MoveStatus::Evaluated(BitboardMoveScore::new(
-            m.clone(),
-            Score::new(-5, path_length),
-        ));
-        let moves_status3 = MoveStatus::Evaluated(BitboardMoveScore::new(
-            m.clone(),
-            Score::new(3, path_length),
-        ));
-        let moves_status4 = MoveStatus::NotEvaluated(m.clone());
+        let moves_status1 = MoveStatus {
+            b_move: m.clone(),
+            variant: "1".to_string(),
+            score_opt: Some(Score::new(0, path_length)),
+            goal: PreOrder::Depth(3),
+            is_finished: false,
+        };
+        let moves_status2 = MoveStatus {
+            b_move: m.clone(),
+            variant: "2".to_string(),
+            score_opt: Some(Score::new(-5, path_length)),
+            goal: PreOrder::Depth(3),
+            is_finished: false,
+        };
+        let moves_status3 = MoveStatus {
+            b_move: m.clone(),
+            variant: "3".to_string(),
+            score_opt: Some(Score::new(3, path_length)),
+            goal: PreOrder::Depth(3),
+            is_finished: false,
+        };
+        let moves_status4 = MoveStatus {
+            b_move: m.clone(),
+            variant: "4".to_string(),
+            score_opt: None,
+            goal: PreOrder::Depth(3),
+            is_finished: false,
+        };
+        let moves_status5 = MoveStatus {
+            b_move: m.clone(),
+            variant: "5".to_string(),
+            score_opt: Some(Score::new(-6, path_length)),
+            goal: PreOrder::Mat {
+                defender_color: square::Color::White,
+                max_depth: 1,
+            },
+            is_finished: false,
+        };
+        let moves_status6 = MoveStatus {
+            b_move: m.clone(),
+            variant: "6".to_string(),
+            score_opt: Some(Score::new(-7, path_length)),
+            goal: PreOrder::Capture {
+                delta: 3,
+                idx: bitboard::BitIndex::new(0),
+            },
+            is_finished: false,
+        };
+        let moves_status7 = MoveStatus {
+            b_move: m.clone(),
+            variant: "7".to_string(),
+            score_opt: Some(Score::new(-8, path_length)),
+            goal: PreOrder::Capture {
+                delta: 4,
+                idx: bitboard::BitIndex::new(0),
+            },
+            is_finished: false,
+        };
+        let moves_status8 = MoveStatus {
+            b_move: m.clone(),
+            variant: "8".to_string(),
+            score_opt: Some(Score::new(-9, path_length)),
+            goal: PreOrder::Capture {
+                delta: -3,
+                idx: bitboard::BitIndex::new(0),
+            },
+            is_finished: false,
+        };
+
         let mut v = vec![
+            moves_status8.clone(),
+            moves_status7.clone(),
+            moves_status6.clone(),
+            moves_status5.clone(),
+            moves_status4.clone(),
+            moves_status3.clone(),
+            moves_status2.clone(),
+            moves_status1.clone(),
+        ];
+        let expected1 = vec![
+            moves_status3.clone(),
             moves_status1.clone(),
             moves_status2.clone(),
-            moves_status3.clone(),
+            moves_status5.clone(),
+            moves_status6.clone(),
+            moves_status7.clone(),
+            moves_status8.clone(),
             moves_status4.clone(),
         ];
-        let expected = vec![moves_status4, moves_status3, moves_status1, moves_status2];
-        v.sort_by(compare_move_status);
-        assert_eq!(v, expected)
+        v.sort_by(order_move_status);
+        let v_variant: Vec<String> = v.iter().map(|m| m.get_variant()).collect();
+        let expected1_variant: Vec<String> = expected1.iter().map(|m| m.get_variant()).collect();
+        assert_eq!(v_variant, expected1_variant);
+        let expected2 = vec![
+            moves_status5.clone(),
+            moves_status7.clone(),
+            moves_status6.clone(),
+            moves_status3.clone(),
+            moves_status1.clone(),
+            moves_status2.clone(),
+            moves_status4.clone(),
+            moves_status8.clone(),
+        ];
+        v.sort_by(preorder_compare);
+        let v_variant: Vec<String> = v.iter().map(|m| m.get_variant()).collect();
+        let expected2_variant: Vec<String> = expected2.iter().map(|m| m.get_variant()).collect();
+        assert_eq!(v_variant, expected2_variant)
     }
 }

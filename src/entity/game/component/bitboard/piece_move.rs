@@ -22,6 +22,9 @@ pub enum CheckStatus {
     None,
 }
 impl CheckStatus {
+    pub fn is_check(&self) -> bool {
+        *self != CheckStatus::None
+    }
     pub fn build_simple_check(
         attacker: square::TypePiece,
         attacker_index: bitboard::BitIndex,

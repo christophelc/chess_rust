@@ -92,7 +92,7 @@ impl GameManager {
                     self.debug_actor_opt.clone(),
                     true,
                 );
-                game_state.update_game_status();
+                game_state.update_endgame_status();
                 res
             });
         match result {

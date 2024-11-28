@@ -146,7 +146,7 @@ impl Node {
         game_clone
             .play_moves(&[long_algebraic_move], zobrist_table, None, false)
             .unwrap();
-        game_clone.update_game_status();
+        game_clone.update_endgame_status();
         let moves = &game_clone.gen_moves();
         // create child node
         let new_node = Node::add_child(graph[node_idx].index.unwrap(), game_clone, moves);

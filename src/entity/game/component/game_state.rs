@@ -21,8 +21,16 @@ pub enum EndGame {
     TimeOutDraw,                // Timeout but only a King, King + Bishop or Knight
     NullAgreement,              // Two players agree to end the game
 }
+impl EndGame {
+    pub fn is_mat(&self) -> bool {
+        match self {
+            EndGame::Mat(_) => true,
+            _ => false,
+        }
+    }
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct BackMove {
     bitboard_white_and_black_mask: bitboard::BitBoardsWhiteAndBlack,
     bit_position_status_back: bitboard::BitPositionStatus,
@@ -46,7 +54,16 @@ pub struct GameState {
     back: Vec<BackMove>,
     end_game: EndGame,
 }
-
+impl PartialEq for GameState {
+    fn eq(&self, other: &Self) -> bool {
+        self.bit_position == other.bit_position
+            && self.is_regenerate_moves == other.is_regenerate_moves
+            && self.hash_positions == other.hash_positions
+            && self.back.len() == other.back.len()
+            && self.back.last() == other.back.last()
+            && self.end_game == other.end_game
+    }
+}
 impl GameState {
     pub fn new(position: fen::Position, zobrist_table: &zobrist::Zobrist) -> Self {
         let mut game_state = GameState {
@@ -83,6 +100,9 @@ impl GameState {
         let hash =
             zobrist::ZobristHash::zobrist_hash_from_position(&self.bit_position, zobrist_table);
         self.add_hash(hash);
+    }
+    pub fn is_regenerate_moves(&self) -> bool {
+        self.is_regenerate_moves
     }
     pub fn bit_position(&self) -> &bitboard::BitPosition {
         &self.bit_position
@@ -184,6 +204,7 @@ impl GameState {
             back_info.bit_position_status_back,
             back_info.bitboard_white_and_black_mask,
         );
+        self.end_game = EndGame::None;
         self.hash_positions.pop();
     }
     // play n moves from the current position
@@ -241,12 +262,15 @@ impl GameState {
         result.map(|_| summary)
     }
 
-    pub fn update_game_status(&mut self) {
+    pub fn check_status(&self) -> CheckStatus {
         let color = self.bit_position().bit_position_status().player_turn();
-        let check_status = self
-            .bit_position()
+        self.bit_position()
             .bit_boards_white_and_black()
-            .check_status(&color);
+            .check_status(&color)
+    }
+    pub fn update_endgame_status(&mut self) {
+        let color = self.bit_position().bit_position_status().player_turn();
+        let check_status = self.check_status();
         let can_move = self.bit_position().bit_boards_white_and_black().can_move(
             &color,
             check_status,
@@ -292,7 +316,6 @@ fn check_move(
         (square::Square::NonEmpty(_), square::Square::NonEmpty(_)) => Err(format!("Invalid move from {} to {} since the destination square contains a piece of the same color as the piece played." , m.start().value(), m.end().value())),
     }
 }
-
 fn check_move_level2(
     b_move: BitBoardMove,
     bitboard_position: &bitboard::BitPosition,
