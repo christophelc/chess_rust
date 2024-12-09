@@ -60,6 +60,9 @@ impl EngineMat {
         //     println!("{}", mat_move.variant());
         //     println!("============");
         // }
+        if let Some(mat_move) = &shortest_mat_opt {
+            println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());        
+        }
         shortest_mat_opt
     }
 
@@ -115,7 +118,7 @@ impl EngineMat {
                         let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant());
                         shortest_mat_opt = Some(m_mat);
                     }
-                    (None, Some(_)) => {
+                    (None, _) => {
                         if !is_attacker {
                             shortest_mat_opt = None;
                             break;

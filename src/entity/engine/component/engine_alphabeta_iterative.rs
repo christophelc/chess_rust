@@ -143,7 +143,6 @@ impl EngineAlphaBetaIterative {
             stat_eval,
         );
         if let Some(mat_move) = mat_move_opt {
-            println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());
             return mat_move.bitboard_move().clone();
         }
         let mut alpha_beta_opt: Option<score::Score> = None;
