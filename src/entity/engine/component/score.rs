@@ -111,7 +111,11 @@ impl MoveStatus {
     pub fn get_bitboard_move_score(&self) -> Option<BitboardMoveScore> {
         match self.score_opt.as_ref() {
             None => None,
-            Some(score) => Some(BitboardMoveScore::new(self.b_move, score.clone())),
+            Some(score) => Some(BitboardMoveScore::new(
+                self.b_move, 
+                score.clone(),
+                self.variant.clone()
+            )),
         }
     }
     pub fn set_score(&mut self, score: Score) {
@@ -156,11 +160,11 @@ pub struct BitboardMoveScore {
     variant: String,
 }
 impl BitboardMoveScore {
-    pub fn new(bitboard_move: bitboard::BitBoardMove, score: Score) -> Self {
+    pub fn new(bitboard_move: bitboard::BitBoardMove, score: Score, variant: String) -> Self {
         Self {
             bitboard_move,
             score,
-            variant: "".to_string(),
+            variant: variant.to_string(),
         }
     }
     pub fn score(&self) -> &Score {

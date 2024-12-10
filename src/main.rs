@@ -1,5 +1,5 @@
 use chess_actix::entity::engine::component::{
-    engine_alphabeta, engine_alphabeta_iterative, engine_mat, engine_mcts, engine_minimax,
+    engine_alphabeta, engine_iddfs, engine_mat, engine_mcts, engine_minimax,
 };
 use chess_actix::entity::stat::actor::stat_entity;
 use chess_actix::{entity, monitoring, ui};
@@ -24,7 +24,7 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
-const DEPTH: u8 = 2;
+const DEPTH: u8 = 3;
 const MCTS_ITERATION: u64 = 100;
 
 #[allow(dead_code)]
@@ -156,7 +156,8 @@ async fn main() {
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
     //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
     //let mut engine_player1 = engine_mat::EngineMat::new(
-    let mut engine_player1 = engine_alphabeta_iterative::EngineAlphaBetaIterative::new(
+    //let mut engine_player1 = engine_alphabeta::EngineAlphaBeta::new(
+    let mut engine_player1 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
         DEPTH,
@@ -166,7 +167,8 @@ async fn main() {
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone(), None);
     //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
     //let mut engine_player2 = engine_mat::EngineMat::new(    
-    let mut engine_player2 = engine_alphabeta_iterative::EngineAlphaBetaIterative::new(
+    //let mut engine_player2 = engine_alphabeta::EngineAlphaBeta::new(        
+    let mut engine_player2 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
         DEPTH,

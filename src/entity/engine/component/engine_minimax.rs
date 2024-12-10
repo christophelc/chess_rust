@@ -123,7 +123,7 @@ impl EngineMinimax {
                 send_best_move(self_actor.clone(), best_move_opt.unwrap());
             }
         }
-        score::BitboardMoveScore::new(best_move_opt.unwrap(), max_score_opt.unwrap())
+        score::BitboardMoveScore::new(best_move_opt.unwrap(), max_score_opt.unwrap(), "".to_string())
     }
 
     fn prepare_tree_level_1(
