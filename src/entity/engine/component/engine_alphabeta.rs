@@ -65,6 +65,7 @@ impl EngineAlphaBeta {
         &self,
         moves: &mut [bitboard::BitBoardMove],
         game: &mut game_state::GameState,
+        transposition_table: &mut score::TranspositionScore,
     ) -> Vec<score::MoveStatus> {
         let mut moves_status_with_preorder: Vec<(score::MoveStatus, score::PreOrder)> = vec![];
         for m in moves {
@@ -74,7 +75,11 @@ impl EngineAlphaBeta {
             game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
                 .unwrap();
             game.update_endgame_status();
-            let preorder = Self::set_preorder(m, game.check_status().is_check());
+            let player_turn = &game.bit_position().bit_position_status().player_turn();
+            let preorder = match transposition_table.get_move_score(&game.last_hash(), player_turn, 0) {
+                None => Self::set_preorder(m, game.check_status().is_check()),
+                Some(b_move_score) => score::PreOrder::PreviousScore(b_move_score.score().clone()),
+            };
             let mut move_status = score::MoveStatus::from_move(*m);
             moves_status_with_preorder.push((move_status, preorder));
             game.play_back()
@@ -98,6 +103,17 @@ impl EngineAlphaBeta {
         let mut stat_eval = stat_eval::StatEval::default();
 
         let mut game_clone = game.clone();
+
+        let mat_move_opt = self.engine_mat_solver.mat_solver_init(
+            game,
+            self_actor.clone(),
+            stat_actor_opt.clone(),
+            self.max_depth,
+            stat_eval,
+        );
+        if let Some(mat_move) = mat_move_opt {
+            return *mat_move.bitboard_move(),
+        }    
 
         let b_move_score = self.alphabeta_inc_rec(
             "",
@@ -131,24 +147,8 @@ impl EngineAlphaBeta {
         let mut alpha_beta_opt_level_current: Option<score::Score> = None;
 
         let mut moves = game.gen_moves();
-        let moves_status = self.get_moves_preordered(&mut moves, game);
+        let moves_status = self.get_moves_preordered(&mut moves, game, transposition_table);
 
-        if current_depth == 0 {
-            let mat_move_opt = self.engine_mat_solver.mat_solver_init(
-                game,
-                self_actor.clone(),
-                stat_actor_opt.clone(),
-                self.max_depth,
-                stat_eval,
-            );
-            if let Some(mat_move) = mat_move_opt {
-                return score::BitboardMoveScore::new(
-                    mat_move.bitboard_move().clone(),
-                    score::Score::new(i32::MAX, mat_move.mat_in()),
-                    mat_move.variant(),
-                );
-            }    
-        }
         for m_status in &moves_status {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
@@ -256,7 +256,7 @@ impl EngineAlphaBeta {
         let score = if game.end_game() == game_state::EndGame::None {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
                 let best_move_score = self.alphabeta_inc_rec(
-                    &variant,
+                    variant,
                     game,
                     current_depth + 1,
                     max_depth,
@@ -280,7 +280,6 @@ impl EngineAlphaBeta {
                         self_actor.clone(),
                         stat_actor_opt.clone(),
                         stat_eval,
-                        transposition_table,
                         m.end(),
                         current_depth % 2 == 0,
                     ) {
@@ -312,7 +311,6 @@ impl EngineAlphaBeta {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
-        transposition_table: &mut score::TranspositionScore,
         square_capture: bitboard::BitIndex,
         is_max: bool,
     ) -> Option<score::Score> {
@@ -320,10 +318,9 @@ impl EngineAlphaBeta {
         let mut moves_status: Vec<_> = moves
             .into_iter()
             .filter(|m| m.capture().is_some() && m.end() == square_capture)
-            .map(|m| score::MoveStatus::from_move(m))
+            .map(score::MoveStatus::from_move)
             .collect();
         let mut best_score_opt: Option<score::Score> = None;
-        let mut best_move_opt: Option<bitboard::BitBoardMove> = None;
         // TODO before start: sort capture moves
         for m_status in moves_status.iter_mut() {
             let long_algebraic_move =
@@ -342,7 +339,6 @@ impl EngineAlphaBeta {
                 self_actor.clone(),
                 stat_actor_opt.clone(),
                 stat_eval,
-                transposition_table,
                 square_capture,
                 !is_max,
             );
@@ -361,7 +357,6 @@ impl EngineAlphaBeta {
                     || !is_max && score.value() < best_score.value()
                 {
                     best_score_opt = score_opt;
-                    best_move_opt = Some(*m_status.get_move());
                 }
             } else {
                 best_score_opt = Some(score);

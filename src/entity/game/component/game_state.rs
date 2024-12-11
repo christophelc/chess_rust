@@ -23,10 +23,7 @@ pub enum EndGame {
 }
 impl EndGame {
     pub fn is_mat(&self) -> bool {
-        match self {
-            EndGame::Mat(_) => true,
-            _ => false,
-        }
+        matches!(self, EndGame::Mat(_))
     }
 }
 

@@ -240,7 +240,7 @@ impl EngineMcts {
             n_black_wins
         };
         graph[node_id].inc_stat(n_wins, self.iterations_per_move);
-        let mut node_iter = node_id.clone();
+        let mut node_iter = node_id;
         while let Some(node_id) = graph[node_iter].parent() {
             if self.is_debug {
                 println!(

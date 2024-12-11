@@ -79,7 +79,7 @@ impl EngineMat {
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
         let moves = if is_attacker {
-            self.filter_move_with_check(&mut game_clone, &game.gen_moves(), stat_eval)
+            self.filter_move_with_check(&game_clone, &game.gen_moves(), stat_eval)
         } else {
             game.gen_moves()
         };
@@ -146,7 +146,7 @@ impl EngineMat {
                 .play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
                 .unwrap();
             if game_clone.check_status().is_check() {
-                v.push(m.clone());
+                v.push(*m);
             }
             game_clone.play_back();
         }

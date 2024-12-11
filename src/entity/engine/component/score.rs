@@ -14,6 +14,7 @@ pub enum PreOrder {
     Depth,
     Capture { delta: i32 },
     Mat { defender_color: square::Color },
+    PreviousScore(Score),
     Promotion(square::TypePiecePromotion),
 }
 impl PreOrder {
@@ -81,7 +82,7 @@ impl fmt::Display for MoveStatus {
                 "{}/{}:{}",
                 m.cast(),
                 self.get_variant(),
-                score.to_string()
+                score
             ),
             None => write!(
                 f,
@@ -109,14 +110,11 @@ impl MoveStatus {
         self.score_opt.as_ref()
     }
     pub fn get_bitboard_move_score(&self) -> Option<BitboardMoveScore> {
-        match self.score_opt.as_ref() {
-            None => None,
-            Some(score) => Some(BitboardMoveScore::new(
-                self.b_move, 
-                score.clone(),
-                self.variant.clone()
-            )),
-        }
+        self.score_opt.as_ref().map(|score| BitboardMoveScore::new(
+            self.b_move, 
+            score.clone(),
+            self.variant.clone()
+        ))
     }
     pub fn set_score(&mut self, score: Score) {
         self.score_opt = Some(score)
@@ -270,6 +268,10 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
         return std::cmp::Ordering::Equal;
     }
     match (a, b) {
+        // we can have only one PV: play it first
+        (PreOrder::PreviousScore(sc1), PreOrder::PreviousScore(sc2)) => sc2.value().cmp(&sc1.value()),
+        (_, PreOrder::PreviousScore(_)) => std::cmp::Ordering::Greater,
+        (PreOrder::PreviousScore(_), _) => std::cmp::Ordering::Less,
         (PreOrder::Promotion(pa), PreOrder::Promotion(pb)) => {
             PreOrder::promotion_value(pb).cmp(&PreOrder::promotion_value(pa))
         }
@@ -278,7 +280,7 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
         (PreOrder::Mat { defender_color: _ }, _) => std::cmp::Ordering::Less,
         (_, PreOrder::Mat { defender_color: _ }) => std::cmp::Ordering::Greater,
         (PreOrder::Capture { delta: delta_a }, PreOrder::Capture { delta: delta_b }) => {
-            delta_b.cmp(&delta_a)
+            delta_b.cmp(delta_a)
         }
         (PreOrder::Capture { delta }, PreOrder::Depth) => {
             if *delta >= 0 {
@@ -301,8 +303,6 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
 pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
     match (a.get_score(), b.get_score()) {
         (Some(score_a), Some(score_b)) => {
-            let score_a = score_a;
-            let score_b = score_b;
             score_b.value().cmp(&score_a.value())
         }
         // put non evaluated node at the end

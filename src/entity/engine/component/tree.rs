@@ -73,7 +73,7 @@ impl Node {
             index: None,
             parent: None,
             children: vec![],
-            untried_moves: moves.into_iter().map(|b_move| b_move.clone()).collect(),
+            untried_moves: moves.to_vec(),
             game,
             n_visits: 0,
             n_wins: 0,
@@ -96,7 +96,7 @@ impl Node {
                     Some((max_i, max_value)) if node.ucb1(graph, c) <= max_value.ucb1(graph, c) => {
                         Some((max_i, max_value))
                     }
-                    _ => Some((i, &node)),
+                    _ => Some((i, node)),
                 }
             })
             .map(|(i, _)| i)

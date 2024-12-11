@@ -26,6 +26,7 @@ pub struct EngineIddfs {
     zobrist_table: zobrist::Zobrist,
     max_depth: u8,
     engine_alphabeta: engine_alphabeta::EngineAlphaBeta,
+    engine_mat_solver: engine_mat::EngineMat,        
 }
 impl EngineIddfs {
     pub fn new(
@@ -42,8 +43,14 @@ impl EngineIddfs {
             engine_alphabeta: engine_alphabeta::EngineAlphaBeta::new(
                 // fIXME: max_depth here should be dynamic
                 None,
-                zobrist_table,
+                zobrist_table.clone(),
                 max_depth,
+            ),
+            engine_mat_solver: engine_mat::EngineMat::new(
+                // fIXME: max_depth here should be dynamic
+                None,
+                zobrist_table,
+                max_depth * 2,
             ),
         }
     }
@@ -62,22 +69,37 @@ impl EngineIddfs {
 
         let mut game_clone = game.clone();
 
-        // TODO: iterarion over depth
-        let current_depth = 0;
-        let max_depth = self.max_depth;
-        // evaluate move with aplha beta
-        let b_move_score = self.engine_alphabeta.alphabeta_inc_rec(
-            "",
-            &mut game_clone,
-            current_depth,
-            max_depth,
-            None,
+        let mat_move_opt = self.engine_mat_solver.mat_solver_init(
+            game,
             self_actor.clone(),
             stat_actor_opt.clone(),
-            &mut stat_eval,
-            &mut transposition_table,
+            self.max_depth,
+            stat_eval,
         );
-        *b_move_score.bitboard_move()
+        if let Some(mat_move) = mat_move_opt {
+            return *mat_move.bitboard_move(),
+        }    
+
+        let mut b_move_score_opt: Option<score::BitboardMoveScore> = None;
+        for max_depth in 1..self.max_depth {
+            println!("=> {}", max_depth);
+            
+            // evaluate move with aplha beta
+            let b_move_score = self.engine_alphabeta.alphabeta_inc_rec(
+                "",
+                &mut game_clone,
+                0,
+                max_depth,
+                None,
+                self_actor.clone(),
+                stat_actor_opt.clone(),
+                &mut stat_eval,
+                &mut transposition_table,
+            );
+            println!("{} : {}", b_move_score.get_variant(), b_move_score.score().value());
+            b_move_score_opt = Some(b_move_score);
+        }
+        b_move_score_opt.unwrap().bitboard_move().clone()
     }
 
 
