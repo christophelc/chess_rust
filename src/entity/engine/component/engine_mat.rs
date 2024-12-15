@@ -11,7 +11,7 @@ use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EngineMat {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -61,7 +61,7 @@ impl EngineMat {
         //     println!("============");
         // }
         if let Some(mat_move) = &shortest_mat_opt {
-            println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());        
+            println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());
         }
         shortest_mat_opt
     }
@@ -77,7 +77,7 @@ impl EngineMat {
         stat_eval: &mut stat_eval::StatEval,
         max_depth: u8,
     ) -> Option<score::BitboardMoveScoreMat> {
-        let mut game_clone = game.clone();
+        let game_clone = game.clone();
         let moves = if is_attacker {
             self.filter_move_with_check(&game_clone, &game.gen_moves(), stat_eval)
         } else {
@@ -299,6 +299,9 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+    use crate::entity::engine::component::stat_eval;
+    use crate::entity::game::component::bitboard::zobrist;
+    use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{
             engine::component::engine_mat,
@@ -329,70 +332,30 @@ mod tests {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
         // mat in 3
-        let inputs = vec![
-            "position fen 8/R5P1/5P2/3kBp2/3p1P2/1K1P1P2/8/8 w - - 1 3",
-            "go",
-        ];
-        // mat in 5 (no initial check)
-        //"position fen 8/R7/4kPP1/3ppp2/3B1P2/1K1P1P2/8/8 w - - 0 1",
-        let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
-        let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
+        let game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
         //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
-        let mut engine_player1 = engine_mat::EngineMat::new(
+        let engine_player1 = engine_mat::EngineMat::new(
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             MAT_DEPTH,
         );
-        engine_player1.set_id_number("white");
         let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
-            Arc::new(engine_player1),
+            Arc::new(engine_player1.clone()),
             debug_actor_opt.clone(),
             None,
         );
-        let mut engine_player2 = engine_mat::EngineMat::new(
-            debug_actor_opt.clone(),
-            game_manager.zobrist_table(),
-            MAT_DEPTH,
-        );
-        engine_player2.set_id_number("black");
-        let engine_player2_dispatcher = dispatcher::EngineDispatcher::new(
-            Arc::new(engine_player2),
-            debug_actor_opt.clone(),
-            None,
-        );
-        let player1 = player::Player::Human {
-            engine_opt: Some(engine_player1_dispatcher.start()),
-        };
-        let player2 = player::Player::Computer {
-            engine: engine_player2_dispatcher.start(),
-        };
-        let players = player::Players::new(player1, player2);
-        game_manager.set_players(players);
-        let game_manager_actor = game_manager.start();
-        let uci_entity = uci_entity::UciEntity::new(
-            uci_reader,
-            game_manager_actor.clone(),
-            debug_actor_opt.clone(),
-            None,
-        );
-        let uci_entity_actor = uci_entity.start();
-        for _i in 0..inputs.len() {
-            let r = uci_entity_actor
-                .send(uci_entity::handler_read::ReadUserInput)
-                .await;
-            println!("{:?}", r);
-        }
-        actix::clock::sleep(std::time::Duration::from_secs(100)).await;
-        let game_opt = get_game_state(&game_manager_actor).await;
-        assert!(game_opt.is_some());
-        let game = game_opt.as_ref().unwrap();
-        let moves = game.gen_moves();
-        let moves: Vec<String> = (*moves
-            .into_iter()
-            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(m).cast())
-            .collect::<Vec<String>>())
-        .to_vec();
-        println!("{:?}", moves);
-        assert!(!moves.contains(&"h3h2".to_string()));
+        let self_actor = engine_player1_dispatcher.start();
+        let fen = "8/R5P1/5P2/3kBp2/3p1P2/1K1P1P2/8/8 w - - 1 3";
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
+        let zobrist_table = &zobrist::Zobrist::new();
+        let game = game_state::GameState::new(position, zobrist_table);
+        let mut stat_eval = stat_eval::StatEval::default();
+        let mat_move_opt =
+            engine_player1.mat_solver_init(&game, self_actor, None, 6, &mut stat_eval);
+        println!("{:?}", mat_move_opt);
     }
+
+    // TODO:
+    // mat in 5 (no initial check)
+    //"position fen 8/R7/4kPP1/3ppp2/3B1P2/1K1P1P2/8/8 w - - 0 1",
 }

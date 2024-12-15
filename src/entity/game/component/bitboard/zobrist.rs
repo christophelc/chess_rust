@@ -1,5 +1,5 @@
 /// Zobrish hash
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::fmt;
 
 use crate::entity::game::component::{bitboard, square};
@@ -72,7 +72,9 @@ impl Default for Zobrist {
 
 impl Zobrist {
     pub fn init(mut self) -> Zobrist {
-        let mut rng = rand::thread_rng();
+        // seed for debug
+        let seed: u64 = 123;
+        let mut rng = StdRng::seed_from_u64(seed);
         // Generate random values for each piece and square
         for piece in 0..12 {
             for square in 0..64 {
@@ -113,6 +115,9 @@ impl fmt::Display for ZobristHash {
 }
 
 impl ZobristHash {
+    pub fn value(&self) -> u64 {
+        self.0
+    }
     pub fn zobrist_hash_from_position(
         bit_position: &bitboard::BitPosition,
         zobrist: &Zobrist,

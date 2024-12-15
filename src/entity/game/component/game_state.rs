@@ -48,7 +48,7 @@ pub struct GameState {
     bit_position: bitboard::BitPosition,
     is_regenerate_moves: bool,
     hash_positions: zobrist::ZobristHistory,
-    back: Vec<BackMove>,
+    backup: Vec<BackMove>,
     end_game: EndGame,
 }
 impl PartialEq for GameState {
@@ -56,8 +56,8 @@ impl PartialEq for GameState {
         self.bit_position == other.bit_position
             && self.is_regenerate_moves == other.is_regenerate_moves
             && self.hash_positions == other.hash_positions
-            && self.back.len() == other.back.len()
-            && self.back.last() == other.back.last()
+            && self.backup.len() == other.backup.len()
+            && self.backup.last() == other.backup.last()
             && self.end_game == other.end_game
     }
 }
@@ -66,7 +66,7 @@ impl GameState {
         let mut game_state = GameState {
             bit_position: bitboard::BitPosition::from(position),
             hash_positions: zobrist::ZobristHistory::default(),
-            back: vec![],
+            backup: vec![],
             is_regenerate_moves: false,
             end_game: EndGame::None,
         };
@@ -80,12 +80,12 @@ impl GameState {
     fn add_hash(&mut self, hash: zobrist::ZobristHash) {
         self.hash_positions.push(hash);
     }
-    fn add_back(
+    fn store_backup(
         &mut self,
         bit_boards_white_and_black_masks: BitBoardsWhiteAndBlack,
         bit_position_status_back: bitboard::BitPositionStatus,
     ) {
-        self.back.push(BackMove::new(
+        self.backup.push(BackMove::new(
             bit_boards_white_and_black_masks,
             bit_position_status_back,
         ))
@@ -194,9 +194,9 @@ impl GameState {
     }
 
     pub fn play_back(&mut self) {
-        assert!(!self.back.is_empty());
+        assert!(!self.backup.is_empty());
         self.is_regenerate_moves = true;
-        let back_info = self.back.pop().unwrap();
+        let back_info = self.backup.pop().unwrap();
         self.bit_position.play_back(
             back_info.bit_position_status_back,
             back_info.bitboard_white_and_black_mask,
@@ -243,7 +243,7 @@ impl GameState {
                         .bit_position
                         .bit_boards_white_and_black()
                         .xor(bit_position_black_and_white_before_move);
-                    self.add_back(bitboards_masks, bit_position_status_before_move);
+                    self.store_backup(bitboards_masks, bit_position_status_before_move);
                     // update hash history
                     self.add_hash(hash);
                     summary.push(b_move);

@@ -68,7 +68,7 @@ impl EngineMcts {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> bitboard::BitBoardMove {
-        let mut graph = tree::graph::new();
+        let mut graph = tree::Graph::new();
         let moves = game.gen_moves();
         let root = tree::Node::build_root(game.clone(), &moves);
         let root_id = tree::add_node_to_graph(&mut graph, root.clone());
@@ -101,7 +101,7 @@ impl EngineMcts {
             panic!("No move found")
         }
     }
-    fn mcts_run(&self, graph: &mut tree::graph, node_id: tree::NodeIdx, mcts_stat: &mut MctsStat) {
+    fn mcts_run(&self, graph: &mut tree::Graph, node_id: tree::NodeIdx, mcts_stat: &mut MctsStat) {
         if graph[node_id].is_terminal() {
             let (n_white_wins, n_black_wins) = Self::evaluate_end_game(graph[node_id].game());
             self.mcts_back_propagation(graph, node_id, n_white_wins, n_black_wins);
@@ -152,7 +152,7 @@ impl EngineMcts {
             }
         }
     }
-    fn exploration(&self, graph: &mut tree::graph, node_id: tree::NodeIdx) -> tree::NodeIdx {
+    fn exploration(&self, graph: &mut tree::Graph, node_id: tree::NodeIdx) -> tree::NodeIdx {
         let mut rng = rand::thread_rng();
         let node = &graph[node_id];
         if self.is_debug {
@@ -163,7 +163,7 @@ impl EngineMcts {
     }
     fn mcts_simulation(
         &self,
-        graph: &tree::graph,
+        graph: &tree::Graph,
         expanded_node_idx: tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) -> (u64, u64) {
@@ -180,7 +180,7 @@ impl EngineMcts {
     // return None if Draw game, else return the winner
     pub fn mcts_one_simulation(
         &self,
-        graph: &tree::graph,
+        graph: &tree::Graph,
         node_id: tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) -> (u64, u64) {
@@ -220,7 +220,7 @@ impl EngineMcts {
     }
     pub fn mcts_back_propagation(
         &self,
-        graph: &mut tree::graph,
+        graph: &mut tree::Graph,
         node_id: tree::NodeIdx,
         n_white_wins: u64,
         n_black_wins: u64,

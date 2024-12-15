@@ -12,7 +12,7 @@ use crate::ui::notation::long_notation;
 const TREE_FILE_PATH: &str = "tree.txt";
 
 pub type NodeIdx = petgraph::graph::NodeIndex;
-pub type graph = petgraph::graph::Graph<Node, EdgeMove>;
+pub type Graph = petgraph::graph::Graph<Node, EdgeMove>;
 pub struct EdgeMove(pub bitboard::BitBoardMove);
 
 #[derive(Debug, Clone)]
@@ -79,14 +79,14 @@ impl Node {
             n_wins: 0,
         }
     }
-    pub fn get_node_mut(graph: &mut graph, node_idx: NodeIdx) -> &mut Node {
+    pub fn get_node_mut(graph: &mut Graph, node_idx: NodeIdx) -> &mut Node {
         if let Some(node) = graph.node_weight_mut(node_idx) {
             node
         } else {
             panic!("No node {:?}", node_idx);
         }
     }
-    pub fn argmax(graph: &graph, values: &[NodeIdx], c: f64) -> Option<usize> {
+    pub fn argmax(graph: &Graph, values: &[NodeIdx], c: f64) -> Option<usize> {
         values
             .iter()
             .enumerate()
@@ -101,7 +101,7 @@ impl Node {
             })
             .map(|(i, _)| i)
     }
-    pub fn ucb1(&self, graph: &graph, c: f64) -> f64 {
+    pub fn ucb1(&self, graph: &Graph, c: f64) -> f64 {
         assert!(!self.is_root());
         if self.n_visits == 0 {
             // ensure a node is explored at least once
@@ -133,7 +133,7 @@ impl Node {
     }
     // add a new child based on the untried_moves at index idx
     pub fn exploration(
-        graph: &mut graph,
+        graph: &mut Graph,
         node_idx: NodeIdx,
         idx: usize,
         zobrist_table: &zobrist::Zobrist,
@@ -161,7 +161,7 @@ impl Node {
 }
 
 #[allow(dead_code)]
-fn write_tree(graph: &graph, node: NodeIdx) {
+fn write_tree(graph: &Graph, node: NodeIdx) {
     let exe_path = env::current_exe().expect("Failed to find executable path");
     let folder_exe_path = exe_path
         .parent()
@@ -179,7 +179,7 @@ fn write_tree(graph: &graph, node: NodeIdx) {
 
 #[allow(dead_code)]
 fn display_tree_to_file(
-    graph: &graph,
+    graph: &Graph,
     node: NodeIdx,
     indent: usize,
     level: i8,
@@ -206,7 +206,7 @@ fn display_tree_to_file(
     }
 }
 
-pub fn display_tree(graph: &graph, node: NodeIdx, indent: usize, level: i8) {
+pub fn display_tree(graph: &Graph, node: NodeIdx, indent: usize, level: i8) {
     let mut m_as_str: String = "".to_string();
     if let Some(parent) = graph[node].parent() {
         if let Some(edge_index) = graph.find_edge(parent, node) {
@@ -249,7 +249,7 @@ pub fn display_tree(graph: &graph, node: NodeIdx, indent: usize, level: i8) {
     }
 }
 
-pub fn add_node_to_graph(graph: &mut graph, node: Node) -> NodeIdx {
+pub fn add_node_to_graph(graph: &mut Graph, node: Node) -> NodeIdx {
     let node_idx = graph.add_node(node);
     // Update the `index` field after the node is added
     graph[node_idx].index = Some(node_idx);

@@ -1,6 +1,6 @@
 pub mod engine_alphabeta;
-pub mod engine_iddfs;
 pub mod engine_dummy;
+pub mod engine_iddfs;
 pub mod engine_logic;
 pub mod engine_mat;
 pub mod engine_mcts;

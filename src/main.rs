@@ -166,8 +166,8 @@ async fn main() {
     let engine_player1_dispatcher =
         dispatcher::EngineDispatcher::new(Arc::new(engine_player1), debug_actor_opt.clone(), None);
     //let mut engine_player2 = dummy::EngineDummy::new(debug_actor_opt.clone());
-    //let mut engine_player2 = engine_mat::EngineMat::new(    
-    //let mut engine_player2 = engine_alphabeta::EngineAlphaBeta::new(        
+    //let mut engine_player2 = engine_mat::EngineMat::new(
+    //let mut engine_player2 = engine_alphabeta::EngineAlphaBeta::new(
     let mut engine_player2 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),

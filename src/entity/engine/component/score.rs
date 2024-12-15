@@ -39,31 +39,30 @@ impl TranspositionScore {
     pub fn get_move_score(
         &self,
         hash: &zobrist::ZobristHash,
-        player_turn: &square::Color,
         depth: u8,
     ) -> Option<BitboardMoveScore> {
         let mut move_score_opt: Option<BitboardMoveScore> = None;
         if let Some(move_score) = self.table.get(hash) {
             if move_score.score().path_length() >= depth {
-                match player_turn {
-                    square::Color::White => move_score_opt = Some(move_score.clone()),
-                    square::Color::Black => move_score_opt = Some(move_score.opposite()),
-                }
+                move_score_opt = Some(move_score.clone());
             }
         }
         move_score_opt
     }
     // store score for White
-    pub fn set_move_score(
-        &mut self,
-        hash: &zobrist::ZobristHash,
-        player_turn: &square::Color,
-        move_score: &BitboardMoveScore,
-    ) {
-        match player_turn {
-            square::Color::White => self.table.insert(hash.clone(), move_score.clone()),
-            square::Color::Black => self.table.insert(hash.clone(), move_score.opposite()),
-        };
+    pub fn set_move_score(&mut self, hash: &zobrist::ZobristHash, move_score: &BitboardMoveScore) {
+        // ipdate only if more accurate
+        if let Some(v) = self.table.get_key_value(hash) {
+            // less accurate ?
+            if v.1.score().path_length() < move_score.score().path_length()
+                || v.1.score().path_length() == move_score.score().path_length() &&
+            // capture can occur at max_depth for max_depth = 3 but not for max_depth = 2 (for example)
+            v.1.score().current_depth() < move_score.score().current_depth()
+            {
+                return;
+            }
+        }
+        self.table.insert(hash.clone(), move_score.clone());
     }
 }
 
@@ -77,13 +76,7 @@ impl fmt::Display for MoveStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let m = long_notation::LongAlgebricNotationMove::build_from_b_move(self.b_move);
         match &self.score_opt {
-            Some(score) => write!(
-                f,
-                "{}/{}:{}",
-                m.cast(),
-                self.get_variant(),
-                score
-            ),
+            Some(score) => write!(f, "{}/{}:{}", m.cast(), self.get_variant(), score),
             None => write!(
                 f,
                 "not_evaluated({})",
@@ -110,11 +103,9 @@ impl MoveStatus {
         self.score_opt.as_ref()
     }
     pub fn get_bitboard_move_score(&self) -> Option<BitboardMoveScore> {
-        self.score_opt.as_ref().map(|score| BitboardMoveScore::new(
-            self.b_move, 
-            score.clone(),
-            self.variant.clone()
-        ))
+        self.score_opt
+            .as_ref()
+            .map(|score| BitboardMoveScore::new(self.b_move, score.clone(), self.variant.clone()))
     }
     pub fn set_score(&mut self, score: Score) {
         self.score_opt = Some(score)
@@ -168,13 +159,6 @@ impl BitboardMoveScore {
     pub fn score(&self) -> &Score {
         &self.score
     }
-    pub fn opposite(&self) -> BitboardMoveScore {
-        BitboardMoveScore {
-            bitboard_move: self.bitboard_move,
-            score: self.score.opposite(),
-            variant: self.variant.clone(),
-        }
-    }
     pub fn bitboard_move(&self) -> &bitboard::BitBoardMove {
         &self.bitboard_move
     }
@@ -191,10 +175,11 @@ impl fmt::Display for BitboardMoveScore {
             long_notation::LongAlgebricNotationMove::build_from_b_move(self.bitboard_move);
         write!(
             f,
-            "{}:{} depth:{}",
+            "{}:{} current_depth {} / max_depth {}",
             notation.cast(),
             self.score.value,
-            self.score.path_length()
+            self.score.current_depth(),
+            self.score.max_depth
         )
     }
 }
@@ -202,28 +187,33 @@ impl fmt::Display for BitboardMoveScore {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Score {
     value: i32,
-    path_length: u8,
+    current_depth: u8,
+    max_depth: u8,
 }
 impl Score {
-    pub fn new(value: i32, path_length: u8) -> Self {
-        Self { value, path_length }
-    }
-    pub fn is_better_than(&self, score: &Score) -> bool {
-        self.value > score.value
-            || self.value == score.value && self.path_length > score.path_length
-    }
-    pub fn opposite(&self) -> Self {
+    pub fn new(value: i32, current_depth: u8, max_depth: u8) -> Self {
         Self {
-            value: if self.value == i32::MIN {
-                i32::MAX
-            } else {
-                -self.value
-            },
-            path_length: self.path_length,
+            value,
+            current_depth,
+            max_depth,
         }
     }
+    pub fn is_greater_than(&self, score: &Score) -> bool {
+        self.value > score.value
+            || self.value == score.value && self.path_length() > score.path_length()
+    }
+    pub fn is_less_than(&self, score: &Score) -> bool {
+        self.value < score.value
+            || self.value == score.value && self.path_length() > score.path_length()
+    }
+    pub fn current_depth(&self) -> u8 {
+        self.current_depth
+    }
+    pub fn max_depth(&self) -> u8 {
+        self.max_depth
+    }
     pub fn path_length(&self) -> u8 {
-        self.path_length
+        self.max_depth - self.current_depth
     }
     pub fn value(&self) -> i32 {
         self.value
@@ -231,7 +221,11 @@ impl Score {
 }
 impl fmt::Display for Score {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} - path length: {}", self.value, self.path_length)
+        write!(
+            f,
+            "{} - depth: {}/{}",
+            self.value, self.current_depth, self.max_depth
+        )
     }
 }
 // better move first
@@ -269,7 +263,9 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
     }
     match (a, b) {
         // we can have only one PV: play it first
-        (PreOrder::PreviousScore(sc1), PreOrder::PreviousScore(sc2)) => sc2.value().cmp(&sc1.value()),
+        (PreOrder::PreviousScore(sc1), PreOrder::PreviousScore(sc2)) => {
+            sc2.value().cmp(&sc1.value())
+        }
         (_, PreOrder::PreviousScore(_)) => std::cmp::Ordering::Greater,
         (PreOrder::PreviousScore(_), _) => std::cmp::Ordering::Less,
         (PreOrder::Promotion(pa), PreOrder::Promotion(pb)) => {
@@ -302,9 +298,7 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
 // to be called for depth >=1 by IDDFS
 pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
     match (a.get_score(), b.get_score()) {
-        (Some(score_a), Some(score_b)) => {
-            score_b.value().cmp(&score_a.value())
-        }
+        (Some(score_a), Some(score_b)) => score_b.value().cmp(&score_a.value()),
         // put non evaluated node at the end
         (Some(_score_a), _) => std::cmp::Ordering::Less,
         (_, Some(_score_b)) => std::cmp::Ordering::Greater,
@@ -332,74 +326,47 @@ mod tests {
             None,
             None,
         );
-        let path_length = 0;
+        let current_depth = 0;
+        let max_depth = 0;
         let moves_status1 = MoveStatus {
             b_move: m.clone(),
             variant: "1".to_string(),
-            score_opt: Some(Score::new(0, path_length)),
-            goal: PreOrder::Depth(3),
-            is_finished: false,
+            score_opt: Some(Score::new(0, current_depth, max_depth)),
         };
         let moves_status2 = MoveStatus {
             b_move: m.clone(),
             variant: "2".to_string(),
-            score_opt: Some(Score::new(-5, path_length)),
-            goal: PreOrder::Depth(3),
-            is_finished: false,
+            score_opt: Some(Score::new(-5, current_depth, max_depth)),
         };
         let moves_status3 = MoveStatus {
             b_move: m.clone(),
             variant: "3".to_string(),
-            score_opt: Some(Score::new(3, path_length)),
-            goal: PreOrder::Depth(3),
-            is_finished: false,
+            score_opt: Some(Score::new(3, current_depth, max_depth)),
         };
         let moves_status4 = MoveStatus {
             b_move: m.clone(),
             variant: "4".to_string(),
             score_opt: None,
-            goal: PreOrder::Depth(3),
-            is_finished: false,
         };
         let moves_status5 = MoveStatus {
             b_move: m.clone(),
             variant: "5".to_string(),
-            score_opt: Some(Score::new(-6, path_length)),
-            goal: PreOrder::Mat {
-                defender_color: square::Color::White,
-                max_depth: 1,
-            },
-            is_finished: false,
+            score_opt: Some(Score::new(-6, current_depth, max_depth)),
         };
         let moves_status6 = MoveStatus {
             b_move: m.clone(),
             variant: "6".to_string(),
-            score_opt: Some(Score::new(-7, path_length)),
-            goal: PreOrder::Capture {
-                delta: 3,
-                idx: bitboard::BitIndex::new(0),
-            },
-            is_finished: false,
+            score_opt: Some(Score::new(-7, current_depth, max_depth)),
         };
         let moves_status7 = MoveStatus {
             b_move: m.clone(),
             variant: "7".to_string(),
-            score_opt: Some(Score::new(-8, path_length)),
-            goal: PreOrder::Capture {
-                delta: 4,
-                idx: bitboard::BitIndex::new(0),
-            },
-            is_finished: false,
+            score_opt: Some(Score::new(-8, current_depth, max_depth)),
         };
         let moves_status8 = MoveStatus {
             b_move: m.clone(),
             variant: "8".to_string(),
-            score_opt: Some(Score::new(-9, path_length)),
-            goal: PreOrder::Capture {
-                delta: -3,
-                idx: bitboard::BitIndex::new(0),
-            },
-            is_finished: false,
+            score_opt: Some(Score::new(-9, current_depth, max_depth)),
         };
 
         let mut v = vec![
@@ -436,9 +403,43 @@ mod tests {
             moves_status4.clone(),
             moves_status8.clone(),
         ];
-        v.sort_by(preorder_compare);
-        let v_variant: Vec<String> = v.iter().map(|m| m.get_variant()).collect();
-        let expected2_variant: Vec<String> = expected2.iter().map(|m| m.get_variant()).collect();
-        assert_eq!(v_variant, expected2_variant)
+    }
+
+    //////////////////////////////////
+    // Preorder test (generated by AI)
+    //////////////////////////////////
+    #[test]
+    fn test_preorder_sorting() {
+        let current_depth = 0;
+        let max_depth = 0;
+        let mut list = vec![
+            PreOrder::PreviousScore(Score::new(10, current_depth, max_depth)),
+            PreOrder::Promotion(square::TypePiecePromotion::Queen),
+            PreOrder::Capture { delta: 5 },
+            PreOrder::Depth,
+            PreOrder::new_mat(square::Color::White),
+            PreOrder::PreviousScore(Score::new(20, current_depth, max_depth)),
+            PreOrder::Promotion(square::TypePiecePromotion::Rook),
+            PreOrder::Capture { delta: -5 },
+            PreOrder::Depth,
+            PreOrder::Capture { delta: 10 },
+        ];
+
+        list.sort_by(preorder_compare);
+
+        let expected = vec![
+            PreOrder::PreviousScore(Score::new(20, current_depth, max_depth)),
+            PreOrder::PreviousScore(Score::new(10, current_depth, max_depth)),
+            PreOrder::Promotion(square::TypePiecePromotion::Queen),
+            PreOrder::Promotion(square::TypePiecePromotion::Rook),
+            PreOrder::new_mat(square::Color::White),
+            PreOrder::Capture { delta: 10 },
+            PreOrder::Capture { delta: 5 },
+            PreOrder::Depth,
+            PreOrder::Depth,
+            PreOrder::Capture { delta: -5 },
+        ];
+
+        assert_eq!(list, expected);
     }
 }

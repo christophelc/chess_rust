@@ -23,7 +23,7 @@ impl Handler<StatInit> for StatEntity {
 #[rtype(result = "()")]
 pub struct StatInc {
     engine_id: logic::EngineId,
-    inc_n_position_evaluted: u64,
+    inc_n_position_evaluated: u64,
 }
 
 impl Handler<StatInc> for StatEntity {
@@ -33,7 +33,7 @@ impl Handler<StatInc> for StatEntity {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!("Stat actor receive {:?}", msg)));
         }
-        let (engine_id, inc) = (msg.engine_id, msg.inc_n_position_evaluted);
+        let (engine_id, inc) = (msg.engine_id, msg.inc_n_position_evaluated);
         let data_opt = self.stats.get_mut(&engine_id);
         match data_opt {
             Some(data) => data.inc(inc),
@@ -48,13 +48,13 @@ impl Handler<StatInc> for StatEntity {
 #[rtype(result = "()")]
 pub struct StatUpdate {
     engine_id: logic::EngineId,
-    n_position_evaluted: u64,
+    n_position_evaluated: u64,
 }
 impl StatUpdate {
-    pub fn new(engine_id: logic::EngineId, n_position_evaluted: u64) -> Self {
+    pub fn new(engine_id: logic::EngineId, n_position_evaluated: u64) -> Self {
         Self {
             engine_id,
-            n_position_evaluted,
+            n_position_evaluated,
         }
     }
 }
@@ -66,7 +66,7 @@ impl Handler<StatUpdate> for StatEntity {
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!("Stat actor receive {:?}", msg)));
         }
-        let (engine_id, n_delta) = (msg.engine_id, msg.n_position_evaluted);
+        let (engine_id, n_delta) = (msg.engine_id, msg.n_position_evaluated);
         let data_opt = self.stats.get_mut(&engine_id);
         match data_opt {
             Some(data) => data.set(n_delta + data.n_positions_evaluated()),
@@ -136,7 +136,7 @@ fn write_stat(engine_id: &logic::EngineId, stat: &stat_data::StatData) {
             .expect("Failed to open or create file");
         let n_per_second = n_position_evaluated as f32 / duration.num_milliseconds() as f32;
         let data = format!(
-            "{} id:'{}' n_positions_evluated/ms: {:.2} - total: {}\n",
+            "{} id:'{}' n_positions_evaluated/ms: {:.2} - total: {}\n",
             start_time,
             engine_id.name(),
             n_per_second,

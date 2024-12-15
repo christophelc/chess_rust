@@ -20,7 +20,7 @@ pub struct EngineAlphaBeta {
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
     max_depth: u8,
-    engine_mat_solver: engine_mat::EngineMat,    
+    engine_mat_solver: engine_mat::EngineMat,
 }
 impl EngineAlphaBeta {
     pub fn new(
@@ -76,7 +76,7 @@ impl EngineAlphaBeta {
                 .unwrap();
             game.update_endgame_status();
             let player_turn = &game.bit_position().bit_position_status().player_turn();
-            let preorder = match transposition_table.get_move_score(&game.last_hash(), player_turn, 0) {
+            let preorder = match transposition_table.get_move_score(&game.last_hash(), 0) {
                 None => Self::set_preorder(m, game.check_status().is_check()),
                 Some(b_move_score) => score::PreOrder::PreviousScore(b_move_score.score().clone()),
             };
@@ -109,17 +109,18 @@ impl EngineAlphaBeta {
             self_actor.clone(),
             stat_actor_opt.clone(),
             self.max_depth,
-            stat_eval,
+            &mut stat_eval,
         );
         if let Some(mat_move) = mat_move_opt {
-            return *mat_move.bitboard_move(),
-        }    
+            return *mat_move.bitboard_move();
+        }
 
         let b_move_score = self.alphabeta_inc_rec(
             "",
             &mut *&mut game_clone,
             current_depth,
             self.max_depth,
+            None,
             None,
             self_actor.clone(),
             stat_actor_opt.clone(),
@@ -130,25 +131,30 @@ impl EngineAlphaBeta {
         *b_move_score.bitboard_move()
     }
 
-
     pub fn alphabeta_inc_rec(
         &self,
         variant: &str,
         game: &mut game_state::GameState,
         current_depth: u8,
         max_depth: u8,
-        alpha_beta_opt_level_prec: Option<score::Score>,
+        alpha_opt: Option<&score::Score>,
+        beta_opt: Option<&score::Score>,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
         transposition_table: &mut score::TranspositionScore,
     ) -> score::BitboardMoveScore {
+        let mut alpha_opt = alpha_opt.map(|sc| sc.clone());
+        let mut beta_opt = beta_opt.map(|sc| sc.clone());
         let mut best_move_score_opt: Option<score::BitboardMoveScore> = None;
-        let mut alpha_beta_opt_level_current: Option<score::Score> = None;
 
         let mut moves = game.gen_moves();
         let moves_status = self.get_moves_preordered(&mut moves, game, transposition_table);
 
+        let is_max = game
+            .bit_position()
+            .bit_position_status()
+            .player_turn_white();
         for m_status in &moves_status {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
@@ -156,56 +162,100 @@ impl EngineAlphaBeta {
             let score = self.process_move(
                 game,
                 *m_status.get_move(),
-                alpha_beta_opt_level_current.clone(),
+                alpha_opt.as_ref(),
+                beta_opt.as_ref(),
                 &updated_variant,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
                 stat_eval,
                 current_depth,
                 max_depth,
+                is_max,
                 transposition_table,
             );
             let mut move_score = score::BitboardMoveScore::new(
                 *m_status.get_move(),
-                score::Score::new(score.value(), score.path_length()),
+                score::Score::new(score.value(), score.current_depth(), score.max_depth()),
                 m_status.get_variant(),
             );
             move_score.set_variant(&updated_variant);
-            if best_move_score_opt.is_none()
-                || score.is_better_than(best_move_score_opt.as_ref().unwrap().score())
-            {
-                alpha_beta_opt_level_current = Some(move_score.score().clone());
-                // Send best move
-                best_move_score_opt = Some(move_score);
-                send_best_move(
-                    self_actor.clone(),
-                    *best_move_score_opt.as_ref().unwrap().bitboard_move(),
-                );
-                //println!("current move:{}:{} {}/{}", updated_variant, m.score().value(), current_depth, current_depth);
-                if score.value() == i32::MAX {
-                    // useless to continue explore other moves
-                    break;
-                }
-                if let Some(alpha_beta) = &alpha_beta_opt_level_prec {
-                    if alpha_beta.value() > -score.value() {
-                        // alpha_beta pruning
-                        break;
+            //println!("{} : {}", updated_variant, move_score.score());
+            if is_max {
+                // best_score = max(best_score, score)
+                if best_move_score_opt.is_none()
+                    || score.is_greater_than(best_move_score_opt.as_ref().unwrap().score())
+                {
+                    // Send best move
+                    best_move_score_opt = Some(move_score);
+                    if current_depth == 0 {
+                        send_best_move(
+                            self_actor.clone(),
+                            *best_move_score_opt.as_ref().unwrap().bitboard_move(),
+                        );
                     }
                 }
+                // alpha = max(alpha, score)
+                if alpha_opt.is_none()
+                    || best_move_score_opt
+                        .as_ref()
+                        .unwrap()
+                        .score()
+                        .is_greater_than(&alpha_opt.as_ref().unwrap())
+                {
+                    alpha_opt = Some(best_move_score_opt.as_ref().unwrap().score().clone());
+                }
+                // beta pruning (alphz >= beta)
+                if beta_opt.is_some()
+                    && alpha_opt.as_ref().unwrap().value() >= beta_opt.as_ref().unwrap().value()
+                {
+                    break;
+                }
+            } else {
+                // best_score = min(best_score, score)
+                if best_move_score_opt.is_none()
+                    || score.is_less_than(best_move_score_opt.as_ref().unwrap().score())
+                {
+                    // best_score = min(best_score, score)
+                    best_move_score_opt = Some(move_score);
+                    if current_depth == 0 {
+                        send_best_move(
+                            self_actor.clone(),
+                            *best_move_score_opt.as_ref().unwrap().bitboard_move(),
+                        );
+                    }
+                }
+                // beta = min(beta, score)
+                if beta_opt.is_none()
+                    || best_move_score_opt
+                        .as_ref()
+                        .unwrap()
+                        .score()
+                        .is_less_than(&beta_opt.as_ref().unwrap())
+                {
+                    beta_opt = Some(best_move_score_opt.as_ref().unwrap().score().clone());
+                }
+                // alpha pruning (alpha >= beta)
+                if alpha_opt.is_some()
+                    && alpha_opt.as_ref().unwrap().value() >= beta_opt.as_ref().unwrap().value()
+                {
+                    break;
+                }
             }
+            /*/
+            println!(
+                "{} / [{:?}, {:?}]; best: {}",
+                updated_variant,
+                alpha_opt,
+                beta_opt,
+                best_move_score_opt.as_ref().unwrap()
+            );
+            */
         }
         let hash = game.last_hash();
-        if let Some(b_score) = &best_move_score_opt {
-            transposition_table.set_move_score(
-                &hash,
-                &game
-                    .bit_position()
-                    .bit_position_status()
-                    .player_turn()
-                    .switch(),
-                b_score,
-            );
-        }
+        // FIXME: sometimes, the value is overriden for the same hash, current_depth, max_depth (for a specific depth defined in iddfs).
+        // Chekc if this is normal
+        transposition_table.set_move_score(&hash, &best_move_score_opt.as_ref().unwrap());
+
         best_move_score_opt.unwrap()
     }
 
@@ -222,33 +272,34 @@ impl EngineAlphaBeta {
         &self,
         game: &mut game_state::GameState,
         m: bitboard::BitBoardMove,
-        alpha_beta_opt: Option<score::Score>,
+        alpha_opt: Option<&score::Score>,
+        beta_opt: Option<&score::Score>,
         variant: &str,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
         current_depth: u8,
         max_depth: u8,
+        is_max: bool,
         transposition_table: &mut score::TranspositionScore,
     ) -> score::Score {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
-        // if current_depth == 0 {
+        // if current_depth >= 0 && max_depth >= 5 {
         //     println!("{}", variant);
         // }
         // check if the current position has been already evaluated
         let hash = game.last_hash();
-        if let Some(move_score) = transposition_table.get_move_score(
-            &hash,
-            &game.bit_position().bit_position_status().player_turn(),
-            max_depth - current_depth,
-        ) {
+        if let Some(move_score) =
+            transposition_table.get_move_score(&hash, max_depth - current_depth)
+        {
             //println!("hit {:?}", move_score);
             if stat_eval.inc_n_transposition_hit() % 1_000_000 == 0 {
                 println!("hits: {}", stat_eval.n_transposition_hit());
             }
             game.play_back();
+            //println!("transposition {}: {} / {} =>  {}: {}", long_algebraic_move.cast(), current_depth, max_depth, move_score.get_variant(), move_score.score());
             return move_score.score().clone();
         };
 
@@ -260,14 +311,15 @@ impl EngineAlphaBeta {
                     game,
                     current_depth + 1,
                     max_depth,
-                    alpha_beta_opt,
+                    alpha_opt,
+                    beta_opt,
                     self_actor.clone(),
                     stat_actor_opt.clone(),
                     stat_eval,
                     transposition_table,
                 );
-                let score = best_move_score.score().opposite();
-                score::Score::new(score.value(), score.path_length() + 1)
+                let score = best_move_score.score();
+                score::Score::new(score.value(), current_depth, max_depth)
             } else {
                 // capture (avoid horizon effect) ?
                 let mut score_opt: Option<score::Score> = None;
@@ -281,22 +333,28 @@ impl EngineAlphaBeta {
                         stat_actor_opt.clone(),
                         stat_eval,
                         m.end(),
-                        current_depth % 2 == 0,
+                        is_max,
                     ) {
                         score_opt = Some(score);
                     }
                 }
                 if let Some(score) = score_opt {
+                    let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
+                    transposition_table.set_move_score(
+                        &hash,
+                        &score::BitboardMoveScore::new(m, score.clone(), updated_variant),
+                    );
                     score
                 } else {
                     score::Score::new(
                         evaluate_position(game, stat_eval, &stat_actor_opt, self.id()),
-                        max_depth - current_depth,
+                        current_depth,
+                        max_depth,
                     )
                 }
             }
         } else {
-            handle_end_game_scenario(game, current_depth)
+            handle_end_game_scenario(game, current_depth, max_depth)
         };
         game.play_back();
         score
@@ -326,11 +384,10 @@ impl EngineAlphaBeta {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
-            //println!("{}", updated_variant);
+            //println!("capture {}", updated_variant);
             game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
                 .unwrap();
             game.update_endgame_status();
-            //println!("=> {} / {}", long_algebraic_move.cast(), updated_variant);
             let score_opt = self.evalutate_capture(
                 &updated_variant,
                 game,
@@ -343,25 +400,25 @@ impl EngineAlphaBeta {
                 !is_max,
             );
             let score = if let Some(sc) = &score_opt {
-                sc.opposite()
+                sc.clone()
             } else {
                 score::Score::new(
                     evaluate_position(game, stat_eval, &stat_actor_opt, self.id()),
-                    max_depth - current_depth,
+                    current_depth,
+                    max_depth,
                 )
-                .opposite()
             };
-            if let Some(best_score) = &best_score_opt {
-                // minimax
-                if is_max && score.value() > best_score.value()
-                    || !is_max && score.value() < best_score.value()
-                {
-                    best_score_opt = score_opt;
+            //println!("capture {} : {}", updated_variant, score.value());
+            match &best_score_opt {
+                Some(best_score) => {
+                    if is_max && score.value() > best_score.value()
+                        || !is_max && score.value() < best_score.value()
+                    {
+                        best_score_opt = score_opt;
+                    }
                 }
-            } else {
-                best_score_opt = Some(score);
+                None => best_score_opt = Some(score),
             }
-            //self.alphabeta_inc_rec(&updated_variant, game, current_depth, max_depth, None, self_actor.clone(), stat_actor_opt.clone(), stat_eval, transposition_table);
             game.play_back();
         }
         best_score_opt
@@ -422,25 +479,29 @@ fn send_best_move(
     self_actor.do_send(msg);
 }
 
-fn handle_end_game_scenario(game: &game_state::GameState, current_depth: u8) -> score::Score {
+fn handle_end_game_scenario(
+    game: &game_state::GameState,
+    current_depth: u8,
+    max_depth: u8,
+) -> score::Score {
     match game.end_game() {
         game_state::EndGame::Mat(_) => {
             // If the game ends in a checkmate, it is a favorable outcome for the player who causes the checkmate.
-            score::Score::new(i32::MAX, current_depth)
+            score::Score::new(i32::MAX, current_depth, max_depth)
         }
         game_state::EndGame::TimeOutLost(color)
             if color == game.bit_position().bit_position_status().player_turn() =>
         {
             // If the current player loses by timeout, it is an unfavorable outcome.
-            score::Score::new(i32::MIN, current_depth)
+            score::Score::new(i32::MIN, current_depth, max_depth)
         }
         game_state::EndGame::TimeOutLost(_) => {
             // If the opponent times out, it is a favorable outcome for the current player.
-            score::Score::new(i32::MAX, current_depth)
+            score::Score::new(i32::MAX, current_depth, max_depth)
         }
         _ => {
             // In other cases (stalemate, etc.), it might be neutral or need specific scoring based on the game rules.
-            score::Score::new(0, current_depth)
+            score::Score::new(0, current_depth, max_depth)
         }
     }
 }
@@ -462,9 +523,8 @@ fn evaluate_position(
         }
         stat_eval.reset_n_positions_evaluated();
     }
-    evaluate(game.bit_position())
+    evaluate_static_position(game.bit_position())
 }
-
 
 fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
     let n_rooks = bitboards.rooks().bitboard().iter().count() as u32;
@@ -475,15 +535,12 @@ fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
     n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns
 }
 
-fn evaluate(bit_position: &bitboard::BitPosition) -> i32 {
-    let color = bit_position.bit_position_status().player_turn().switch();
+// evaluate from white perspective
+fn evaluate_static_position(bit_position: &bitboard::BitPosition) -> i32 {
     let score_current =
-        evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board(&color));
-    let score_opponent = evaluate_one_side(
-        bit_position
-            .bit_boards_white_and_black()
-            .bit_board(&color.switch()),
-    );
+        evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board_white());
+    let score_opponent =
+        evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board_black());
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
     score_current as i32 - score_opponent as i32

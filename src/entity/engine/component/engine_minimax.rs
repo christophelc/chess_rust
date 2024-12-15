@@ -116,14 +116,18 @@ impl EngineMinimax {
                 n_positions_evaluated,
                 current_depth,
             );
-            if max_score_opt.is_none() || score.is_better_than(max_score_opt.as_ref().unwrap()) {
+            if max_score_opt.is_none() || score.is_greater_than(max_score_opt.as_ref().unwrap()) {
                 // Send best move
                 best_move_opt = Some(*m);
                 max_score_opt = Some(score);
                 send_best_move(self_actor.clone(), best_move_opt.unwrap());
             }
         }
-        score::BitboardMoveScore::new(best_move_opt.unwrap(), max_score_opt.unwrap(), "".to_string())
+        score::BitboardMoveScore::new(
+            best_move_opt.unwrap(),
+            max_score_opt.unwrap(),
+            "".to_string(),
+        )
     }
 
     fn prepare_tree_level_1(
@@ -175,15 +179,16 @@ impl EngineMinimax {
                     n_positions_evaluated,
                 );
                 let score = bitboard_move_score.score();
-                score::Score::new(-score.value(), score.path_length() + 1)
+                score::Score::new(-score.value(), current_depth, self.max_depth)
             } else {
                 score::Score::new(
                     evaluate_position(game, n_positions_evaluated, &stat_actor_opt, self.id()),
                     current_depth,
+                    self.max_depth,
                 )
             }
         } else {
-            handle_end_game_scenario(game, current_depth)
+            handle_end_game_scenario(game, current_depth, self.max_depth)
         };
 
         game.play_back();
@@ -245,25 +250,29 @@ fn send_best_move(
     self_actor.do_send(msg);
 }
 
-fn handle_end_game_scenario(game: &game_state::GameState, current_depth: u8) -> score::Score {
+fn handle_end_game_scenario(
+    game: &game_state::GameState,
+    current_depth: u8,
+    max_depth: u8,
+) -> score::Score {
     match game.end_game() {
         game_state::EndGame::Mat(_) => {
             // If the game ends in a checkmate, it is a favorable outcome for the player who causes the checkmate.
-            score::Score::new(i32::MAX, current_depth)
+            score::Score::new(i32::MAX, current_depth, max_depth)
         }
         game_state::EndGame::TimeOutLost(color)
             if color == game.bit_position().bit_position_status().player_turn() =>
         {
             // If the current player loses by timeout, it is an unfavorable outcome.
-            score::Score::new(i32::MIN, current_depth)
+            score::Score::new(i32::MIN, current_depth, max_depth)
         }
         game_state::EndGame::TimeOutLost(_) => {
             // If the opponent times out, it is a favorable outcome for the current player.
-            score::Score::new(i32::MAX, current_depth)
+            score::Score::new(i32::MAX, current_depth, max_depth)
         }
         _ => {
             // In other cases (stalemate, etc.), it might be neutral or need specific scoring based on the game rules.
-            score::Score::new(0, current_depth)
+            score::Score::new(0, current_depth, max_depth)
         }
     }
 }
