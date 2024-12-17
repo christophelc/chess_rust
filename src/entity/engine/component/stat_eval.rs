@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct StatEval {
     n_positions_evaluated: u64,
     n_transposition_hit: u64,

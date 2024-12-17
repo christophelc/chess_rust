@@ -91,10 +91,17 @@ impl EngineIddfs {
                 None,
                 None,
                 self_actor.clone(),
-                stat_actor_opt.clone(),
+                None,
                 &mut stat_eval,
                 &mut transposition_table,
             );
+            if let Some(stat_actor) = stat_actor_opt.as_ref() {
+                let msg = stat_entity::handler_stat::StatUpdate::new(
+                    self.id(),
+                    stat_eval.n_positions_evaluated(),
+                );
+                stat_actor.do_send(msg);    
+            }
             println!(
                 "info => {} / '{}' : {}",
                 max_depth,

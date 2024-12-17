@@ -19,11 +19,11 @@ And there are heurstic:
 
 - Time management
 - Refactoring of the code
+- Aspiration Window
 - Improve speed (not a priority)
 	- In this version, I think there are allocation that could be avoided
 	- I should consider magic number (may be I could enhance speed by a factor of 2).
 
 ## Next steps
 
-- Fix stats: stats are received by StatActor but counter stays null
-- Add neural networkds (NNUE ?)
+- Add neural networks (NNUE ?)
