@@ -228,6 +228,19 @@ impl fmt::Display for Score {
         )
     }
 }
+pub fn compare_preorder_mat(
+    a: &bitboard::BitBoardMove,
+    b: &bitboard::BitBoardMove,
+) -> std::cmp::Ordering {
+    match (a.promotion(), b.promotion(), a.capture(), b.capture()) {
+        (Some(_pa), _, _, _) => std::cmp::Ordering::Less,
+        (_, Some(_pb), _, _) => std::cmp::Ordering::Greater,
+        (_, _, Some(_cap_a), None) => std::cmp::Ordering::Less,
+        (_, _, None, Some(_cap_a)) => std::cmp::Ordering::Greater,
+        _ => std::cmp::Ordering::Equal,
+    }
+}
+
 // better move first
 pub fn compare(a: &BitboardMoveScore, b: &BitboardMoveScore) -> std::cmp::Ordering {
     b.score.value.cmp(&a.score.value)
@@ -256,15 +269,22 @@ pub fn biased_capture(
         Some(capture) => value_type_piece(capture) - value_type_piece(type_piece) + 1,
     }
 }
+
 // to be called before evaluation at depth 0 by IDDFS
-pub fn preorder_compare(a: &PreOrder, b: &PreOrder) -> std::cmp::Ordering {
+pub fn preorder_compare(a: &PreOrder, b: &PreOrder, is_asc: bool) -> std::cmp::Ordering {
     if a == b {
         return std::cmp::Ordering::Equal;
     }
     match (a, b) {
         // we can have only one PV: play it first
         (PreOrder::PreviousScore(sc1), PreOrder::PreviousScore(sc2)) => {
-            sc2.value().cmp(&sc1.value())
+            if is_asc {
+                // smaller scores first
+                sc1.value().cmp(&sc2.value())
+            } else {
+                // higher score first
+                sc2.value().cmp(&sc1.value())
+            }
         }
         (_, PreOrder::PreviousScore(_)) => std::cmp::Ordering::Greater,
         (PreOrder::PreviousScore(_), _) => std::cmp::Ordering::Less,
@@ -308,7 +328,9 @@ pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::engine::component::score::{order_move_status, PreOrder};
+    use crate::entity::engine::component::score::{
+        compare_preorder_mat, order_move_status, PreOrder,
+    };
     use crate::entity::game::component::{bitboard, square};
 
     use super::preorder_compare;
@@ -425,7 +447,7 @@ mod tests {
             PreOrder::Capture { delta: 10 },
         ];
 
-        list.sort_by(preorder_compare);
+        list.sort_by(|a, b| preorder_compare(&a, &b, false));
 
         let expected = vec![
             PreOrder::PreviousScore(Score::new(20, current_depth, max_depth)),
@@ -441,5 +463,131 @@ mod tests {
         ];
 
         assert_eq!(list, expected);
+    }
+
+    #[test]
+    fn test_preorder_for_mat() {
+        use bitboard::{BitBoardMove, BitIndex};
+        use square::TypePiecePromotion;
+        use square::{Color, TypePiece};
+
+        // Create a sequence of moves with different combinations of promotion and capture.
+        let mut moves = vec![
+            // Promotion moves
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Pawn,
+                BitIndex::new(12),
+                BitIndex::new(20),
+                None,
+                Some(TypePiecePromotion::Queen),
+            ),
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Pawn,
+                BitIndex::new(25),
+                BitIndex::new(32),
+                None,
+                Some(TypePiecePromotion::Knight),
+            ),
+            // Capture moves
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Rook,
+                BitIndex::new(10),
+                BitIndex::new(18),
+                Some(TypePiece::Pawn),
+                None,
+            ),
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Bishop,
+                BitIndex::new(15),
+                BitIndex::new(23),
+                Some(TypePiece::Rook),
+                None,
+            ),
+            // Regular moves
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Knight,
+                BitIndex::new(5),
+                BitIndex::new(13),
+                None,
+                None,
+            ),
+            BitBoardMove::new(
+                Color::White,
+                TypePiece::Queen,
+                BitIndex::new(30),
+                BitIndex::new(37),
+                None,
+                None,
+            ),
+        ];
+
+        // Sort the moves using compare_preorder_mat.
+        moves.sort_by(|a, b| compare_preorder_mat(a, b));
+
+        // Assert the expected ordering:
+        // - Promotion moves come first
+        // - Then capture moves
+        // - Finally, regular moves
+        assert_eq!(
+            moves,
+            vec![
+                // Promotion moves
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Pawn,
+                    BitIndex::new(25),
+                    BitIndex::new(32),
+                    None,
+                    Some(TypePiecePromotion::Knight)
+                ),
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Pawn,
+                    BitIndex::new(12),
+                    BitIndex::new(20),
+                    None,
+                    Some(TypePiecePromotion::Queen)
+                ),
+                // Capture moves
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Rook,
+                    BitIndex::new(10),
+                    BitIndex::new(18),
+                    Some(TypePiece::Pawn),
+                    None
+                ),
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Bishop,
+                    BitIndex::new(15),
+                    BitIndex::new(23),
+                    Some(TypePiece::Rook),
+                    None
+                ),
+                // Regular moves
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Knight,
+                    BitIndex::new(5),
+                    BitIndex::new(13),
+                    None,
+                    None
+                ),
+                BitBoardMove::new(
+                    Color::White,
+                    TypePiece::Queen,
+                    BitIndex::new(30),
+                    BitIndex::new(37),
+                    None,
+                    None
+                ),
+            ]
+        );
     }
 }

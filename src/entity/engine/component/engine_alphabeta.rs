@@ -7,8 +7,8 @@ use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
-use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;
+use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
 use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
@@ -61,11 +61,14 @@ impl EngineAlphaBeta {
         preorder
     }
 
+    // is_asc true => score 3, score 4
+    // is asc false => score 4, score 3
     fn get_moves_preordered(
         &self,
         moves: &mut [bitboard::BitBoardMove],
         game: &mut game_state::GameState,
         transposition_table: &mut score::TranspositionScore,
+        is_asc: bool,
     ) -> Vec<score::MoveStatus> {
         let mut moves_status_with_preorder: Vec<(score::MoveStatus, score::PreOrder)> = vec![];
         for m in moves {
@@ -75,16 +78,15 @@ impl EngineAlphaBeta {
             game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
                 .unwrap();
             game.update_endgame_status();
-            let player_turn = &game.bit_position().bit_position_status().player_turn();
             let preorder = match transposition_table.get_move_score(&game.last_hash(), 0) {
                 None => Self::set_preorder(m, game.check_status().is_check()),
                 Some(b_move_score) => score::PreOrder::PreviousScore(b_move_score.score().clone()),
             };
-            let mut move_status = score::MoveStatus::from_move(*m);
+            let move_status = score::MoveStatus::from_move(*m);
             moves_status_with_preorder.push((move_status, preorder));
             game.play_back()
         }
-        moves_status_with_preorder.sort_by(|a, b| score::preorder_compare(&a.1, &b.1));
+        moves_status_with_preorder.sort_by(|a, b| score::preorder_compare(&a.1, &b.1, is_asc));
         moves_status_with_preorder
             .into_iter()
             .map(|t| t.0)
@@ -137,8 +139,8 @@ impl EngineAlphaBeta {
         game: &mut game_state::GameState,
         current_depth: u8,
         max_depth: u8,
-        alpha_opt: Option<&score::Score>,
-        beta_opt: Option<&score::Score>,
+        alpha_opt: Option<i32>,
+        beta_opt: Option<i32>,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
@@ -149,12 +151,13 @@ impl EngineAlphaBeta {
         let mut best_move_score_opt: Option<score::BitboardMoveScore> = None;
 
         let mut moves = game.gen_moves();
-        let moves_status = self.get_moves_preordered(&mut moves, game, transposition_table);
-
         let is_max = game
             .bit_position()
             .bit_position_status()
             .player_turn_white();
+        let moves_status =
+            self.get_moves_preordered(&mut moves, game, transposition_table, !is_max);
+
         for m_status in &moves_status {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
@@ -162,8 +165,8 @@ impl EngineAlphaBeta {
             let score = self.process_move(
                 game,
                 *m_status.get_move(),
-                alpha_opt.as_ref(),
-                beta_opt.as_ref(),
+                alpha_opt,
+                beta_opt,
                 &updated_variant,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
@@ -196,19 +199,17 @@ impl EngineAlphaBeta {
                 }
                 // alpha = max(alpha, score)
                 if alpha_opt.is_none()
-                    || best_move_score_opt
-                        .as_ref()
-                        .unwrap()
-                        .score()
-                        .is_greater_than(&alpha_opt.as_ref().unwrap())
+                    || best_move_score_opt.as_ref().unwrap().score().value() >= alpha_opt.unwrap()
                 {
-                    alpha_opt = Some(best_move_score_opt.as_ref().unwrap().score().clone());
+                    alpha_opt = Some(best_move_score_opt.as_ref().unwrap().score().value());
                 }
                 // beta pruning (alphz >= beta)
-                if beta_opt.is_some()
-                    && alpha_opt.as_ref().unwrap().value() >= beta_opt.as_ref().unwrap().value()
+                if *alpha_opt.as_ref().unwrap() == i32::MAX
+                    || beta_opt.is_some()
+                        && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    break;
+                    // do not update transpositon table
+                    return best_move_score_opt.unwrap();
                 }
             } else {
                 // best_score = min(best_score, score)
@@ -226,19 +227,17 @@ impl EngineAlphaBeta {
                 }
                 // beta = min(beta, score)
                 if beta_opt.is_none()
-                    || best_move_score_opt
-                        .as_ref()
-                        .unwrap()
-                        .score()
-                        .is_less_than(&beta_opt.as_ref().unwrap())
+                    || best_move_score_opt.as_ref().unwrap().score().value() < beta_opt.unwrap()
                 {
-                    beta_opt = Some(best_move_score_opt.as_ref().unwrap().score().clone());
+                    beta_opt = Some(best_move_score_opt.as_ref().unwrap().score().value());
                 }
                 // alpha pruning (alpha >= beta)
-                if alpha_opt.is_some()
-                    && alpha_opt.as_ref().unwrap().value() >= beta_opt.as_ref().unwrap().value()
+                if *beta_opt.as_ref().unwrap() == i32::MIN
+                    || alpha_opt.is_some()
+                        && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    break;
+                    // do not update transpositon table
+                    return best_move_score_opt.unwrap();
                 }
             }
             /*/
@@ -272,8 +271,8 @@ impl EngineAlphaBeta {
         &self,
         game: &mut game_state::GameState,
         m: bitboard::BitBoardMove,
-        alpha_opt: Option<&score::Score>,
-        beta_opt: Option<&score::Score>,
+        alpha_opt: Option<i32>,
+        beta_opt: Option<i32>,
         variant: &str,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
@@ -484,14 +483,21 @@ fn handle_end_game_scenario(
     current_depth: u8,
     max_depth: u8,
 ) -> score::Score {
+    // check the color for the last move
+    let is_turn_white = !game
+        .bit_position()
+        .bit_position_status()
+        .player_turn_white();
     match game.end_game() {
         game_state::EndGame::Mat(_) => {
             // If the game ends in a checkmate, it is a favorable outcome for the player who causes the checkmate.
-            score::Score::new(i32::MAX, current_depth, max_depth)
+            if is_turn_white {
+                score::Score::new(i32::MAX, current_depth, max_depth)
+            } else {
+                score::Score::new(i32::MIN, current_depth, max_depth)
+            }
         }
-        game_state::EndGame::TimeOutLost(color)
-            if color == game.bit_position().bit_position_status().player_turn() =>
-        {
+        game_state::EndGame::TimeOutLost(color) if color == square::Color::White => {
             // If the current player loses by timeout, it is an unfavorable outcome.
             score::Score::new(i32::MIN, current_depth, max_depth)
         }
@@ -543,7 +549,7 @@ fn evaluate_static_position(bit_position: &bitboard::BitPosition) -> i32 {
         evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board_black());
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
-    score_current as i32 - score_opponent as i32
+    (score_current as i32 - score_opponent as i32) * 100
 }
 
 #[cfg(test)]

@@ -45,6 +45,7 @@ impl EngineMat {
         stat_eval: &mut stat_eval::StatEval,
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
+        println!("info looking for mat");
         let shortest_mat_opt = self.mat_solver(
             "",
             &mut game_clone,
@@ -55,6 +56,7 @@ impl EngineMat {
             stat_eval,
             max_depth,
         );
+        println!("info end looking for mat");
         // if let Some(mat_move) = &shortest_mat_opt {
         //     println!("============");
         //     println!("{}", mat_move.variant());
@@ -81,7 +83,9 @@ impl EngineMat {
         let moves = if is_attacker {
             self.filter_move_with_check(&game_clone, &game.gen_moves(), stat_eval)
         } else {
-            game.gen_moves()
+            let mut moves = game.gen_moves();
+            moves.sort_by(score::compare_preorder_mat);
+            moves
         };
         if moves.is_empty() {
             None
@@ -188,6 +192,7 @@ impl EngineMat {
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast())
             .trim()
             .to_string();
+        //println!("variant mat ? {}", updated_variant);
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
         game.update_endgame_status();
