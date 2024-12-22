@@ -3,8 +3,7 @@ use rand::Rng;
 use std::fmt;
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::engine::component::{engine_logic as logic, tree};
-use crate::entity::game::component::bitboard::piece_move::GenMoves;
+use crate::entity::engine::component::{engine_logic as logic, mcts_tree};
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{game_state, square};
@@ -62,16 +61,11 @@ impl EngineMcts {
         self.id_number = id_number.to_string();
     }
 
-    pub fn mcts(
-        &self,
-        game: &game_state::GameState,
-        self_actor: Addr<dispatcher::EngineDispatcher>,
-        stat_actor_opt: Option<stat_entity::StatActor>,
-    ) -> bitboard::BitBoardMove {
-        let mut graph = tree::Graph::new();
+    pub fn mcts(&self, game: &game_state::GameState) -> bitboard::BitBoardMove {
+        let mut graph = mcts_tree::Graph::new();
         let moves = game.gen_moves();
-        let root = tree::Node::build_root(game.clone(), &moves);
-        let root_id = tree::add_node_to_graph(&mut graph, root.clone());
+        let root = mcts_tree::Node::build_root(game.clone(), &moves);
+        let root_id = mcts_tree::add_node_to_graph(&mut graph, root.clone());
         let mut mcts_stat = MctsStat::default();
         for i in 0..MAX_TREE_ITERATION {
             if i % 100 == 0 {
@@ -79,7 +73,7 @@ impl EngineMcts {
             }
             self.mcts_run(&mut graph, root_id, &mut mcts_stat);
         }
-        if let Some(idx) = tree::Node::argmax(&graph, graph[root_id].children(), self.c) {
+        if let Some(idx) = mcts_tree::Node::argmax(&graph, graph[root_id].children(), self.c) {
             let best_move_id = graph[root_id].children().get(idx).unwrap();
             let best_move = if let Some(edge_index) = graph.find_edge(root_id, *best_move_id) {
                 let edge = graph.edge_weight(edge_index).unwrap();
@@ -87,7 +81,7 @@ impl EngineMcts {
             } else {
                 panic!("Graph error: edge not found");
             };
-            tree::display_tree(&graph, root_id, 0, 0);
+            mcts_tree::display_tree(&graph, root_id, 0, 0);
             let total: u64 = graph[root_id]
                 .children()
                 .iter()
@@ -101,7 +95,12 @@ impl EngineMcts {
             panic!("No move found")
         }
     }
-    fn mcts_run(&self, graph: &mut tree::Graph, node_id: tree::NodeIdx, mcts_stat: &mut MctsStat) {
+    fn mcts_run(
+        &self,
+        graph: &mut mcts_tree::Graph,
+        node_id: mcts_tree::NodeIdx,
+        mcts_stat: &mut MctsStat,
+    ) {
         if graph[node_id].is_terminal() {
             let (n_white_wins, n_black_wins) = Self::evaluate_end_game(graph[node_id].game());
             self.mcts_back_propagation(graph, node_id, n_white_wins, n_black_wins);
@@ -124,7 +123,7 @@ impl EngineMcts {
                     graph[node_id].set_untried_moves(moves);
                 } else {
                     // selection: all moves have been expanded: select the best ucb1 score
-                    match tree::Node::argmax(graph, node.children(), self.c) {
+                    match mcts_tree::Node::argmax(graph, node.children(), self.c) {
                         None => {
                             if self.is_debug {
                                 println!("not found")
@@ -135,7 +134,7 @@ impl EngineMcts {
                                 println!("found")
                             };
                             let selected_node_idx = node.children().get(idx).unwrap();
-                            self.mcts_run(graph, selected_node_idx.clone(), mcts_stat)
+                            self.mcts_run(graph, *selected_node_idx, mcts_stat)
                         }
                     }
                 }
@@ -152,19 +151,23 @@ impl EngineMcts {
             }
         }
     }
-    fn exploration(&self, graph: &mut tree::Graph, node_id: tree::NodeIdx) -> tree::NodeIdx {
+    fn exploration(
+        &self,
+        graph: &mut mcts_tree::Graph,
+        node_id: mcts_tree::NodeIdx,
+    ) -> mcts_tree::NodeIdx {
         let mut rng = rand::thread_rng();
         let node = &graph[node_id];
         if self.is_debug {
             println!("exploration / {}", node.untried_moves().len())
         };
         let random_index = rng.gen_range(0..node.untried_moves().len()); // Random index
-        tree::Node::exploration(graph, node_id, random_index, &self.zobrist_table)
+        mcts_tree::Node::exploration(graph, node_id, random_index, &self.zobrist_table)
     }
     fn mcts_simulation(
         &self,
-        graph: &tree::Graph,
-        expanded_node_idx: tree::NodeIdx,
+        graph: &mcts_tree::Graph,
+        expanded_node_idx: mcts_tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) -> (u64, u64) {
         let mut n_white_wins: u64 = 0;
@@ -178,10 +181,10 @@ impl EngineMcts {
         (n_white_wins, n_black_wins)
     }
     // return None if Draw game, else return the winner
-    pub fn mcts_one_simulation(
+    fn mcts_one_simulation(
         &self,
-        graph: &tree::Graph,
-        node_id: tree::NodeIdx,
+        graph: &mcts_tree::Graph,
+        node_id: mcts_tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) -> (u64, u64) {
         let mut rng = rand::thread_rng();
@@ -220,8 +223,8 @@ impl EngineMcts {
     }
     pub fn mcts_back_propagation(
         &self,
-        graph: &mut tree::Graph,
-        node_id: tree::NodeIdx,
+        graph: &mut mcts_tree::Graph,
+        node_id: mcts_tree::NodeIdx,
         n_white_wins: u64,
         n_black_wins: u64,
     ) {
@@ -283,7 +286,7 @@ impl logic::Engine for EngineMcts {
     ) {
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.mcts(&game, self_actor.clone(), stat_actor_opt.clone());
+            let best_move = self.mcts(&game);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));

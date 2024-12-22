@@ -9,7 +9,7 @@ pub struct ChessBoardIterator<'a> {
     row: usize,
     col: usize,
 }
-impl<'a> Iterator for ChessBoardIterator<'a> {
+impl Iterator for ChessBoardIterator<'_> {
     type Item = square::Square;
 
     fn next(&mut self) -> Option<Self::Item> {

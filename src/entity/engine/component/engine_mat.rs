@@ -3,7 +3,6 @@ use actix::Addr;
 use super::engine_logic::{self as logic, Engine};
 use super::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::stat::actor::stat_entity;
@@ -268,7 +267,7 @@ impl logic::Engine for EngineMat {
             self.max_depth,
             &mut stat_eval,
         );
-        let best_move_opt = best_move_opt.map(|m| m.bitboard_move().clone());
+        let best_move_opt = best_move_opt.map(|m| *m.bitboard_move());
         self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
             stat_actor_opt,
         ));
@@ -287,14 +286,6 @@ impl logic::Engine for EngineMat {
             println!("No mat in {} half moves or less found", self.max_depth);
         }
     }
-}
-
-fn send_best_move(
-    self_actor: Addr<dispatcher::EngineDispatcher>,
-    best_move: bitboard::BitBoardMove,
-) {
-    let msg = dispatcher::handler_engine::EngineSendBestMove(best_move);
-    self_actor.do_send(msg);
 }
 
 #[cfg(test)]

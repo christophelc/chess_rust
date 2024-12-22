@@ -1,29 +1,16 @@
 use actix::Addr;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::engine_logic::{self as logic, Engine};
 use super::{engine_alphabeta, engine_mat, score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
-use crate::entity::game::component::square::Switch;
-use crate::entity::game::component::{game_state, player, square};
+use crate::entity::game::component::game_state;
 use crate::entity::stat::actor::stat_entity;
-use crate::entity::stat::component::stat_data;
-use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
-
-#[derive(Debug)]
-enum IddfsAction {
-    Stop,
-    Dig(usize),
-    Evaluate(usize),
-}
 
 pub struct EngineIddfs {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
-    zobrist_table: zobrist::Zobrist,
     max_depth: u8,
     engine_alphabeta: engine_alphabeta::EngineAlphaBeta,
     engine_mat_solver: engine_mat::EngineMat,
@@ -38,7 +25,6 @@ impl EngineIddfs {
         Self {
             id_number: "".to_string(),
             debug_actor_opt,
-            zobrist_table: zobrist_table.clone(),
             max_depth: max_depth * 2 - 1,
             engine_alphabeta: engine_alphabeta::EngineAlphaBeta::new(
                 // fIXME: max_depth here should be dynamic
@@ -152,6 +138,7 @@ impl EngineIddfs {
                 );
                 stat_actor.do_send(msg);
             }
+            send_best_move(self_actor.clone(), *b_move_score.bitboard_move());
             println!(
                 "info => {} / '{}' : {}",
                 max_depth,
@@ -160,7 +147,7 @@ impl EngineIddfs {
             );
             b_move_score_opt = Some(b_move_score);
         }
-        b_move_score_opt.unwrap().bitboard_move().clone()
+        *b_move_score_opt.unwrap().bitboard_move()
     }
 }
 unsafe impl Send for EngineIddfs {}

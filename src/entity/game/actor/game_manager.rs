@@ -8,7 +8,7 @@ use actix::{Actor, Addr, Context};
 use crate::entity::{
     engine::component::ts_best_move,
     game::component::{
-        bitboard::{self, piece_move::GenMoves, zobrist},
+        bitboard::{self, zobrist},
         square,
     },
 };

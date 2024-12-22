@@ -56,7 +56,7 @@ pub struct AttackersIterator<'a> {
     attackers: &'a Attackers,
     index: usize,
 }
-impl<'a> Iterator for AttackersIterator<'a> {
+impl Iterator for AttackersIterator<'_> {
     type Item = (TypePiece, BitBoard);
 
     fn next(&mut self) -> Option<Self::Item> {

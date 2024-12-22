@@ -4,7 +4,6 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use super::engine_logic::{self as logic, Engine};
 use super::score;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;

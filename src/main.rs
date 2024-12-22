@@ -1,6 +1,15 @@
-use chess_actix::entity::engine::component::{
-    engine_alphabeta, engine_iddfs, engine_mat, engine_mcts, engine_minimax,
-};
+#[allow(unused_imports)]
+use chess_actix::entity::engine::component::engine_alphabeta;
+use chess_actix::entity::engine::component::engine_iddfs;
+#[allow(unused_imports)]
+use chess_actix::entity::engine::component::engine_mat;
+#[allow(unused_imports)]
+use chess_actix::entity::engine::component::engine_mcts;
+#[allow(unused_imports)]
+use chess_actix::entity::engine::component::engine_minimax;
+#[allow(unused_imports)]
+use entity::engine::component::engine_dummy as dummy;
+
 use chess_actix::entity::stat::actor::stat_entity;
 use chess_actix::{entity, monitoring, ui};
 
@@ -13,7 +22,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use entity::engine::actor::engine_dispatcher as dispatcher;
-use entity::engine::component::engine_dummy as dummy;
 use entity::game::component::bitboard::{
     piece_move::{self, GenMoves},
     BitPosition,
@@ -25,7 +33,6 @@ use monitoring::debug;
 use ui::notation::{fen, san};
 
 const DEPTH: u8 = 3;
-const MCTS_ITERATION: u64 = 100;
 
 #[allow(dead_code)]
 fn fen() {

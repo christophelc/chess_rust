@@ -8,7 +8,7 @@ pub struct InputParser<'a> {
     input: &'a str,
     game_manager_actor: game_manager::GameManagerActor,
 }
-impl<'a> fmt::Display for InputParser<'a> {
+impl fmt::Display for InputParser<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Write the inner `input` string into the provided formatter
         write!(f, "{}", self.input)

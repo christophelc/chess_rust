@@ -1,11 +1,9 @@
 use actix::Addr;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::engine_logic::{self as logic, Engine};
-use super::{score, stat_eval, ts_bitboard_move};
+use super::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
-use crate::entity::game::component::bitboard::piece_move::GenMoves;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{game_state, square};
@@ -99,7 +97,7 @@ impl EngineAlphaBeta {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> bitboard::BitBoardMove {
-        let num_cpus = num_cpus::get();
+        //let num_cpus = num_cpus::get();
         let mut transposition_table = score::TranspositionScore::default();
         let current_depth = 0;
         let mut stat_eval = stat_eval::StatEval::default();
@@ -119,7 +117,7 @@ impl EngineAlphaBeta {
 
         let b_move_score = self.alphabeta_inc_rec(
             "",
-            &mut *&mut game_clone,
+            &mut game_clone,
             current_depth,
             self.max_depth,
             None,
@@ -146,8 +144,8 @@ impl EngineAlphaBeta {
         stat_eval: &mut stat_eval::StatEval,
         transposition_table: &mut score::TranspositionScore,
     ) -> score::BitboardMoveScore {
-        let mut alpha_opt = alpha_opt.map(|sc| sc.clone());
-        let mut beta_opt = beta_opt.map(|sc| sc.clone());
+        let mut alpha_opt = alpha_opt;
+        let mut beta_opt = beta_opt;
         let mut best_move_score_opt: Option<score::BitboardMoveScore> = None;
 
         let mut moves = game.gen_moves();
@@ -253,7 +251,7 @@ impl EngineAlphaBeta {
         let hash = game.last_hash();
         // FIXME: sometimes, the value is overriden for the same hash, current_depth, max_depth (for a specific depth defined in iddfs).
         // Chekc if this is normal
-        transposition_table.set_move_score(&hash, &best_move_score_opt.as_ref().unwrap());
+        transposition_table.set_move_score(&hash, best_move_score_opt.as_ref().unwrap());
 
         best_move_score_opt.unwrap()
     }
@@ -497,7 +495,7 @@ fn handle_end_game_scenario(
                 score::Score::new(i32::MIN, current_depth, max_depth)
             }
         }
-        game_state::EndGame::TimeOutLost(color) if color == square::Color::White => {
+        game_state::EndGame::TimeOutLost(square::Color::White)  => {
             // If the current player loses by timeout, it is an unfavorable outcome.
             score::Score::new(i32::MIN, current_depth, max_depth)
         }

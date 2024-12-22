@@ -1,12 +1,9 @@
-use petgraph::visit::EdgeRef;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::{env, fmt};
 
-use super::score;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::{bitboard, game_state};
-use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 
 const TREE_FILE_PATH: &str = "tree.txt";
@@ -53,11 +50,7 @@ impl Node {
         self.n_visits
     }
 
-    pub fn add_child(
-        parent_idx: NodeIdx,
-        game: game_state::GameState,
-        moves: &[bitboard::BitBoardMove],
-    ) -> Self {
+    pub fn add_child(parent_idx: NodeIdx, game: game_state::GameState) -> Self {
         Self {
             index: None,
             parent: Some(parent_idx),
@@ -147,9 +140,8 @@ impl Node {
             .play_moves(&[long_algebraic_move], zobrist_table, None, false)
             .unwrap();
         game_clone.update_endgame_status();
-        let moves = &game_clone.gen_moves();
         // create child node
-        let new_node = Node::add_child(graph[node_idx].index.unwrap(), game_clone, moves);
+        let new_node = Node::add_child(graph[node_idx].index.unwrap(), game_clone);
         let child_id = add_node_to_graph(graph, new_node);
         let edge_move = EdgeMove(selected_move);
         graph.add_edge(graph[node_idx].index.unwrap(), child_id, edge_move);
