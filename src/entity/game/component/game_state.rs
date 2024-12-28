@@ -8,6 +8,8 @@ use crate::ui::notation::{fen, long_notation};
 
 use crate::monitoring::debug;
 
+use super::bitboard::piece_move;
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum EndGame {
     #[default]
@@ -137,6 +139,17 @@ impl GameState {
         }
     }
 
+    pub fn gen_control_square(&self) -> (piece_move::ControlSquares, piece_move::ControlSquares) {
+        let bit_boards_white_and_black = self.bit_position.bit_boards_white_and_black();
+        let control_square_white_with_pawns =
+            bit_boards_white_and_black.gen_square_control(&square::Color::White);
+        let control_square_black_with_pawns =
+            bit_boards_white_and_black.gen_square_control(&square::Color::Black);
+        (
+            control_square_white_with_pawns,
+            control_square_black_with_pawns,
+        )
+    }
     pub fn gen_moves(&self) -> Vec<BitBoardMove> {
         let bit_position_status = self.bit_position.bit_position_status();
         let color = bit_position_status.player_turn();

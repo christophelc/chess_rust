@@ -297,6 +297,20 @@ impl PawnsBitBoard {
     pub fn switch(&mut self, mask_switch: BitBoard, mask_promotion: BitBoard) {
         self.bitboard.switch(mask_switch, mask_promotion);
     }
+    // generate attacks for all pawns at the same time
+    pub fn gen_attacks_for_all_pawns(&self, color: &square::Color) -> BitBoard {
+        match color {
+            square::Color::White => {
+                (self.bitboard & !bitboard::BitBoard(table::MASK_COL_A)) << 7
+                    | (self.bitboard & !bitboard::BitBoard(table::MASK_COL_H)) << 9
+            }
+            square::Color::Black => {
+                (self.bitboard & !bitboard::BitBoard(table::MASK_COL_A)) >> 9
+                    | (self.bitboard & !bitboard::BitBoard(table::MASK_COL_H)) >> 7
+            }
+        }
+    }
+
     pub fn gen_moves_no_check(
         &self,
         color: &square::Color,
@@ -351,6 +365,25 @@ impl BitOrAssign<u64> for PawnsBitBoard {
     }
 }
 
+pub struct ControlSquares {
+    moves: Vec<PieceMoves>,
+    pawns_control: bitboard::BitBoard,
+}
+impl ControlSquares {
+    pub fn new(moves: Vec<PieceMoves>, pawns_control: bitboard::BitBoard) -> Self {
+        Self {
+            moves,
+            pawns_control,
+        }
+    }
+    pub fn moves(&self) -> &Vec<PieceMoves> {
+        &self.moves
+    }
+    pub fn panws_control(&self) -> bitboard::BitBoard {
+        self.pawns_control
+    }
+}
+
 pub trait GenMoves {
     fn gen_moves_for_all(
         &self,
@@ -361,6 +394,7 @@ pub trait GenMoves {
     ) -> Vec<bitboard::BitBoardMove>;
 
     fn check_status(&self, color: &square::Color) -> CheckStatus;
+    fn gen_square_control(&self, color: &square::Color) -> ControlSquares;
     fn can_move(
         &self,
         color: &square::Color,
@@ -727,6 +761,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
             }
         }
     }
+
     fn gen_moves_for_all(
         &self,
         color: &square::Color,
@@ -810,6 +845,30 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
     /// check if the current king of color 'color' is under check
     fn check_status(&self, color: &square::Color) -> CheckStatus {
         check_status(color, self)
+    }
+
+    fn gen_square_control(&self, color: &square::Color) -> ControlSquares {
+        let bit_board = self.bit_board(color);
+        let bit_board_opponent = self.bit_board(&color.switch());
+        let mut moves_all: Vec<PieceMoves> = vec![];
+        let moves = bit_board
+            .rooks
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board
+            .bishops
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board
+            .knights
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board
+            .queens
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let pawns_attack = bit_board.pawns().gen_attacks_for_all_pawns(color);
+        ControlSquares::new(moves_all, pawns_attack)
     }
 }
 

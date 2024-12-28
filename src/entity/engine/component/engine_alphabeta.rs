@@ -4,7 +4,7 @@ use super::engine_logic::{self as logic, Engine};
 use super::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
-use crate::entity::game::component::bitboard::zobrist;
+use crate::entity::game::component::bitboard::{piece_move, zobrist};
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
@@ -495,7 +495,7 @@ fn handle_end_game_scenario(
                 score::Score::new(i32::MIN, current_depth, max_depth)
             }
         }
-        game_state::EndGame::TimeOutLost(square::Color::White)  => {
+        game_state::EndGame::TimeOutLost(square::Color::White) => {
             // If the current player loses by timeout, it is an unfavorable outcome.
             score::Score::new(i32::MIN, current_depth, max_depth)
         }
@@ -527,24 +527,80 @@ fn evaluate_position(
         }
         stat_eval.reset_n_positions_evaluated();
     }
-    evaluate_static_position(game.bit_position())
+    // check if can win or insufficient material
+    let player_turn = game.bit_position().bit_position_status().player_turn();
+    let player_can_win = check_can_win(
+        game.bit_position()
+        .bit_boards_white_and_black()
+        .bit_board(&player_turn)
+    );
+    let player_opponent_can_win = check_can_win(
+        game.bit_position()
+        .bit_boards_white_and_black()
+        .bit_board(&player_turn.switch())
+    );    
+    let default_score = evaluate_static_position(game.bit_position()) 
+        + evaluate_dynamic_position(game.gen_control_square());
+    let bonus = if player_turn == square::Color::White { 100000 } else { -100000 };
+    match (player_can_win, player_opponent_can_win) {
+        // both can win
+        (true, true) => default_score,
+        // no one can win
+        (false, false) => 0,
+        // only current player can win
+        (true, false) => default_score + bonus,
+        // only opponent can win
+        (false, true) => default_score - bonus,
+    }
+
 }
 
-fn evaluate_one_side(bitboards: &bitboard::BitBoards) -> u32 {
+fn check_can_win(bitboards: &bitboard::BitBoards) -> bool {
+    let (n_rooks, n_knights, n_bishops, n_queens, n_pawns) = count_material_one_side(bitboards);
+    n_rooks != 0 || n_queens != 0 || n_pawns != 0 || (n_knights + n_bishops >= 2)
+}
+
+fn evaluate_dynamic_position(
+    control_squares: (piece_move::ControlSquares, piece_move::ControlSquares),
+) -> i32 {
+    let (control_squares_white, control_squares_black) = control_squares;
+    (evaluate_dynamic_position_one_side(control_squares_white)
+        - evaluate_dynamic_position_one_side(control_squares_black))
+        * 10
+}
+
+fn evaluate_dynamic_position_one_side(control_squares: piece_move::ControlSquares) -> i32 {
+    let mut score = 0;
+    for piece_moves in control_squares.moves() {
+        let n_squares_control_except_pawns = piece_moves.moves().count_ones();
+        let n_sqaures_control_pawns = control_squares.panws_control().count_ones();
+        score += (n_squares_control_except_pawns + n_sqaures_control_pawns) as i32;
+    }
+    score
+}
+
+fn count_material_one_side(bitboards: &bitboard::BitBoards) -> (u32, u32, u32, u32, u32) {
     let n_rooks = bitboards.rooks().bitboard().iter().count() as u32;
     let n_knights = bitboards.knights().bitboard().iter().count() as u32;
     let n_bishops = bitboards.bishops().bitboard().iter().count() as u32;
     let n_queens = bitboards.queens().bitboard().iter().count() as u32;
     let n_pawns = bitboards.pawns().bitboard().iter().count() as u32;
+    (n_rooks, n_knights, n_bishops, n_queens, n_pawns)
+}
+
+fn evaluate_static_position_one_side(bitboards: &bitboard::BitBoards) -> u32 {
+    let (n_rooks, n_knights, n_bishops, n_queens, n_pawns) = count_material_one_side(bitboards);
     n_rooks * 5 + n_knights * 3 + n_bishops * 3 + n_queens * 10 + n_pawns
 }
 
 // evaluate from white perspective
 fn evaluate_static_position(bit_position: &bitboard::BitPosition) -> i32 {
-    let score_current =
-        evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board_white());
-    let score_opponent =
-        evaluate_one_side(bit_position.bit_boards_white_and_black().bit_board_black());
+    let score_current = evaluate_static_position_one_side(
+        bit_position.bit_boards_white_and_black().bit_board_white(),
+    );
+    let score_opponent = evaluate_static_position_one_side(
+        bit_position.bit_boards_white_and_black().bit_board_black(),
+    );
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
     (score_current as i32 - score_opponent as i32) * 100
@@ -570,14 +626,14 @@ mod tests {
         ui::notation::long_notation,
     };
 
-    use super::evaluate_one_side;
+    use super::evaluate_static_position_one_side;
 
     #[test]
     fn test_evaluation_one_side() {
         let mut bitboards = bitboard::BitBoards::default();
         bitboards.xor_piece(TypePiece::Rook, bitboard::BitBoard::new(1));
         bitboards.xor_piece(TypePiece::Pawn, bitboard::BitBoard::new(2));
-        let score = evaluate_one_side(&bitboards);
+        let score = evaluate_static_position_one_side(&bitboards);
         assert_eq!(score, 6);
     }
 

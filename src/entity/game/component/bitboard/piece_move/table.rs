@@ -13,6 +13,7 @@ const MASK_ROW_6: u64 = MASK_ROW_0 << 48;
 pub const MASK_ROW_7: u64 = MASK_ROW_0 << 56;
 
 pub const MASK_COL_A: u64 = 0x0101010101010101;
+pub const MASK_COL_H: u64 = MASK_COL_A << 7;
 
 fn get_mask_row_up(row: u8, n: u8) -> u64 {
     let n = if n == 0 { 1 } else { n };
