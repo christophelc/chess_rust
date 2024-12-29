@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 
+pub const SCORE_MAT_WHITE: i32 = i32::MAX;
+pub const SCORE_MAT_BLACK: i32 = i32::MIN;
+
 use crate::{
     entity::game::component::{
         bitboard::{self, zobrist},
@@ -13,13 +16,17 @@ use crate::{
 pub enum PreOrder {
     Depth,
     Capture { delta: i32 },
-    Mat { defender_color: square::Color },
-    PreviousScore(Score),
+    // Check => mat hope
+    SearchMat { defender_color: square::Color },
+    KillerMove,
+    CurrentDepthScore(Score),
+    // move already evaluated but at a depth < current_depth
+    PreviousDepthScore(Score),
     Promotion(square::TypePiecePromotion),
 }
 impl PreOrder {
     pub fn new_mat(defender_color: square::Color) -> Self {
-        PreOrder::Mat { defender_color }
+        PreOrder::SearchMat { defender_color }
     }
     fn promotion_value(promotion: &square::TypePiecePromotion) -> u8 {
         match promotion {
@@ -271,13 +278,13 @@ pub fn biased_capture(
 }
 
 // to be called before evaluation at depth 0 by IDDFS
+// CurrentDepthScore > KillerMove > PreviousDepthScore
 pub fn preorder_compare(a: &PreOrder, b: &PreOrder, is_asc: bool) -> std::cmp::Ordering {
     if a == b {
         return std::cmp::Ordering::Equal;
     }
     match (a, b) {
-        // we can have only one PV: play it first
-        (PreOrder::PreviousScore(sc1), PreOrder::PreviousScore(sc2)) => {
+        (PreOrder::CurrentDepthScore(sc1), PreOrder::CurrentDepthScore(sc2)) => {
             if is_asc {
                 // smaller scores first
                 sc1.value().cmp(&sc2.value())
@@ -286,15 +293,29 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder, is_asc: bool) -> std::cmp::O
                 sc2.value().cmp(&sc1.value())
             }
         }
-        (_, PreOrder::PreviousScore(_)) => std::cmp::Ordering::Greater,
-        (PreOrder::PreviousScore(_), _) => std::cmp::Ordering::Less,
+        (_, PreOrder::CurrentDepthScore(_)) => std::cmp::Ordering::Greater,
+        (PreOrder::CurrentDepthScore(_), _) => std::cmp::Ordering::Less,
+        (_, PreOrder::KillerMove) => std::cmp::Ordering::Greater,        
+        (PreOrder::KillerMove, _) => std::cmp::Ordering::Less,
+        // we can have only one PV: play it first
+        (PreOrder::PreviousDepthScore(sc1), PreOrder::PreviousDepthScore(sc2)) => {
+            if is_asc {
+                // smaller scores first
+                sc1.value().cmp(&sc2.value())
+            } else {
+                // higher score first
+                sc2.value().cmp(&sc1.value())
+            }
+        }
+        (_, PreOrder::PreviousDepthScore(_)) => std::cmp::Ordering::Greater,
+        (PreOrder::PreviousDepthScore(_), _) => std::cmp::Ordering::Less,
         (PreOrder::Promotion(pa), PreOrder::Promotion(pb)) => {
             PreOrder::promotion_value(pb).cmp(&PreOrder::promotion_value(pa))
         }
         (PreOrder::Promotion(_), _) => std::cmp::Ordering::Less,
         (_, PreOrder::Promotion(_)) => std::cmp::Ordering::Greater,
-        (PreOrder::Mat { defender_color: _ }, _) => std::cmp::Ordering::Less,
-        (_, PreOrder::Mat { defender_color: _ }) => std::cmp::Ordering::Greater,
+        (PreOrder::SearchMat { defender_color: _ }, _) => std::cmp::Ordering::Less,
+        (_, PreOrder::SearchMat { defender_color: _ }) => std::cmp::Ordering::Greater,
         (PreOrder::Capture { delta: delta_a }, PreOrder::Capture { delta: delta_b }) => {
             delta_b.cmp(delta_a)
         }
@@ -328,13 +349,13 @@ pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
 
 #[cfg(test)]
 mod tests {
-    use crate::entity::engine::component::score::{
+    use crate::entity::engine::component::evaluation::score;
+    use score::{
         compare_preorder_mat, order_move_status, PreOrder,
     };
     use crate::entity::game::component::{bitboard, square};
 
     use super::preorder_compare;
-    use super::BitboardMoveScore;
     use super::MoveStatus;
     use super::Score;
 
@@ -401,7 +422,7 @@ mod tests {
             moves_status2.clone(),
             moves_status1.clone(),
         ];
-        let expected1 = vec![
+        let expected = vec![
             moves_status3.clone(),
             moves_status1.clone(),
             moves_status2.clone(),
@@ -413,18 +434,8 @@ mod tests {
         ];
         v.sort_by(order_move_status);
         let v_variant: Vec<String> = v.iter().map(|m| m.get_variant()).collect();
-        let expected1_variant: Vec<String> = expected1.iter().map(|m| m.get_variant()).collect();
-        assert_eq!(v_variant, expected1_variant);
-        let expected2 = vec![
-            moves_status5.clone(),
-            moves_status7.clone(),
-            moves_status6.clone(),
-            moves_status3.clone(),
-            moves_status1.clone(),
-            moves_status2.clone(),
-            moves_status4.clone(),
-            moves_status8.clone(),
-        ];
+        let expected_variant: Vec<String> = expected.iter().map(|m| m.get_variant()).collect();
+        assert_eq!(v_variant, expected_variant);
     }
 
     //////////////////////////////////
@@ -432,26 +443,30 @@ mod tests {
     //////////////////////////////////
     #[test]
     fn test_preorder_sorting() {
-        let current_depth = 0;
+        let current_depth = 2;
         let max_depth = 0;
         let mut list = vec![
-            PreOrder::PreviousScore(Score::new(10, current_depth, max_depth)),
+            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),            
+            PreOrder::PreviousDepthScore(Score::new(10, current_depth - 1, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Queen),
             PreOrder::Capture { delta: 5 },
             PreOrder::Depth,
             PreOrder::new_mat(square::Color::White),
-            PreOrder::PreviousScore(Score::new(20, current_depth, max_depth)),
+            PreOrder::PreviousDepthScore(Score::new(20, current_depth -2, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Rook),
             PreOrder::Capture { delta: -5 },
             PreOrder::Depth,
             PreOrder::Capture { delta: 10 },
+            PreOrder::KillerMove,
         ];
 
         list.sort_by(|a, b| preorder_compare(&a, &b, false));
 
         let expected = vec![
-            PreOrder::PreviousScore(Score::new(20, current_depth, max_depth)),
-            PreOrder::PreviousScore(Score::new(10, current_depth, max_depth)),
+            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),                        
+            PreOrder::KillerMove,            
+            PreOrder::PreviousDepthScore(Score::new(20, current_depth -2, max_depth)),
+            PreOrder::PreviousDepthScore(Score::new(10, current_depth -1, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Queen),
             PreOrder::Promotion(square::TypePiecePromotion::Rook),
             PreOrder::new_mat(square::Color::White),

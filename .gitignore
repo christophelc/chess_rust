@@ -5,3 +5,4 @@ tarpaulin-report.html
 flamegraph.svg
 perf.data*
 profile.json
+test_suites.txt

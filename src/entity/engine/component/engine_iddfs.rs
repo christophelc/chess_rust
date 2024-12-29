@@ -1,7 +1,8 @@
 use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
-use super::{engine_alphabeta, engine_mat, score, stat_eval};
+use super::evaluation::{score, stat_eval};
+use super::{engine_alphabeta, engine_mat, search_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
@@ -54,6 +55,7 @@ impl EngineIddfs {
         beta_opt: &mut Option<i32>,
         b_move_score: &mut score::BitboardMoveScore,
         max_depth: u8,
+        state: &mut search_state::SearchState,
     ) {
         let window_aspiration = 50;
 
@@ -72,6 +74,7 @@ impl EngineIddfs {
                 None,
                 stat_eval,
                 transposition_table,
+                state,
             );
         }
         if let Some(alpha) = alpha_opt {
@@ -90,7 +93,8 @@ impl EngineIddfs {
     ) -> bitboard::BitBoardMove {
         let mut transposition_table = score::TranspositionScore::default();
         let mut stat_eval = stat_eval::StatEval::default();
-
+        let mut state = search_state::SearchState::new();
+        
         let mut game_clone = game.clone();
 
         let mat_move_opt = self.engine_mat_solver.mat_solver_init(
@@ -120,6 +124,7 @@ impl EngineIddfs {
                 None,
                 &mut stat_eval,
                 &mut transposition_table,
+                &mut state,
             );
             self.aspiration_window(
                 &mut game_clone,
@@ -130,6 +135,7 @@ impl EngineIddfs {
                 &mut beta_opt,
                 &mut b_move_score,
                 max_depth,
+                &mut state,
             );
             if let Some(stat_actor) = stat_actor_opt.as_ref() {
                 let msg = stat_entity::handler_stat::StatUpdate::new(

@@ -1,7 +1,7 @@
 use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
-use super::{score, stat_eval};
+use super::evaluation::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
@@ -295,31 +295,19 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-    use crate::entity::engine::component::stat_eval;
+    use crate::entity::engine::component::evaluation::stat_eval;
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{
             engine::component::engine_mat,
-            game::{actor::game_manager, component::player},
-            uci::actor::uci_entity,
+            game::actor::game_manager,
         },
         monitoring::debug,
-        ui::notation::long_notation,
     };
 
     #[cfg(test)]
     use crate::entity::game::component::game_state;
-
-    #[cfg(test)]
-    async fn get_game_state(
-        game_manager_actor: &game_manager::GameManagerActor,
-    ) -> Option<game_state::GameState> {
-        let result_or_error = game_manager_actor
-            .send(game_manager::handler_game::GetGameState)
-            .await;
-        result_or_error.unwrap()
-    }
 
     #[actix::test]
     async fn test_game_end() {

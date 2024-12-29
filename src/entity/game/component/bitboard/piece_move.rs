@@ -84,6 +84,7 @@ impl Attackers {
         self.rooks.empty()
             && self.knights.empty()
             && self.bishops.empty()
+            && self.queens.empty()
             && self.pawns.empty()
             && self.king.empty()
     }
@@ -2136,6 +2137,29 @@ mod tests {
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());
         assert_eq!(fen, "qnbbkbnn/8/8/8/8/8/8/R4RK1 b kq - 1 1");
+    }
+
+    #[test]
+    fn test_game_cannot_castle() {
+        let fen = "r3k1nr/pp3pp1/2nQb3/7p/2P3q1/5N2/PP2BPPP/R1B2RK1 b kq - 0 13";
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
+        let bit_board_position = bitboard::BitPosition::from(position);
+        let color = square::Color::Black;
+        let bit_board = &bit_board_position.bit_boards_white_and_black.bit_board_black();
+        let bit_board_opponent = &bit_board_position.bit_boards_white_and_black.bit_board_white();
+        let bit_position_status = bit_board_position.bit_position_status();
+        let can_castle_king_side =
+        bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), &color);
+    let can_castle_queen_side =
+        bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), &color);
+        let b_moves = gen_moves_for_king_castle(
+            &color,
+            bit_board,
+            bit_board_opponent,
+            can_castle_king_side,
+            can_castle_queen_side,
+        );
+        assert_eq!(b_moves, bitboard::BitBoard::default());
     }
 
     #[test]

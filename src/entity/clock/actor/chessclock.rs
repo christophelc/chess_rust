@@ -35,7 +35,9 @@ impl Clock {
         let ticking_handle = ctx.run_interval(Duration::from_secs(1), |clock, ctx| {
             if clock.remaining_time > 0 {
                 clock.remaining_time -= 1;
-                println!("Remaining time: {}", clock.remaining_time);
+                if clock.remaining_time % 1000 == 0 {
+                    println!("Remaining time: {}", clock.remaining_time);
+                }
             } else {
                 println!("No remaining time.");
                 clock
