@@ -94,7 +94,7 @@ impl EngineIddfs {
         let mut transposition_table = score::TranspositionScore::default();
         let mut stat_eval = stat_eval::StatEval::default();
         let mut state = search_state::SearchState::new();
-        
+
         let mut game_clone = game.clone();
 
         let mat_move_opt = self.engine_mat_solver.mat_solver_init(

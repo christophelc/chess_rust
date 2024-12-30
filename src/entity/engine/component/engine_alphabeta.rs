@@ -6,8 +6,8 @@ use super::search_state;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::zobrist;
-use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::game_state;
+use crate::entity::game::component::square::Switch;
 use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
@@ -44,7 +44,11 @@ impl EngineAlphaBeta {
         self.id_number = id_number.to_string();
     }
 
-    fn set_preorder(m: &bitboard::BitBoardMove, is_check: bool, is_killer_move: bool) -> score::PreOrder {
+    fn set_preorder(
+        m: &bitboard::BitBoardMove,
+        is_check: bool,
+        is_killer_move: bool,
+    ) -> score::PreOrder {
         if let Some(promotion) = m.promotion() {
             return score::PreOrder::Promotion(promotion);
         }
@@ -53,9 +57,9 @@ impl EngineAlphaBeta {
             (_, true, _) => score::PreOrder::new_mat(m.color().switch()),
             (_, _, true) => {
                 let delta = score::biased_capture(m.type_piece(), m.capture());
-                score::PreOrder::Capture { delta }    
+                score::PreOrder::Capture { delta }
             }
-            _ => score::PreOrder::Depth
+            _ => score::PreOrder::Depth,
         };
         preorder
     }
@@ -70,7 +74,7 @@ impl EngineAlphaBeta {
         is_asc: bool,
         current_depth: u8,
         state: &search_state::SearchState,
-    ) -> Vec<score::MoveStatus> {
+    ) -> Vec<(score::MoveStatus, score::PreOrder)> {
         let mut moves_status_with_preorder: Vec<(score::MoveStatus, score::PreOrder)> = vec![];
         for m in moves {
             let long_algebraic_move =
@@ -80,19 +84,24 @@ impl EngineAlphaBeta {
                 .unwrap();
             game.update_endgame_status();
             let preorder = match transposition_table.get_move_score(&game.last_hash(), 0) {
-                Some(b_move_score) if b_move_score.score().current_depth() == current_depth => score::PreOrder::CurrentDepthScore(b_move_score.score().clone()),                                
-                None => Self::set_preorder(m, game.check_status().is_check(), state.is_killer_move(current_depth as usize, *m)),
-                Some(b_move_score) => score::PreOrder::PreviousDepthScore(b_move_score.score().clone()),
+                Some(b_move_score) if b_move_score.score().current_depth() == current_depth => {
+                    score::PreOrder::CurrentDepthScore(b_move_score.score().clone())
+                }
+                None => Self::set_preorder(
+                    m,
+                    game.check_status().is_check(),
+                    state.is_killer_move(current_depth as usize, *m),
+                ),
+                Some(b_move_score) => {
+                    score::PreOrder::PreviousDepthScore(b_move_score.score().clone())
+                }
             };
             let move_status = score::MoveStatus::from_move(*m);
             moves_status_with_preorder.push((move_status, preorder));
             game.play_back()
         }
         moves_status_with_preorder.sort_by(|a, b| score::preorder_compare(&a.1, &b.1, is_asc));
-        moves_status_with_preorder
-            .into_iter()
-            .map(|t| t.0)
-            .collect()
+        moves_status_with_preorder.into_iter().collect()
     }
 
     fn alphabeta(
@@ -138,6 +147,10 @@ impl EngineAlphaBeta {
         *b_move_score.bitboard_move()
     }
 
+    fn can_null_move(game: &game_state::GameState, current_depth: u8, max_depth: u8) -> bool {
+        max_depth - current_depth > 3 && !game.check_status().is_check() && !evaluation::is_final(&game)
+    }
+
     pub fn alphabeta_inc_rec(
         &self,
         variant: &str,
@@ -161,13 +174,26 @@ impl EngineAlphaBeta {
             .bit_position()
             .bit_position_status()
             .player_turn_white();
-        let moves_status =
-            self.get_moves_preordered(&mut moves, game, transposition_table, !is_max, current_depth, state);
+        let moves_status = self.get_moves_preordered(
+            &mut moves,
+            game,
+            transposition_table,
+            !is_max,
+            current_depth,
+            state,
+        );
 
-        for m_status in &moves_status {
+        // alpha beta
+        for (idx, (m_status, preorder)) in moves_status.iter().enumerate() {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
+            // Last move reduction
+            let new_max_depth = if current_depth < max_depth && idx > 1 && !preorder.is_special() {
+                max_depth - 1
+            } else {
+                max_depth
+            };
             let score = self.process_move(
                 game,
                 *m_status.get_move(),
@@ -178,7 +204,7 @@ impl EngineAlphaBeta {
                 stat_actor_opt.clone(),
                 stat_eval,
                 current_depth,
-                max_depth,
+                new_max_depth,
                 is_max,
                 transposition_table,
                 state,
@@ -215,7 +241,14 @@ impl EngineAlphaBeta {
                     || beta_opt.is_some()
                         && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    state.add_killer_move(current_depth as usize, best_move_score_opt.as_ref().unwrap().bitboard_move().clone());                    
+                    state.add_killer_move(
+                        current_depth as usize,
+                        best_move_score_opt
+                            .as_ref()
+                            .unwrap()
+                            .bitboard_move()
+                            .clone(),
+                    );
                     // do not update transpositon table
                     return best_move_score_opt.unwrap();
                 }
@@ -244,7 +277,14 @@ impl EngineAlphaBeta {
                     || alpha_opt.is_some()
                         && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    state.add_killer_move(current_depth as usize, best_move_score_opt.as_ref().unwrap().bitboard_move().clone());
+                    state.add_killer_move(
+                        current_depth as usize,
+                        best_move_score_opt
+                            .as_ref()
+                            .unwrap()
+                            .bitboard_move()
+                            .clone(),
+                    );
                     // do not update transpositon table
                     return best_move_score_opt.unwrap();
                 }
@@ -293,11 +333,11 @@ impl EngineAlphaBeta {
         state: &mut search_state::SearchState,
     ) -> score::Score {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
-        game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
-            .unwrap();
-        // if current_depth >= 0 && max_depth >= 5 {
+        // if current_depth >= 0 {
         //     println!("{}", variant);
         // }
+        game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
+            .unwrap();
         // check if the current position has been already evaluated
         let hash = game.last_hash();
         if let Some(move_score) =
@@ -315,6 +355,31 @@ impl EngineAlphaBeta {
         game.update_endgame_status();
         let score = if game.end_game() == game_state::EndGame::None {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
+                // null move pruning
+                if beta_opt.is_some() && Self::can_null_move(game, current_depth, max_depth) {
+                    let reduction = 2 + (max_depth - current_depth) / 6;
+                    let null_depth = max_depth - reduction;
+                    game.play_null_move(&self.zobrist_table);
+                    let score = self.alphabeta_inc_rec(
+                        variant,
+                        game,
+                        current_depth + 1,
+                        null_depth,
+                        alpha_opt,
+                        beta_opt,
+                        self_actor.clone(),
+                        stat_actor_opt.clone(),
+                        stat_eval,
+                        transposition_table,
+                        state,
+                    );
+                    game.play_back_null_move();
+                    if score.score().value() >= beta_opt.unwrap() {
+                        game.play_back();                    
+                        return score::Score::new(beta_opt.unwrap(), current_depth, max_depth);
+                    }
+                }
+
                 let best_move_score = self.alphabeta_inc_rec(
                     variant,
                     game,

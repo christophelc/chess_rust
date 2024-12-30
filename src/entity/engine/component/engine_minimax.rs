@@ -50,7 +50,7 @@ impl EngineMinimax {
             .map(|chunk| {
                 let mut game_clone = game.clone();
                 // FIxME: should be global
-                let mut stat_eval = stat_eval::StatEval::default();                
+                let mut stat_eval = stat_eval::StatEval::default();
                 let bitboard_move_score = self.minimax_rec(
                     "",
                     &mut game_clone,

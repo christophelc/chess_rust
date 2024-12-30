@@ -36,6 +36,14 @@ impl PreOrder {
             square::TypePiecePromotion::Bishop => 3,
         }
     }
+    pub fn is_special(&self) -> bool {
+        match self {
+            PreOrder::Depth | PreOrder::CurrentDepthScore(_) | PreOrder::PreviousDepthScore(_) => {
+                false
+            }
+            _ => true,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -295,7 +303,7 @@ pub fn preorder_compare(a: &PreOrder, b: &PreOrder, is_asc: bool) -> std::cmp::O
         }
         (_, PreOrder::CurrentDepthScore(_)) => std::cmp::Ordering::Greater,
         (PreOrder::CurrentDepthScore(_), _) => std::cmp::Ordering::Less,
-        (_, PreOrder::KillerMove) => std::cmp::Ordering::Greater,        
+        (_, PreOrder::KillerMove) => std::cmp::Ordering::Greater,
         (PreOrder::KillerMove, _) => std::cmp::Ordering::Less,
         // we can have only one PV: play it first
         (PreOrder::PreviousDepthScore(sc1), PreOrder::PreviousDepthScore(sc2)) => {
@@ -350,10 +358,8 @@ pub fn order_move_status(a: &MoveStatus, b: &MoveStatus) -> std::cmp::Ordering {
 #[cfg(test)]
 mod tests {
     use crate::entity::engine::component::evaluation::score;
-    use score::{
-        compare_preorder_mat, order_move_status, PreOrder,
-    };
     use crate::entity::game::component::{bitboard, square};
+    use score::{compare_preorder_mat, order_move_status, PreOrder};
 
     use super::preorder_compare;
     use super::MoveStatus;
@@ -446,13 +452,13 @@ mod tests {
         let current_depth = 2;
         let max_depth = 0;
         let mut list = vec![
-            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),            
+            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),
             PreOrder::PreviousDepthScore(Score::new(10, current_depth - 1, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Queen),
             PreOrder::Capture { delta: 5 },
             PreOrder::Depth,
             PreOrder::new_mat(square::Color::White),
-            PreOrder::PreviousDepthScore(Score::new(20, current_depth -2, max_depth)),
+            PreOrder::PreviousDepthScore(Score::new(20, current_depth - 2, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Rook),
             PreOrder::Capture { delta: -5 },
             PreOrder::Depth,
@@ -463,10 +469,10 @@ mod tests {
         list.sort_by(|a, b| preorder_compare(&a, &b, false));
 
         let expected = vec![
-            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),                        
-            PreOrder::KillerMove,            
-            PreOrder::PreviousDepthScore(Score::new(20, current_depth -2, max_depth)),
-            PreOrder::PreviousDepthScore(Score::new(10, current_depth -1, max_depth)),
+            PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),
+            PreOrder::KillerMove,
+            PreOrder::PreviousDepthScore(Score::new(20, current_depth - 2, max_depth)),
+            PreOrder::PreviousDepthScore(Score::new(10, current_depth - 1, max_depth)),
             PreOrder::Promotion(square::TypePiecePromotion::Queen),
             PreOrder::Promotion(square::TypePiecePromotion::Rook),
             PreOrder::new_mat(square::Color::White),

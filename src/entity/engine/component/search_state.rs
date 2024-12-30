@@ -1,6 +1,5 @@
 use crate::entity::game::component::bitboard;
 
-
 pub const MAX_DEPTH: usize = 64;
 
 #[derive(Debug)]

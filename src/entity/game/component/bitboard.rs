@@ -173,6 +173,9 @@ impl BitPosition {
             self.bit_position_status,
         )
     }
+    pub fn change_side(&mut self) {
+        self.bit_position_status.change_side();
+    }
 }
 impl PartialEq for BitPosition {
     fn eq(&self, other: &Self) -> bool {
@@ -207,9 +210,14 @@ impl BitPosition {
         };
         self.bit_position_status =
             update_status(b_move, bit_board_pawn_opponent, self.bit_position_status);
+        // update hash with change of color
+        *hash = hash.xor_player_turn(zobrist_table);
     }
     pub fn bit_boards_white_and_black(&self) -> &BitBoardsWhiteAndBlack {
         &self.bit_boards_white_and_black
+    }
+    pub fn bit_position_status_into(&mut self) -> &mut BitPositionStatus {
+        &mut self.bit_position_status
     }
     pub fn bit_position_status(&self) -> &BitPositionStatus {
         &self.bit_position_status
@@ -1133,6 +1141,10 @@ impl BitPositionStatus {
         } else {
             self.flags &= !Self::CASTLING_BLACK_KING_SIDE;
         }
+    }
+
+    pub fn change_side(&mut self) {
+        self.set_player_turn_white(!self.player_turn_white());
     }
 
     pub fn set_player_turn_white(&mut self, value: bool) {

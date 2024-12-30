@@ -44,6 +44,10 @@ And there are heuristics:
 - Recapture if capture at the max depth,
 - Aspiration window,
 - Killer moves (moves causing a prune when: alpha(parent) >= beta (maximisation case) or alpha >= beta(parent) (minimisation case) ) 
+- Null move pruning
+- Last move reduction
+
+Remark: the null move pruning is the key to get an efficient pruning.
 
 The evaluation of a position is very basic. It is based on:
 - Material evaluation
@@ -71,7 +75,18 @@ For pawns, we generate attacked squares by using bitwise operations directly on 
 
 ## TODO
 
-- Null move pruning
+- Resign
+
+- Make max_depth more dynamic
+
+- Improve mat solver: currently it looks for forced moves. But it is not always the right way to proceed.
+
+Example of position: ```r4q1r/1b1kn3/p2p4/2pp1N1p/8/2PB4/P1P1QPPP/4R1K1 w - - 2 21 ```
+ - It founds MAT in 13 half moves: ```e2e6 d7e8 e6g6 e8d7 g6d6 d7c8 f5e7 f8e7 d3f5 e7d7 f5d7 c8d8 d7h3```
+ - Stockfish founds MAT in 11 half moves:    ```e2e6 d7e8 e6g6 e8d8 g6d6 d8c8 f5e7 f8e7 e1e7 a8a7 d3f5```
+ 
+ The difference is that the capture Rxe7 of the queen by the rook avoids the intermediate move Qd8.
+
 
 - Add randomness to avoid playing the same games several times (it is for tournament)
 

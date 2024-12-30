@@ -2145,13 +2145,17 @@ mod tests {
         let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
         let bit_board_position = bitboard::BitPosition::from(position);
         let color = square::Color::Black;
-        let bit_board = &bit_board_position.bit_boards_white_and_black.bit_board_black();
-        let bit_board_opponent = &bit_board_position.bit_boards_white_and_black.bit_board_white();
+        let bit_board = &bit_board_position
+            .bit_boards_white_and_black
+            .bit_board_black();
+        let bit_board_opponent = &bit_board_position
+            .bit_boards_white_and_black
+            .bit_board_white();
         let bit_position_status = bit_board_position.bit_position_status();
         let can_castle_king_side =
-        bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), &color);
-    let can_castle_queen_side =
-        bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), &color);
+            bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), &color);
+        let can_castle_queen_side =
+            bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), &color);
         let b_moves = gen_moves_for_king_castle(
             &color,
             bit_board,

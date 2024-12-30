@@ -1,9 +1,9 @@
+use super::engine_logic as logic;
 use crate::entity::game::component::bitboard::piece_move;
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{bitboard, game_state, square};
 use crate::entity::stat::actor::stat_entity;
 use crate::entity::stat::component::stat_data;
-use super::engine_logic as logic;
 
 pub mod score;
 pub mod stat_eval;
@@ -17,16 +17,22 @@ pub fn handle_end_game_scenario(
     max_depth: u8,
 ) -> score::Score {
     match game.end_game() {
-        game_state::EndGame::Mat(square::Color::Black) => 
-            score::Score::new(score::SCORE_MAT_WHITE, current_depth, max_depth),
-        game_state::EndGame::Mat(square::Color::White) =>         
-            score::Score::new(score::SCORE_MAT_BLACK, current_depth, max_depth),
+        game_state::EndGame::Mat(square::Color::Black) => {
+            score::Score::new(score::SCORE_MAT_WHITE, current_depth, max_depth)
+        }
+        game_state::EndGame::Mat(square::Color::White) => {
+            score::Score::new(score::SCORE_MAT_BLACK, current_depth, max_depth)
+        }
         game_state::EndGame::TimeOutLost(square::Color::White) =>
-            // If the current player loses by timeout, it is an unfavorable outcome.
-            score::Score::new(score::SCORE_MAT_BLACK, current_depth, max_depth),
-        game_state::EndGame::TimeOutLost(_) => 
-            // If the opponent times out, it is a favorable outcome for the current player.
-            score::Score::new(score::SCORE_MAT_WHITE, current_depth, max_depth),
+        // If the current player loses by timeout, it is an unfavorable outcome.
+        {
+            score::Score::new(score::SCORE_MAT_BLACK, current_depth, max_depth)
+        }
+        game_state::EndGame::TimeOutLost(_) =>
+        // If the opponent times out, it is a favorable outcome for the current player.
+        {
+            score::Score::new(score::SCORE_MAT_WHITE, current_depth, max_depth)
+        }
         _ => {
             // In other cases (stalemate, etc.), it might be neutral or need specific scoring based on the game rules.
             score::Score::new(0, current_depth, max_depth)
@@ -55,17 +61,21 @@ pub fn evaluate_position(
     let player_turn = game.bit_position().bit_position_status().player_turn();
     let player_can_win = check_can_win(
         game.bit_position()
-        .bit_boards_white_and_black()
-        .bit_board(&player_turn)
+            .bit_boards_white_and_black()
+            .bit_board(&player_turn),
     );
     let player_opponent_can_win = check_can_win(
         game.bit_position()
-        .bit_boards_white_and_black()
-        .bit_board(&player_turn.switch())
-    );    
-    let default_score = evaluate_static_position(game.bit_position()) 
+            .bit_boards_white_and_black()
+            .bit_board(&player_turn.switch()),
+    );
+    let default_score = evaluate_static_position(game.bit_position())
         + evaluate_dynamic_position(game.gen_control_square());
-    let bonus = if player_turn == square::Color::White { 100000 } else { -100000 };
+    let bonus = if player_turn == square::Color::White {
+        100000
+    } else {
+        -100000
+    };
     match (player_can_win, player_opponent_can_win) {
         // both can win
         (true, true) => default_score,
@@ -76,7 +86,19 @@ pub fn evaluate_position(
         // only opponent can win
         (false, true) => default_score - bonus,
     }
+}
 
+pub fn is_final(game: &game_state::GameState) -> bool {
+    let b_white_black = game.bit_position().bit_boards_white_and_black();
+    let (n_rooks_w, n_knights_w, n_bishops_w, n_queens_w, n_pawns_w) =
+        count_material_one_side(b_white_black.bit_board_white());
+    let (n_rooks_b, n_knights_b, n_bishops_b, n_queens_b, n_pawns_b) =
+        count_material_one_side(b_white_black.bit_board_white());
+    (n_rooks_w + n_rooks_b) * 5
+        + (n_knights_w + n_knights_b + n_bishops_w + n_bishops_b) * 3
+        + (n_queens_w + n_queens_b) * 10
+        + (n_pawns_w + n_pawns_b)
+        <= 13
 }
 
 fn check_can_win(bitboards: &bitboard::BitBoards) -> bool {
@@ -150,7 +172,7 @@ mod tests {
         ui::notation::long_notation,
     };
 
-    use super:: evaluate_static_position_one_side;
+    use super::evaluate_static_position_one_side;
 
     #[test]
     fn test_evaluation_one_side() {

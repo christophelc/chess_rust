@@ -48,7 +48,6 @@ impl BackMove {
 #[derive(Debug, Clone)]
 pub struct GameState {
     bit_position: bitboard::BitPosition,
-    is_regenerate_moves: bool,
     hash_positions: zobrist::ZobristHistory,
     backup: Vec<BackMove>,
     end_game: EndGame,
@@ -56,7 +55,6 @@ pub struct GameState {
 impl PartialEq for GameState {
     fn eq(&self, other: &Self) -> bool {
         self.bit_position == other.bit_position
-            && self.is_regenerate_moves == other.is_regenerate_moves
             && self.hash_positions == other.hash_positions
             && self.backup.len() == other.backup.len()
             && self.backup.last() == other.backup.last()
@@ -69,7 +67,6 @@ impl GameState {
             bit_position: bitboard::BitPosition::from(position),
             hash_positions: zobrist::ZobristHistory::default(),
             backup: vec![],
-            is_regenerate_moves: false,
             end_game: EndGame::None,
         };
         // init moves and game status
@@ -99,9 +96,6 @@ impl GameState {
         let hash =
             zobrist::ZobristHash::zobrist_hash_from_position(&self.bit_position, zobrist_table);
         self.add_hash(hash);
-    }
-    pub fn is_regenerate_moves(&self) -> bool {
-        self.is_regenerate_moves
     }
     pub fn bit_position(&self) -> &bitboard::BitPosition {
         &self.bit_position
@@ -206,9 +200,23 @@ impl GameState {
         }
     }
 
+    // null move is playing no move (switch side only)
+    pub fn play_null_move(&mut self, zobrist_table: &zobrist::Zobrist) {
+        let mut hash = self.last_hash();
+        // Change player turn
+        self.bit_position.change_side();
+        // Do not allow capture en passant if we play twice
+        self.bit_position.bit_position_status_into().set_pawn_en_passant(None);
+        hash = hash.xor_player_turn(zobrist_table);
+        self.add_hash(hash);
+    }
+    pub fn play_back_null_move(&mut self) {
+        self.hash_positions.pop();
+        self.bit_position.change_side();        
+    }
+
     pub fn play_back(&mut self) {
         assert!(!self.backup.is_empty());
-        self.is_regenerate_moves = true;
         let back_info = self.backup.pop().unwrap();
         self.bit_position.play_back(
             back_info.bit_position_status_back,
@@ -217,6 +225,7 @@ impl GameState {
         self.end_game = EndGame::None;
         self.hash_positions.pop();
     }
+
     // play n moves from the current position
     pub fn play_moves(
         &mut self,
@@ -368,8 +377,8 @@ fn check_move_level2(
 #[cfg(test)]
 mod tests {
 
-    use crate::entity::game::component::bitboard;
     use crate::entity::game::component::bitboard::zobrist::Zobrist;
+    use crate::entity::game::component::{bitboard, square};
     use crate::monitoring::debug;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::ui::notation::long_notation;
@@ -426,5 +435,65 @@ mod tests {
         game.play_back();
         let bit_position = game.bit_position();
         assert!(*bit_position == bitboard::BitPosition::from(position))
+    }
+
+    #[test]
+    fn test_play_null_move_back() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        let fen_pos = fen::FEN_START_POSITION;
+        let position = fen::Fen::decode(fen_pos).expect("Failed to decode FEN");
+        let zobrist_table = Zobrist::new();
+        let mut game = super::GameState::new(position, &zobrist_table);
+        // play white twice
+        let moves = vec!["e2e4", "e7e5", "f1e2", "f8a3", "b2a3"];
+        let valid_moves: Vec<long_notation::LongAlgebricNotationMove> = moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
+            .collect();
+        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone(), true);
+        let color = game.bit_position().bit_position_status().player_turn();
+        // It should be black to play
+        assert_eq!(color, square::Color::Black);
+        // Let us do a null move
+        game.play_null_move(&zobrist_table);
+        // It is again white to play
+        let color = game.bit_position().bit_position_status().player_turn();
+        assert_eq!(color, square::Color::White);
+        // check move c1b2 is valid
+        let moves: Vec<String> = game
+            .gen_moves()
+            .iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect();
+        let mv = "c1b2";
+        assert!(moves.iter().any(|m| m == mv));
+        // play the move Bb2
+        let valid_moves = long_notation::LongAlgebricNotationMove::build_from_str(mv).unwrap();
+        let _ = game.play_moves(
+            &vec![valid_moves],
+            &zobrist_table,
+            debug_actor_opt.clone(),
+            true,
+        );
+        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);
+        // play back last white move Bb2
+        game.play_back();
+        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::White);
+        game.play_back_null_move();
+        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);        
+        // play back white move bxa3
+        game.play_back();        
+        // play back black move Ba3
+        game.play_back();
+        println!("{}", game.bit_position().to().chessboard());                
+        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);                
+        let moves: Vec<String> = game
+            .gen_moves()
+            .iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_b_move(*m).cast())
+            .collect();
+        let mv = "f8c5";
+        println!("{}", moves.join(","));
+        assert!(moves.iter().any(|m| m == mv))
     }
 }

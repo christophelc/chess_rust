@@ -44,6 +44,7 @@ impl EngineMat {
         stat_eval: &mut stat_eval::StatEval,
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
+        let mut max_depth = max_depth;
         println!("info looking for mat");
         let shortest_mat_opt = self.mat_solver(
             "",
@@ -53,7 +54,7 @@ impl EngineMat {
             self_actor.clone(),
             stat_actor_opt.clone(),
             stat_eval,
-            max_depth,
+            &mut max_depth,
         );
         println!("info end looking for mat");
         // if let Some(mat_move) = &shortest_mat_opt {
@@ -76,7 +77,7 @@ impl EngineMat {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
-        max_depth: u8,
+        max_depth: &mut u8,
     ) -> Option<score::BitboardMoveScoreMat> {
         let game_clone = game.clone();
         let moves = if is_attacker {
@@ -104,11 +105,16 @@ impl EngineMat {
                 );
                 match (move_mat_opt, &shortest_mat_opt) {
                     (Some(move_mat), Some(shortest_mat))
-                        // maximize
+                        // maximize (find the shortest mat)
                         if is_attacker && shortest_mat.mat_in() > move_mat.mat_in() =>
                     {
                         let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant());
-                        shortest_mat_opt = Some(m_mat);
+                        shortest_mat_opt = Some(m_mat.clone());
+                        let mat_in = m_mat.mat_in();
+                        if *max_depth >= mat_in {
+                            *max_depth = mat_in -1;
+                        }
+                        break;
                     }
                     (Some(move_mat), Some(shortest_mat))
                         // minimize
@@ -185,7 +191,7 @@ impl EngineMat {
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
         current_depth: u8,
-        max_depth: u8,
+        max_depth: &mut u8,
     ) -> Option<score::BitboardMoveScoreMat> {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast())
@@ -299,10 +305,7 @@ mod tests {
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
-        entity::{
-            engine::component::engine_mat,
-            game::actor::game_manager,
-        },
+        entity::{engine::component::engine_mat, game::actor::game_manager},
         monitoring::debug,
     };
 
