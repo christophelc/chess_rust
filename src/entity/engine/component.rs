@@ -6,6 +6,7 @@ pub mod engine_mat;
 pub mod engine_mcts;
 pub mod engine_minimax;
 pub mod evaluation;
+pub mod feature;
 pub mod mcts_tree;
 pub mod search_state;
 pub mod ts_best_move;

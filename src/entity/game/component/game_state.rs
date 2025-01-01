@@ -207,13 +207,15 @@ impl GameState {
         // Change player turn
         self.bit_position.change_side();
         // Do not allow capture en passant if we play twice
-        self.bit_position.bit_position_status_into().set_pawn_en_passant(None);
+        self.bit_position
+            .bit_position_status_into()
+            .set_pawn_en_passant(None);
         hash = hash.xor_player_turn(zobrist_table);
         self.add_hash(hash);
     }
     pub fn play_back_null_move(&mut self) {
         self.hash_positions.pop();
-        self.bit_position.change_side();        
+        self.bit_position.change_side();
     }
 
     pub fn play_back(&mut self) {
@@ -426,9 +428,7 @@ mod tests {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         let fen_pos = "8/4k3/8/1N3pP1/2R2P2/P5K1/P2B4/8 b - - 0 48";
         let position = fen::Fen::decode(fen_pos).expect("Failed to decode FEN");
-        let moves = vec![
-            "e7e6", "c4c7", "e6d5", "c7d7", "d5e4"
-        ];
+        let moves = vec!["e7e6", "c4c7", "e6d5", "c7d7", "d5e4"];
         let zobrist_table = Zobrist::new();
         let mut game = super::GameState::new(position, &zobrist_table);
         let valid_moves: Vec<long_notation::LongAlgebricNotationMove> = moves
@@ -504,18 +504,30 @@ mod tests {
             debug_actor_opt.clone(),
             true,
         );
-        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);
+        assert_eq!(
+            game.bit_position().bit_position_status().player_turn(),
+            square::Color::Black
+        );
         // play back last white move Bb2
         game.play_back();
-        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::White);
+        assert_eq!(
+            game.bit_position().bit_position_status().player_turn(),
+            square::Color::White
+        );
         game.play_back_null_move();
-        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);        
+        assert_eq!(
+            game.bit_position().bit_position_status().player_turn(),
+            square::Color::Black
+        );
         // play back white move bxa3
-        game.play_back();        
+        game.play_back();
         // play back black move Ba3
         game.play_back();
-        println!("{}", game.bit_position().to().chessboard());                
-        assert_eq!(game.bit_position().bit_position_status().player_turn(), square::Color::Black);                
+        println!("{}", game.bit_position().to().chessboard());
+        assert_eq!(
+            game.bit_position().bit_position_status().player_turn(),
+            square::Color::Black
+        );
         let moves: Vec<String> = game
             .gen_moves()
             .iter()

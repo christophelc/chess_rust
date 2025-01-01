@@ -2,12 +2,12 @@ use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{self, score, stat_eval};
-use super::search_state;
+use super::{feature, search_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::zobrist;
-use crate::entity::game::component::game_state;
 use crate::entity::game::component::square::Switch;
+use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
@@ -46,6 +46,7 @@ impl EngineAlphaBeta {
 
     fn set_preorder(
         m: &bitboard::BitBoardMove,
+        last_move_opt: Option<&bitboard::BitBoardMove>,
         is_check: bool,
         is_killer_move: bool,
     ) -> score::PreOrder {
@@ -56,7 +57,13 @@ impl EngineAlphaBeta {
             (true, _, _) => score::PreOrder::KillerMove,
             (_, true, _) => score::PreOrder::new_mat(m.color().switch()),
             (_, _, true) => {
-                let delta = score::biased_capture(m.type_piece(), m.capture());
+                let mut delta = score::biased_capture(m.type_piece(), m.capture());
+                if let Some(last_move) = last_move_opt {
+                    // if capture of the last moved piece, priorize
+                    if m.end() == last_move.end() {
+                        delta = delta * 2 + 1;
+                    };
+                }
                 score::PreOrder::Capture { delta }
             }
             _ => score::PreOrder::Depth,
@@ -69,18 +76,24 @@ impl EngineAlphaBeta {
     fn get_moves_preordered(
         &self,
         moves: &mut [bitboard::BitBoardMove],
+        last_move_opt: Option<&bitboard::BitBoardMove>,
         game: &mut game_state::GameState,
         transposition_table: &mut score::TranspositionScore,
         is_asc: bool,
         current_depth: u8,
         state: &search_state::SearchState,
     ) -> Vec<(score::MoveStatus, score::PreOrder)> {
+        if !feature::FEATURE_PREORDER {
+            return moves
+                .into_iter()
+                .map(|m| (score::MoveStatus::from_move(*m), score::PreOrder::Depth))
+                .collect();
+        }
         let mut moves_status_with_preorder: Vec<(score::MoveStatus, score::PreOrder)> = vec![];
         for m in moves {
-            let long_algebraic_move =
-                long_notation::LongAlgebricNotationMove::build_from_b_move(*m);
+            let long_algebric_move = long_notation::LongAlgebricNotationMove::build_from_b_move(*m);
             //println!("playing level 0: {}", long_algebraic_move.cast());
-            game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
+            game.play_moves(&[long_algebric_move], &self.zobrist_table, None, false)
                 .unwrap();
             game.update_endgame_status();
             let move_info_opt = transposition_table.get_move_info(&game.last_hash(), 0);
@@ -90,6 +103,7 @@ impl EngineAlphaBeta {
                 }
                 None => Self::set_preorder(
                     m,
+                    last_move_opt,
                     game.check_status().is_check(),
                     state.is_killer_move(current_depth as usize, *m),
                 ),
@@ -134,6 +148,7 @@ impl EngineAlphaBeta {
         let b_move_score = self.alphabeta_inc_rec(
             "",
             &mut game_clone,
+            None,
             current_depth,
             self.max_depth,
             None,
@@ -148,14 +163,30 @@ impl EngineAlphaBeta {
         *b_move_score.bitboard_move()
     }
 
-    fn can_null_move(game: &game_state::GameState, current_depth: u8, max_depth: u8) -> bool {
-        max_depth - current_depth > 3 && !game.check_status().is_check() && !evaluation::is_final(&game)
+    fn can_null_move(
+        game: &game_state::GameState,
+        current_depth: u8,
+        max_depth: u8,
+        m: &bitboard::BitBoardMove,
+        alpha_opt: Option<i32>,
+        beta_opt: Option<i32>,
+    ) -> bool {
+        feature::FEATURE_NULL_MOVE_PRUNING
+            && m.capture().is_none()
+            && beta_opt.is_some()
+            && alpha_opt.is_some()
+            && beta_opt.unwrap() - alpha_opt.unwrap() >= evaluation::HALF_PAWN
+            && current_depth >= 2
+            && max_depth - current_depth > 3
+            && !game.check_status().is_check()
+            && !evaluation::is_final(&game)
     }
 
     pub fn alphabeta_inc_rec(
         &self,
         variant: &str,
         game: &mut game_state::GameState,
+        last_move_opt: Option<&bitboard::BitBoardMove>,
         current_depth: u8,
         max_depth: u8,
         alpha_opt: Option<i32>,
@@ -171,30 +202,36 @@ impl EngineAlphaBeta {
         let mut best_move_score_opt: Option<score::BitboardMoveScore> = None;
 
         let mut moves = game.gen_moves();
-        if moves.is_empty() {
-            println!("{}", variant);
-            println!("{}", game.bit_position().to().chessboard());
-        }
         let is_max = game
             .bit_position()
             .bit_position_status()
             .player_turn_white();
         let moves_status = self.get_moves_preordered(
             &mut moves,
+            last_move_opt,
             game,
             transposition_table,
             !is_max,
             current_depth,
             state,
         );
+        //let v: Vec<String> = moves_status.iter().map(|pm| format!("{} : {:?}", LongAlgebricNotationMove::build_from_b_move(*pm.0.get_move()).cast(), pm.1)).collect();
+        //println!("variant: '{}' preorder: {:?}", variant, v);
 
         // alpha beta
         for (idx, (m_status, preorder)) in moves_status.iter().enumerate() {
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
-            // Last move reduction
-            let new_max_depth = if current_depth < max_depth && idx > 1 && !preorder.is_special() {
+            let updated_variant = updated_variant.trim();
+            // Last move reduction (if we are not too close to max_depth)
+            let max_depth = if feature::FEATURE_LMR
+                && current_depth > 3
+                && max_depth - current_depth > 0
+                && idx > 2
+                && !preorder.is_special()
+                && !game.check_status().is_check()
+            {
                 max_depth - 1
             } else {
                 max_depth
@@ -204,12 +241,12 @@ impl EngineAlphaBeta {
                 *m_status.get_move(),
                 alpha_opt,
                 beta_opt,
-                &updated_variant,
+                updated_variant,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
                 stat_eval,
                 current_depth,
-                new_max_depth,
+                max_depth,
                 is_max,
                 transposition_table,
                 state,
@@ -228,6 +265,7 @@ impl EngineAlphaBeta {
                 {
                     // Send best move
                     best_move_score_opt = Some(move_score);
+                    //if current_depth == 0 { println!("{} -> best move: {}", current_depth, best_move_score_opt.as_ref().unwrap()) };
                     if current_depth == 0 {
                         send_best_move(
                             self_actor.clone(),
@@ -237,23 +275,27 @@ impl EngineAlphaBeta {
                 }
                 // alpha = max(alpha, score)
                 if alpha_opt.is_none()
-                    || best_move_score_opt.as_ref().unwrap().score().value() >= alpha_opt.unwrap()
+                    || best_move_score_opt.as_ref().unwrap().score().value() > alpha_opt.unwrap()
                 {
                     alpha_opt = Some(best_move_score_opt.as_ref().unwrap().score().value());
+                    //println!("alpha: '{}' {}", variant, alpha_opt.as_ref().unwrap());
+                    // TODO: store alpha
                 }
                 // beta pruning (alpha >= beta(parent) )
                 if *alpha_opt.as_ref().unwrap() == score::SCORE_MAT_WHITE
                     || beta_opt.is_some()
                         && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    state.add_killer_move(
-                        current_depth as usize,
-                        best_move_score_opt
-                            .as_ref()
-                            .unwrap()
-                            .bitboard_move()
-                            .clone(),
-                    );
+                    if feature::FEATURE_KILLER_MOVE {
+                        state.add_killer_move(
+                            current_depth as usize,
+                            best_move_score_opt
+                                .as_ref()
+                                .unwrap()
+                                .bitboard_move()
+                                .clone(),
+                        );
+                    }
                     // do not update transpositon table
                     return best_move_score_opt.unwrap();
                 }
@@ -264,6 +306,7 @@ impl EngineAlphaBeta {
                 {
                     // best_score = min(best_score, score)
                     best_move_score_opt = Some(move_score);
+                    //if current_depth == 0 { println!("{} -> best move: {}", current_depth, best_move_score_opt.as_ref().unwrap()); }
                     if current_depth == 0 {
                         send_best_move(
                             self_actor.clone(),
@@ -276,6 +319,8 @@ impl EngineAlphaBeta {
                     || best_move_score_opt.as_ref().unwrap().score().value() < beta_opt.unwrap()
                 {
                     beta_opt = Some(best_move_score_opt.as_ref().unwrap().score().value());
+                    //println!("beta: '{}' {}", variant, beta_opt.as_ref().unwrap());
+                    // TODO: store beta
                 }
                 // alpha pruning (alpha(parent) >= beta)
                 if *beta_opt.as_ref().unwrap() == score::SCORE_MAT_BLACK
@@ -307,7 +352,14 @@ impl EngineAlphaBeta {
         let hash = game.last_hash();
         // FIXME: sometimes, the value is overriden for the same hash, current_depth, max_depth (for a specific depth defined in iddfs).
         // Chekc if this is normal
-        transposition_table.set_move_info(&hash, best_move_score_opt.as_ref().unwrap(), score::TypeScore::Exact, game.bit_position().bit_position_status().n_half_moves());
+        if feature::FEATURE_TRANSPOSITION_TABLE {
+            transposition_table.set_move_info(
+                &hash,
+                best_move_score_opt.as_ref().unwrap(),
+                score::BoundScore::Exact,
+                game.bit_position().bit_position_status().n_half_moves(),
+            );
+        }
 
         best_move_score_opt.unwrap()
     }
@@ -345,8 +397,7 @@ impl EngineAlphaBeta {
             .unwrap();
         // check if the current position has been already evaluated
         let hash = game.last_hash();
-        if let Some(move_info) =
-            transposition_table.get_move_info(&hash, max_depth - current_depth)
+        if let Some(move_info) = transposition_table.get_move_info(&hash, max_depth - current_depth)
         {
             //println!("hit {:?}", move_score);
             if stat_eval.inc_n_transposition_hit() % 1_000_000 == 0 {
@@ -360,16 +411,21 @@ impl EngineAlphaBeta {
         game.update_endgame_status();
         let score = if game.end_game() == game_state::EndGame::None {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
+                //println!("Rec analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // null move pruning
-                if beta_opt.is_some() && Self::can_null_move(game, current_depth, max_depth) {
+                if (is_max && beta_opt.is_some() || !is_max && alpha_opt.is_some())
+                    && Self::can_null_move(game, current_depth, max_depth, &m, alpha_opt, beta_opt)
+                {
                     // not optimized. By computing first attackers, we will eliminate the need to play a null move first and check if it is valid
                     game.play_null_move(&self.zobrist_table);
                     if game.can_move() {
                         let reduction = 2 + (max_depth - current_depth) / 6;
                         let null_depth = max_depth - reduction;
-                        let score = self.alphabeta_inc_rec(
+                        //println!("null move: {} - reduction: {}, current_depth: {}, max_depth: {}", variant, reduction, current_depth, max_depth);
+                        let score_after_null_move = self.alphabeta_inc_rec(
                             variant,
                             game,
+                            None,
                             current_depth + 1,
                             null_depth,
                             alpha_opt,
@@ -380,10 +436,16 @@ impl EngineAlphaBeta {
                             transposition_table,
                             state,
                         );
+                        //println!("end null move {}", variant);
                         game.play_back_null_move();
-                        if score.score().value() >= beta_opt.unwrap() {
-                            game.play_back();                    
+                        if is_max && score_after_null_move.score().value() >= beta_opt.unwrap() {
+                            game.play_back();
                             return score::Score::new(beta_opt.unwrap(), current_depth, max_depth);
+                        } else if !is_max
+                            && score_after_null_move.score().value() <= alpha_opt.unwrap()
+                        {
+                            game.play_back();
+                            return score::Score::new(alpha_opt.unwrap(), current_depth, max_depth);
                         }
                     } else {
                         game.play_back_null_move();
@@ -393,6 +455,7 @@ impl EngineAlphaBeta {
                 let best_move_score = self.alphabeta_inc_rec(
                     variant,
                     game,
+                    Some(&m),
                     current_depth + 1,
                     max_depth,
                     alpha_opt,
@@ -406,9 +469,13 @@ impl EngineAlphaBeta {
                 let score = best_move_score.score();
                 score::Score::new(score.value(), current_depth, max_depth)
             } else {
+                //println!("Analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // capture (avoid horizon effect) ?
                 let mut score_opt: Option<score::Score> = None;
-                if current_depth == max_depth && m.capture().is_some() {
+                if feature::FEATURE_CAPTURE_HORIZON
+                    && current_depth == max_depth
+                    && m.capture().is_some()
+                {
                     if let Some(score) = self.evalutate_capture(
                         variant,
                         game,
@@ -418,19 +485,12 @@ impl EngineAlphaBeta {
                         stat_actor_opt.clone(),
                         stat_eval,
                         m.end(),
-                        is_max,
+                        !is_max,
                     ) {
                         score_opt = Some(score);
                     }
                 }
-                if let Some(score) = score_opt {
-                    let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
-                    transposition_table.set_move_info(
-                        &hash,
-                        &score::BitboardMoveScore::new(m, score, updated_variant),
-                        score::TypeScore::Exact,
-                        game.bit_position().bit_position_status().n_half_moves(),
-                    );
+                let score = if let Some(score) = score_opt {
                     score
                 } else {
                     score::Score::new(
@@ -438,7 +498,15 @@ impl EngineAlphaBeta {
                         current_depth,
                         max_depth,
                     )
-                }
+                };
+                //println!("{}/{} {}\t{}", current_depth, max_depth, variant, score);
+                transposition_table.set_move_info(
+                    &hash,
+                    &score::BitboardMoveScore::new(m, score, variant.to_string()),
+                    score::BoundScore::Exact,
+                    game.bit_position().bit_position_status().n_half_moves(),
+                );
+                score
             }
         } else {
             evaluation::handle_end_game_scenario(game, current_depth, max_depth)
@@ -487,7 +555,7 @@ impl EngineAlphaBeta {
                 !is_max,
             );
             let score = if let Some(sc) = &score_opt {
-                sc.clone()
+                *sc
             } else {
                 score::Score::new(
                     evaluation::evaluate_position(game, stat_eval, &stat_actor_opt, self.id()),
@@ -495,7 +563,7 @@ impl EngineAlphaBeta {
                     max_depth,
                 )
             };
-            //println!("capture {} : {}", updated_variant, score.value());
+            //println!("capture {}: {}", updated_variant, score);
             match &best_score_opt {
                 Some(best_score) => {
                     if is_max && score.value() > best_score.value()

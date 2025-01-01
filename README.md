@@ -42,7 +42,7 @@ And there are heuristics:
 - Transposition table: we avoid computing again an already evaluated move. The depth of analysis is memorized too (max_depth - current_depth),
 - Preordering of moves (Transposition table, Killer moves, Capture, Check, ),
 - Recapture if capture at the max depth,
-- Aspiration window,
+- Aspiration window (not used for the moment),
 - Killer moves (moves causing a prune when: alpha(parent) >= beta (maximisation case) or alpha >= beta(parent) (minimisation case) ) 
 - Null move pruning
 - Last move reduction
@@ -75,9 +75,15 @@ For pawns, we generate attacked squares by using bitwise operations directly on 
 
 ## TODO
 
+- Fix: In the position ```r3k2r/1b1p1pp1/1p1Pp3/pN5p/1n6/4B3/q4PPP/1R1QR1K1 b kq - 7 22``` black plays Qd5?? if FEATURE_LMR is on. For the moment, we have disabled it.
+
 - Resign
 
 - Make max_depth more dynamic
+
+- Variant not propagated for the best move
+
+- Manage PV (principal variation) to turn on/off some heuristics
 
 - Improve mat solver: currently it looks for forced moves. But it is not always the right way to proceed.
 

@@ -197,7 +197,7 @@ impl EngineMat {
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast())
             .trim()
             .to_string();
-        //println!("variant mat ? {}", updated_variant);
+        println!("variant mat ? {}", updated_variant);
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
         game.update_endgame_status();

@@ -2,8 +2,9 @@ use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{score, stat_eval};
-use super::{engine_alphabeta, engine_mat, search_state};
+use super::{engine_alphabeta, engine_mat, feature, search_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+use crate::entity::engine::component::evaluation;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::stat::actor::stat_entity;
@@ -57,7 +58,7 @@ impl EngineIddfs {
         max_depth: u8,
         state: &mut search_state::SearchState,
     ) {
-        let window_aspiration = 50;
+        let window_aspiration = evaluation::HALF_PAWN;
 
         if alpha_opt.is_some() && b_move_score.score().value() <= alpha_opt.unwrap()
             || beta_opt.is_some() && b_move_score.score().value() >= beta_opt.unwrap()
@@ -66,6 +67,7 @@ impl EngineIddfs {
             *b_move_score = self.engine_alphabeta.alphabeta_inc_rec(
                 "",
                 game,
+                None,
                 0,
                 max_depth,
                 None,
@@ -97,13 +99,17 @@ impl EngineIddfs {
 
         let mut game_clone = game.clone();
 
-        let mat_move_opt = self.engine_mat_solver.mat_solver_init(
-            game,
-            self_actor.clone(),
-            stat_actor_opt.clone(),
-            self.max_depth,
-            &mut stat_eval,
-        );
+        let mat_move_opt = if feature::FEATURE_MAT_SOLVER {
+            self.engine_mat_solver.mat_solver_init(
+                game,
+                self_actor.clone(),
+                stat_actor_opt.clone(),
+                self.max_depth,
+                &mut stat_eval,
+            )
+        } else {
+            None
+        };
         if let Some(mat_move) = mat_move_opt {
             return *mat_move.bitboard_move();
         }
@@ -111,11 +117,12 @@ impl EngineIddfs {
         let mut b_move_score_opt: Option<score::BitboardMoveScore> = None;
         let mut alpha_opt: Option<i32> = None;
         let mut beta_opt: Option<i32> = None;
-        for max_depth in 1..self.max_depth {
+        for max_depth in 1..=self.max_depth {
             // evaluate move with aplha beta
             let mut b_move_score = self.engine_alphabeta.alphabeta_inc_rec(
                 "",
                 &mut game_clone,
+                None,
                 0,
                 max_depth,
                 alpha_opt,
@@ -126,17 +133,19 @@ impl EngineIddfs {
                 &mut transposition_table,
                 &mut state,
             );
-            self.aspiration_window(
-                &mut game_clone,
-                &mut transposition_table,
-                self_actor.clone(),
-                &mut stat_eval,
-                &mut alpha_opt,
-                &mut beta_opt,
-                &mut b_move_score,
-                max_depth,
-                &mut state,
-            );
+            if feature::FEATURE_ASPIRATION_WINDOW {
+                self.aspiration_window(
+                    &mut game_clone,
+                    &mut transposition_table,
+                    self_actor.clone(),
+                    &mut stat_eval,
+                    &mut alpha_opt,
+                    &mut beta_opt,
+                    &mut b_move_score,
+                    max_depth,
+                    &mut state,
+                );
+            }
             if let Some(stat_actor) = stat_actor_opt.as_ref() {
                 let msg = stat_entity::handler_stat::StatUpdate::new(
                     self.id(),
@@ -144,6 +153,7 @@ impl EngineIddfs {
                 );
                 stat_actor.do_send(msg);
             }
+            //println!("best variant found: {}", b_move_score.get_variant());
             send_best_move(self_actor.clone(), *b_move_score.bitboard_move());
             println!(
                 "info => {} / '{}' : {}",

@@ -15,8 +15,9 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum PreOrder {
     Depth,
+    LastMove,
     Capture { delta: i32 },
-    // Check => mat hope
+    // Move that check the opponent => mat hope
     SearchMat { defender_color: square::Color },
     KillerMove,
     CurrentDepthScore(Score),
@@ -47,20 +48,20 @@ impl PreOrder {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum TypeScore {
+pub enum BoundScore {
     Exact,
     LowerBound,
     UpperBound,
 }
 
 #[derive(Debug, Clone)]
-pub struct TranspositionInfo {
+pub struct TranspositionEntry {
     move_score: BitboardMoveScore,
-    type_score: TypeScore,
+    type_score: BoundScore,
     age: u16, // the lower the older
 }
-impl TranspositionInfo {
-    pub fn new(move_score: BitboardMoveScore, type_score: TypeScore, n_half_moves: u16) -> Self {
+impl TranspositionEntry {
+    pub fn new(move_score: BitboardMoveScore, type_score: BoundScore, n_half_moves: u16) -> Self {
         Self {
             move_score,
             type_score,
@@ -70,7 +71,7 @@ impl TranspositionInfo {
     pub fn move_score(&self) -> &BitboardMoveScore {
         &self.move_score
     }
-    pub fn type_score(&self) -> TypeScore {
+    pub fn type_score(&self) -> BoundScore {
         self.type_score
     }
     pub fn age(&self) -> u16 {
@@ -80,15 +81,18 @@ impl TranspositionInfo {
 
 #[derive(Default)]
 pub struct TranspositionScore {
-    table: HashMap<zobrist::ZobristHash, TranspositionInfo>,
+    table: HashMap<zobrist::ZobristHash, TranspositionEntry>,
 }
 impl TranspositionScore {
+    pub fn clear(&mut self) {
+        self.table.clear();
+    }
     pub fn get_move_info(
         &self,
         hash: &zobrist::ZobristHash,
         depth: u8,
-    ) -> Option<TranspositionInfo> {
-        let mut content_opt: Option<TranspositionInfo> = None;
+    ) -> Option<TranspositionEntry> {
+        let mut content_opt: Option<TranspositionEntry> = None;
         if let Some(move_info) = self.table.get(hash) {
             if move_info.move_score.score().path_length() >= depth {
                 content_opt = Some(move_info.clone());
@@ -97,7 +101,13 @@ impl TranspositionScore {
         content_opt
     }
     // store score for White
-    pub fn set_move_info(&mut self, hash: &zobrist::ZobristHash, move_score: &BitboardMoveScore, type_score: TypeScore, n_half_moves: u16) {
+    pub fn set_move_info(
+        &mut self,
+        hash: &zobrist::ZobristHash,
+        move_score: &BitboardMoveScore,
+        type_score: BoundScore,
+        n_half_moves: u16,
+    ) {
         // ipdate only if more accurate
         if let Some(v) = self.table.get_key_value(hash) {
             // less accurate ?
@@ -109,7 +119,10 @@ impl TranspositionScore {
                 return;
             }
         }
-        self.table.insert(hash.clone(), TranspositionInfo::new(move_score.clone(), type_score, n_half_moves));
+        self.table.insert(
+            hash.clone(),
+            TranspositionEntry::new(move_score.clone(), type_score, n_half_moves),
+        );
     }
 }
 
@@ -244,6 +257,9 @@ impl Score {
             current_depth,
             max_depth,
         }
+    }
+    pub fn depth_analysis(&self) -> u8 {
+        self.max_depth - self.current_depth
     }
     pub fn is_greater_than(&self, score: &Score) -> bool {
         self.value > score.value

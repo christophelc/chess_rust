@@ -1,4 +1,4 @@
-use super::engine_logic as logic;
+use super::{engine_logic as logic, feature};
 use crate::entity::game::component::bitboard::piece_move;
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{bitboard, game_state, square};
@@ -8,7 +8,8 @@ use crate::entity::stat::component::stat_data;
 pub mod score;
 pub mod stat_eval;
 
-const FACTOR_PIECE_VALUE: i32 = 1000;
+const FACTOR_PAWN_BASE: i32 = 1000;
+pub const HALF_PAWN: i32 = FACTOR_PAWN_BASE / 2;
 const FACTOR_CONTROL_SQUARES: i32 = 10;
 
 pub fn handle_end_game_scenario(
@@ -59,16 +60,21 @@ pub fn evaluate_position(
     }
     // check if can win or insufficient material
     let player_turn = game.bit_position().bit_position_status().player_turn();
-    let player_can_win = check_can_win(
-        game.bit_position()
-            .bit_boards_white_and_black()
-            .bit_board(&player_turn),
-    );
-    let player_opponent_can_win = check_can_win(
-        game.bit_position()
-            .bit_boards_white_and_black()
-            .bit_board(&player_turn.switch()),
-    );
+    let (player_can_win, player_opponent_can_win) = if feature::FEATURE_CANNOT_WIN_FORCE_NULL {
+        let player_can_win = check_can_win(
+            game.bit_position()
+                .bit_boards_white_and_black()
+                .bit_board(&player_turn),
+        );
+        let player_opponent_can_win = check_can_win(
+            game.bit_position()
+                .bit_boards_white_and_black()
+                .bit_board(&player_turn.switch()),
+        );
+        (player_can_win, player_opponent_can_win)
+    } else {
+        (true, true)
+    };
     let default_score = evaluate_static_position(game.bit_position())
         + evaluate_dynamic_position(game.gen_control_square());
     let bonus = if player_turn == square::Color::White {
@@ -149,7 +155,7 @@ fn evaluate_static_position(bit_position: &bitboard::BitPosition) -> i32 {
     );
     // println!("{}", bit_position.to().chessboard());
     // println!("{:?} / {:?}", score_current, score_opponent);
-    (score_current as i32 - score_opponent as i32) * FACTOR_PIECE_VALUE
+    (score_current as i32 - score_opponent as i32) * FACTOR_PAWN_BASE
 }
 
 #[cfg(test)]
