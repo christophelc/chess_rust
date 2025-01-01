@@ -46,38 +46,70 @@ impl PreOrder {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum TypeScore {
+    Exact,
+    LowerBound,
+    UpperBound,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranspositionInfo {
+    move_score: BitboardMoveScore,
+    type_score: TypeScore,
+    age: u16, // the lower the older
+}
+impl TranspositionInfo {
+    pub fn new(move_score: BitboardMoveScore, type_score: TypeScore, n_half_moves: u16) -> Self {
+        Self {
+            move_score,
+            type_score,
+            age: n_half_moves,
+        }
+    }
+    pub fn move_score(&self) -> &BitboardMoveScore {
+        &self.move_score
+    }
+    pub fn type_score(&self) -> TypeScore {
+        self.type_score
+    }
+    pub fn age(&self) -> u16 {
+        self.age
+    }
+}
+
 #[derive(Default)]
 pub struct TranspositionScore {
-    table: HashMap<zobrist::ZobristHash, BitboardMoveScore>,
+    table: HashMap<zobrist::ZobristHash, TranspositionInfo>,
 }
 impl TranspositionScore {
-    pub fn get_move_score(
+    pub fn get_move_info(
         &self,
         hash: &zobrist::ZobristHash,
         depth: u8,
-    ) -> Option<BitboardMoveScore> {
-        let mut move_score_opt: Option<BitboardMoveScore> = None;
-        if let Some(move_score) = self.table.get(hash) {
-            if move_score.score().path_length() >= depth {
-                move_score_opt = Some(move_score.clone());
+    ) -> Option<TranspositionInfo> {
+        let mut content_opt: Option<TranspositionInfo> = None;
+        if let Some(move_info) = self.table.get(hash) {
+            if move_info.move_score.score().path_length() >= depth {
+                content_opt = Some(move_info.clone());
             }
         }
-        move_score_opt
+        content_opt
     }
     // store score for White
-    pub fn set_move_score(&mut self, hash: &zobrist::ZobristHash, move_score: &BitboardMoveScore) {
+    pub fn set_move_info(&mut self, hash: &zobrist::ZobristHash, move_score: &BitboardMoveScore, type_score: TypeScore, n_half_moves: u16) {
         // ipdate only if more accurate
         if let Some(v) = self.table.get_key_value(hash) {
             // less accurate ?
-            if v.1.score().path_length() < move_score.score().path_length()
-                || v.1.score().path_length() == move_score.score().path_length() &&
+            if v.1.move_score.score().path_length() < move_score.score().path_length()
+                || v.1.move_score.score().path_length() == move_score.score().path_length() &&
             // capture can occur at max_depth for max_depth = 3 but not for max_depth = 2 (for example)
-            v.1.score().current_depth() < move_score.score().current_depth()
+            v.1.move_score.score().current_depth() < move_score.score().current_depth()
             {
                 return;
             }
         }
-        self.table.insert(hash.clone(), move_score.clone());
+        self.table.insert(hash.clone(), TranspositionInfo::new(move_score.clone(), type_score, n_half_moves));
     }
 }
 
@@ -199,7 +231,7 @@ impl fmt::Display for BitboardMoveScore {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Score {
     value: i32,
     current_depth: u8,

@@ -37,7 +37,7 @@ impl EngineIddfs {
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                max_depth * 2,
+                8,
             ),
         }
     }

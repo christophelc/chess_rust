@@ -201,6 +201,7 @@ impl GameState {
     }
 
     // null move is playing no move (switch side only)
+    // we assume we check just after if there is a pat
     pub fn play_null_move(&mut self, zobrist_table: &zobrist::Zobrist) {
         let mut hash = self.last_hash();
         // Change player turn
@@ -287,10 +288,10 @@ impl GameState {
             .bit_boards_white_and_black()
             .check_status(&color)
     }
-    pub fn update_endgame_status(&mut self) {
+    pub fn can_move(&self) -> bool {
         let color = self.bit_position().bit_position_status().player_turn();
         let check_status = self.check_status();
-        let can_move = self.bit_position().bit_boards_white_and_black().can_move(
+        self.bit_position().bit_boards_white_and_black().can_move(
             &color,
             check_status,
             self.bit_position()
@@ -298,8 +299,11 @@ impl GameState {
                 .pawn_en_passant()
                 .as_ref(),
             self.bit_position().bit_position_status(),
-        );
-        let end_game = self.check_end_game(check_status, !can_move);
+        )
+    }
+    pub fn update_endgame_status(&mut self) {
+        let can_move = self.can_move();
+        let end_game = self.check_end_game(self.check_status(), !can_move);
         self.set_end_game(end_game);
     }
 }
@@ -417,6 +421,31 @@ mod tests {
             .collect();
         assert_eq!(algebric_moves, algebric_moves_expected);
     }
+    #[test]
+    fn test_pat() {
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        let fen_pos = "8/4k3/8/1N3pP1/2R2P2/P5K1/P2B4/8 b - - 0 48";
+        let position = fen::Fen::decode(fen_pos).expect("Failed to decode FEN");
+        let moves = vec![
+            "e7e6", "c4c7", "e6d5", "c7d7", "d5e4"
+        ];
+        let zobrist_table = Zobrist::new();
+        let mut game = super::GameState::new(position, &zobrist_table);
+        let valid_moves: Vec<long_notation::LongAlgebricNotationMove> = moves
+            .into_iter()
+            .map(|m| long_notation::LongAlgebricNotationMove::build_from_str(m).unwrap())
+            .collect();
+        let _ = game.play_moves(&valid_moves, &zobrist_table, debug_actor_opt.clone(), true);
+        println!("{}", game.bit_position().to().chessboard());
+        game.play_null_move(&zobrist_table);
+        let moves = game.gen_moves();
+        assert!(moves.is_empty());
+        assert!(!game.can_move());
+        assert_eq!(game.end_game(), super::EndGame::None);
+        game.update_endgame_status();
+        assert_eq!(game.end_game(), super::EndGame::Pat)
+    }
+
     #[test]
     fn test_play_back() {
         let debug_actor_opt: Option<debug::DebugActor> = None;
