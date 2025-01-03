@@ -2,10 +2,11 @@
 name = "chess_rust"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 actix = "0.13.5"
-chrono = "0.4.38"
+chrono = "0.4.39"
 num_cpus = "1.16.0"
 petgraph = "0.6.5"
 rand = "0.8.5"
@@ -19,4 +20,8 @@ path="src/lib.rs"
 
 [profile.release]
 debug = true
+
+[build-dependencies]
+chrono = "0.4"
+
 

@@ -107,9 +107,9 @@ impl BitBoardMove {
         }
         if type_piece == TypePiece::Pawn
             && ((color == Color::White
-                && (end.bitboard() & BitBoard(table::MASK_ROW_7)).non_empty())
+                && (end.bitboard() & BitBoard(table::MASK_ROW_8)).non_empty())
                 || (color == Color::Black
-                    && (end.bitboard() & BitBoard(table::MASK_ROW_0)).non_empty()))
+                    && (end.bitboard() & BitBoard(table::MASK_ROW_1)).non_empty()))
         {
             vec![
                 Self::new(
@@ -248,7 +248,7 @@ fn update_status(
     // move of a rook
     match b_move.type_piece {
         TypePiece::Rook => {
-            if b_move.start.0 == 1 || b_move.start.0 == 56 {
+            if b_move.start.0 == 0 || b_move.start.0 == 56 {
                 bit_position_status.set_castling_queen_side(b_move.color, false)
             }
             if b_move.start.0 == 7 || b_move.start.0 == 63 {

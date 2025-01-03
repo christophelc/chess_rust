@@ -366,6 +366,7 @@ impl BitOrAssign<u64> for PawnsBitBoard {
     }
 }
 
+#[derive(Debug)]
 pub struct ControlSquares {
     moves: Vec<PieceMoves>,
     pawns_control: bitboard::BitBoard,

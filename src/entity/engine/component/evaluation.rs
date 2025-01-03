@@ -1,5 +1,5 @@
 use super::{engine_logic as logic, feature};
-use crate::entity::game::component::bitboard::piece_move;
+use crate::entity::game::component::bitboard::piece_move::{self, table};
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{bitboard, game_state, square};
 use crate::entity::stat::actor::stat_entity;
@@ -11,6 +11,8 @@ pub mod stat_eval;
 const FACTOR_PAWN_BASE: i32 = 1000;
 pub const HALF_PAWN: i32 = FACTOR_PAWN_BASE / 2;
 const FACTOR_CONTROL_SQUARES: i32 = 10;
+
+const BITBOARD_CENTER: u64 = table::MASK_COL_D & table::MASK_ROW_4 | table::MASK_COL_D & table::MASK_ROW_5 | table::MASK_COL_E & table::MASK_ROW_4 | table::MASK_COL_E & table::MASK_ROW_5;
 
 pub fn handle_end_game_scenario(
     game: &game_state::GameState,
@@ -75,8 +77,9 @@ pub fn evaluate_position(
     } else {
         (true, true)
     };
+    let is_start_game = game.bit_position().bit_position_status().n_half_moves() <= 20;
     let default_score = evaluate_static_position(game.bit_position())
-        + evaluate_dynamic_position(game.gen_control_square());
+        + evaluate_dynamic_position(game.gen_control_square(), is_start_game);
     let bonus = if player_turn == square::Color::White {
         100000
     } else {
@@ -114,21 +117,25 @@ fn check_can_win(bitboards: &bitboard::BitBoards) -> bool {
 
 fn evaluate_dynamic_position(
     control_squares: (piece_move::ControlSquares, piece_move::ControlSquares),
+    is_start_game: bool,
 ) -> i32 {
     let (control_squares_white, control_squares_black) = control_squares;
-    (evaluate_dynamic_position_one_side(control_squares_white)
-        - evaluate_dynamic_position_one_side(control_squares_black))
+    (evaluate_dynamic_position_one_side(control_squares_white, is_start_game)
+        - evaluate_dynamic_position_one_side(control_squares_black, is_start_game))
         * FACTOR_CONTROL_SQUARES
 }
 
-fn evaluate_dynamic_position_one_side(control_squares: piece_move::ControlSquares) -> i32 {
+fn evaluate_dynamic_position_one_side(control_squares: piece_move::ControlSquares, is_start_game: bool) -> i32 {
     let mut score = 0;
+    let mask = bitboard::BitBoard::new(if is_start_game { BITBOARD_CENTER } else { u64::MAX });
     for piece_moves in control_squares.moves() {
-        let n_squares_control_except_pawns = piece_moves.moves().count_ones();
-        let n_sqaures_control_pawns = control_squares.panws_control().count_ones();
-        score += (n_squares_control_except_pawns + n_sqaures_control_pawns) as i32;
+        let control = *piece_moves.moves() & mask;
+        let n_squares_control_except_pawns = control.count_ones();
+        score += n_squares_control_except_pawns;
     }
-    score
+    let n_squares_control_pawns = (control_squares.panws_control() & mask).count_ones();    
+    score += score * 2 + n_squares_control_pawns;
+    score as i32
 }
 
 fn count_material_one_side(bitboards: &bitboard::BitBoards) -> (u32, u32, u32, u32, u32) {
@@ -165,6 +172,9 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+    use crate::entity::engine::component::evaluation::{self, BITBOARD_CENTER, FACTOR_CONTROL_SQUARES};
+    use crate::entity::game::component::bitboard::{piece_move, zobrist};
+    use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{
             engine::component::engine_alphabeta,
@@ -178,7 +188,7 @@ mod tests {
         ui::notation::long_notation,
     };
 
-    use super::evaluate_static_position_one_side;
+    use super::{evaluate_dynamic_position_one_side, evaluate_static_position_one_side};
 
     #[test]
     fn test_evaluation_one_side() {
@@ -189,7 +199,7 @@ mod tests {
         assert_eq!(score, 6);
     }
 
-    use crate::entity::game::component::game_state;
+    use crate::entity::game::component::{game_state, square};
     #[cfg(test)]
     async fn get_game_state(
         game_manager_actor: &game_manager::GameManagerActor,
@@ -268,5 +278,35 @@ mod tests {
             .collect::<Vec<String>>())
         .to_vec();
         assert!(!moves.contains(&"h3h2".to_string()));
+    }
+
+    #[test]
+    fn test_control_squares() {
+        // White queen in b3
+        let fen = "7k/8/8/8/8/1Q6/8/7K w - - 0 1";
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
+        let zobrist_table = zobrist::Zobrist::new();
+        let game = game_state::GameState::new(position, &zobrist_table);
+
+        let (control_white, control_black) = game.gen_control_square();
+        let is_start_game = true;        
+        let sc_white = evaluate_dynamic_position_one_side(control_white, is_start_game);
+        assert_eq!(sc_white, 3);
+        let sc_black = evaluate_dynamic_position_one_side(control_black, is_start_game);        
+        assert_eq!(sc_black, 0);
+
+        // The queen controls only the square d5
+        let (control_white, control_black) = game.gen_control_square();
+        let is_start_game = true;
+        let score = evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
+        assert_eq!(score, 3 * FACTOR_CONTROL_SQUARES);
+
+        // The queen control plenty squares
+        let (control_white, control_black) = game.gen_control_square();
+        let is_start_game = false;
+        let score = evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
+        assert_eq!(score, 23 * 3 * FACTOR_CONTROL_SQUARES);
+
+
     }
 }

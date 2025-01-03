@@ -1,7 +1,7 @@
 use crate::entity::game::component::bitboard;
 
 use super::{
-    MASK_ROW_0, MASK_ROW_1, MASK_ROW_2, MASK_ROW_3, MASK_ROW_4, MASK_ROW_5, MASK_ROW_6, MASK_ROW_7,
+    MASK_ROW_1, MASK_ROW_2, MASK_ROW_3, MASK_ROW_4, MASK_ROW_5, MASK_ROW_6, MASK_ROW_7, MASK_ROW_8,
 };
 
 const LEFT_MOVES: [u8; 128] = [
@@ -46,36 +46,36 @@ const RIGHT_MOVES: [u8; 128] = [
 
 const MASK_ROWS: [(u64, u64); 8] = [
     (
+        MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7 | MASK_ROW_8,
+        0,
+    ),
+    (
+        MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7 | MASK_ROW_8,
+        MASK_ROW_1,
+    ),
+    (
+        MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7 | MASK_ROW_8,
+        MASK_ROW_1 | MASK_ROW_2,
+    ),
+    (
+        MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7 | MASK_ROW_8,
+        MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3,
+    ),
+    (
+        MASK_ROW_6 | MASK_ROW_7 | MASK_ROW_8,
+        MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4,
+    ),
+    (
+        MASK_ROW_7 | MASK_ROW_8,
+        MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5,
+    ),
+    (
+        MASK_ROW_8,
+        MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6,
+    ),
+    (
+        0,
         MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7,
-        0,
-    ),
-    (
-        MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7,
-        MASK_ROW_0,
-    ),
-    (
-        MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7,
-        MASK_ROW_0 | MASK_ROW_1,
-    ),
-    (
-        MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7,
-        MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2,
-    ),
-    (
-        MASK_ROW_5 | MASK_ROW_6 | MASK_ROW_7,
-        MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3,
-    ),
-    (
-        MASK_ROW_6 | MASK_ROW_7,
-        MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4,
-    ),
-    (
-        MASK_ROW_7,
-        MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5,
-    ),
-    (
-        0,
-        MASK_ROW_0 | MASK_ROW_1 | MASK_ROW_2 | MASK_ROW_3 | MASK_ROW_4 | MASK_ROW_5 | MASK_ROW_6,
     ),
 ];
 

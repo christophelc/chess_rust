@@ -7,6 +7,8 @@ use chess_actix::entity::engine::component::engine_mat;
 use chess_actix::entity::engine::component::engine_mcts;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_minimax;
+use chrono::{TimeZone, Utc, Local};
+
 #[allow(unused_imports)]
 use entity::engine::component::engine_dummy as dummy;
 
@@ -156,6 +158,16 @@ async fn tui_loop(
 
 #[actix::main]
 async fn main() {
+    let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
+    let timestamp = build_date.parse::<i64>().expect("BUILD_DATE should be a valid timestamp");
+    let utc_datetime = Utc.timestamp_opt(timestamp, 0)
+        .single()
+        .expect("Invalid timestamp");
+    let local_datetime = utc_datetime.with_timezone(&Local);
+    let formatted_date = local_datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string();
+    println!("info -> Build date: {}", formatted_date);
+
+
     let debug_actor_opt: Option<debug::DebugActor> = None;
     let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());
     //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());

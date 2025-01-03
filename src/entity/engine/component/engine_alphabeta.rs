@@ -7,7 +7,7 @@ use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::square::Switch;
-use crate::entity::game::component::{game_state, square};
+use crate::entity::game::component::game_state;
 use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
@@ -163,6 +163,9 @@ impl EngineAlphaBeta {
         *b_move_score.bitboard_move()
     }
 
+    fn diff_opt(beta_opt: Option<i32>, alpha_opt: Option<i32>) -> Option<i32> {
+        beta_opt.zip(alpha_opt).map(|(beta, alpha)| beta - alpha)
+    }
     fn can_null_move(
         game: &game_state::GameState,
         current_depth: u8,
@@ -170,12 +173,13 @@ impl EngineAlphaBeta {
         m: &bitboard::BitBoardMove,
         alpha_opt: Option<i32>,
         beta_opt: Option<i32>,
+        is_max: bool,
     ) -> bool {
         feature::FEATURE_NULL_MOVE_PRUNING
             && m.capture().is_none()
-            && beta_opt.is_some()
-            && alpha_opt.is_some()
-            && beta_opt.unwrap() - alpha_opt.unwrap() >= evaluation::HALF_PAWN
+            && is_max && beta_opt.is_some() 
+            && !is_max && alpha_opt.is_some()
+            && Self::diff_opt(beta_opt, alpha_opt).unwrap_or(0) >= evaluation::HALF_PAWN
             && current_depth >= 2
             && max_depth - current_depth > 3
             && !game.check_status().is_check()
@@ -391,7 +395,7 @@ impl EngineAlphaBeta {
     ) -> score::Score {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         // if current_depth >= 0 {
-        //     println!("{}", variant);
+        //    println!("{}", variant);
         // }
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
@@ -413,8 +417,7 @@ impl EngineAlphaBeta {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
                 //println!("Rec analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // null move pruning
-                if (is_max && beta_opt.is_some() || !is_max && alpha_opt.is_some())
-                    && Self::can_null_move(game, current_depth, max_depth, &m, alpha_opt, beta_opt)
+                if Self::can_null_move(game, current_depth, max_depth, &m, alpha_opt, beta_opt, is_max)
                 {
                     // not optimized. By computing first attackers, we will eliminate the need to play a null move first and check if it is valid
                     game.play_null_move(&self.zobrist_table);
@@ -489,6 +492,24 @@ impl EngineAlphaBeta {
                     ) {
                         score_opt = Some(score);
                     }
+                }
+                if feature::FEATURE_CAPTURE_HORIZON
+                && current_depth == max_depth
+                && game.check_status().is_check() {
+                    score_opt = Some(*self.alphabeta_inc_rec(
+                        variant,
+                        game,
+                        Some(&m),
+                        current_depth + 1,
+                        max_depth + 1,
+                        alpha_opt,
+                        beta_opt,
+                        self_actor.clone(),
+                        stat_actor_opt.clone(),
+                        stat_eval,
+                        transposition_table,
+                        state,
+                    ).score());
                 }
                 let score = if let Some(score) = score_opt {
                     score
