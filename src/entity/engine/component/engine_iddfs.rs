@@ -8,7 +8,12 @@ use crate::entity::engine::component::evaluation;
 use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::game_state;
 use crate::entity::stat::actor::stat_entity;
+use crate::span_debug;
 use crate::{entity::game::component::bitboard, monitoring::debug};
+
+fn span_debug() -> tracing::Span {
+    span_debug!("engine::component::iddfs")
+}
 
 pub struct EngineIddfs {
     id_number: String,
@@ -33,6 +38,7 @@ impl EngineIddfs {
                 None,
                 zobrist_table.clone(),
                 max_depth,
+                false,
             ),
             engine_mat_solver: engine_mat::EngineMat::new(
                 // fIXME: max_depth here should be dynamic
@@ -93,13 +99,20 @@ impl EngineIddfs {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> bitboard::BitBoardMove {
+        let span = span_debug();
+        let _enter = span.enter();
+
+        tracing::info!("Starting IDDFS with max_depth: {}", self.max_depth);
+
         let mut transposition_table = score::TranspositionScore::default();
         let mut stat_eval = stat_eval::StatEval::default();
         let mut state = search_state::SearchState::new();
 
         let mut game_clone = game.clone();
 
-        let mat_move_opt = if feature::FEATURE_MAT_SOLVER {
+        // Vérifiez si un coup rapide est possible avec le mat solver
+        if let Some(mat_move) = if feature::FEATURE_MAT_SOLVER {
+            tracing::debug!("Attempting mat solver");
             self.engine_mat_solver.mat_solver_init(
                 game,
                 self_actor.clone(),
@@ -109,15 +122,20 @@ impl EngineIddfs {
             )
         } else {
             None
-        };
-        if let Some(mat_move) = mat_move_opt {
+        } {
+            tracing::info!("Mat solver found a move: {:?}", mat_move.bitboard_move());
             return *mat_move.bitboard_move();
         }
 
         let mut b_move_score_opt: Option<score::BitboardMoveScore> = None;
         let mut alpha_opt: Option<i32> = None;
         let mut beta_opt: Option<i32> = None;
+
+        tracing::info!("Starting iterative deepening search");
+        // Boucle principale
         for max_depth in 1..=self.max_depth {
+            tracing::info!("Starting iteration at depth: {}", max_depth);
+            let alphabeta_start = std::time::Instant::now();
             // evaluate move with aplha beta
             let mut b_move_score = self.engine_alphabeta.alphabeta_inc_rec(
                 "",
@@ -133,7 +151,16 @@ impl EngineIddfs {
                 &mut transposition_table,
                 &mut state,
             );
+            tracing::info!(
+                "Completed alphabeta at depth {} in {:?}, positions evaluated: {}, transpositions: {}",
+                max_depth,
+                alphabeta_start.elapsed(),
+                stat_eval.n_positions_evaluated(),
+                stat_eval.n_transposition_hit()
+            );
             if feature::FEATURE_ASPIRATION_WINDOW {
+                tracing::debug!("Applying aspiration window at depth {}", max_depth);
+                let window_start = std::time::Instant::now();
                 self.aspiration_window(
                     &mut game_clone,
                     &mut transposition_table,
@@ -145,8 +172,16 @@ impl EngineIddfs {
                     max_depth,
                     &mut state,
                 );
+                tracing::debug!(
+                    "Aspiration window completed in {:?}",
+                    window_start.elapsed()
+                );
             }
             if let Some(stat_actor) = stat_actor_opt.as_ref() {
+                tracing::debug!(
+                    "Sending statistics update, positions evaluated: {}",
+                    stat_eval.n_positions_evaluated()
+                );
                 let msg = stat_entity::handler_stat::StatUpdate::new(
                     self.id(),
                     stat_eval.n_positions_evaluated(),
@@ -155,17 +190,39 @@ impl EngineIddfs {
             }
             //println!("best variant found: {}", b_move_score.get_variant());
             send_best_move(self_actor.clone(), *b_move_score.bitboard_move());
-            println!(
-                "info => {} / '{}' : {}",
+            tracing::info!(
+                "Depth {} completed - Variant: {:?}, Score: {}, Move: {:?}",
                 max_depth,
                 b_move_score.get_variant(),
-                b_move_score.score().value()
+                b_move_score.score().value(),
+                b_move_score.bitboard_move()
             );
+
+            if let Some(prev_score) = b_move_score_opt {
+                tracing::debug!(
+                    "Score improvement: {} -> {}",
+                    prev_score.score().value(),
+                    b_move_score.score().value()
+                );
+            }
+
             b_move_score_opt = Some(b_move_score);
         }
-        *b_move_score_opt.unwrap().bitboard_move()
+
+        tracing::info!("IDDFS completed all iterations");
+        b_move_score_opt.map_or_else(
+            || {
+                tracing::error!("No valid move found in IDDFS!");
+                panic!("No valid move found before timeout!")
+            },
+            |score| {
+                tracing::info!("Final selected move: {:?}", score.bitboard_move());
+                *score.bitboard_move()
+            },
+        )
     }
 }
+
 unsafe impl Send for EngineIddfs {}
 
 const ALPHABETA_INC_ENGINE_ID_NAME: &str = "Alphabeta incremental engine";
@@ -192,24 +249,25 @@ impl logic::Engine for EngineIddfs {
     ) {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
-        if !moves.is_empty() {
-            let best_move = self.iddfs_init(&game, self_actor.clone(), stat_actor_opt.clone());
-            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
-                stat_actor_opt,
-            ));
-            let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
-            if let Some(debug_actor) = &self.debug_actor_opt {
-                debug_actor.do_send(debug::AddMessage(format!(
-                    "Engine of id {:?} reply is: '{:?}'",
-                    self.id(),
-                    reply
-                )));
-            }
-            self_actor.do_send(reply);
-        } else {
+        if moves.is_empty() {
+            tracing::warn!("No moves available - game might be finished");
             // FIXME: Do nothing. The engine should be put asleep
-            panic!("To be implemented. When EndGame detected in game_manager, stop the engines")
+            panic!("To be implemented. When EndGame detected in game_manager, stop the engines");
         }
+        //tracing::info!(max_time = max_time.as_secs());
+        let best_move = self.iddfs_init(&game, self_actor.clone(), stat_actor_opt.clone());
+        self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
+            stat_actor_opt,
+        ));
+        let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
+        if let Some(debug_actor) = &self.debug_actor_opt {
+            debug_actor.do_send(debug::AddMessage(format!(
+                "Engine of id {:?} reply is: '{:?}'",
+                self.id(),
+                reply
+            )));
+        }
+        self_actor.do_send(reply);
     }
 }
 

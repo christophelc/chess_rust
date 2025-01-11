@@ -3,7 +3,11 @@ pub mod handler_clock;
 use actix::prelude::*;
 use std::time::Duration;
 
-use crate::entity::game::actor::game_manager;
+use crate::{entity::game::actor::game_manager, span_debug};
+
+fn span_debug() -> tracing::Span {
+    span_debug!("actor::chessclock")
+}
 
 pub type ClockActor = Addr<Clock>;
 pub struct Clock {
@@ -31,15 +35,18 @@ impl Clock {
     }
     // Start ticking every second, reducing remaining time
     fn start_ticking(&mut self, ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         // Save the handle for the ticking interval so it can be paused later
         let ticking_handle = ctx.run_interval(Duration::from_secs(1), |clock, ctx| {
             if clock.remaining_time > 0 {
                 clock.remaining_time -= 1;
                 if clock.remaining_time % 1000 == 0 {
-                    println!("Remaining time: {}", clock.remaining_time);
+                    tracing::debug!(remaining_time = clock.remaining_time);
                 }
             } else {
-                println!("No remaining time.");
+                tracing::debug!("No remaining time.");
                 clock
                     .game_actor
                     .do_send(game_manager::handler_clock::TimeOut);

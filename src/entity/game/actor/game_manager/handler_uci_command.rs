@@ -18,10 +18,15 @@ use crate::{
 use super::handler_clock;
 use super::GameManager;
 
-// if let Some(stat_actor) = &self.stat_actor_opt {
-//     let msg = stat_entity::handler_stat::StatReset;
-//     stat_actor.do_send(msg);
-// }
+use crate::{span_debug, span_error};
+
+#[allow(dead_code)]
+fn span_debug() -> tracing::Span {
+    span_debug!("game_manager::handler_uci_command")
+}
+fn span_error() -> tracing::Span {
+    span_error!("game_manager::handler_uci_command")
+}
 
 #[derive(Debug, Message)]
 #[rtype(result = "Result<(), String>")]
@@ -56,6 +61,9 @@ impl Handler<UciCommand> for GameManager {
     type Result = Result<(), String>;
 
     fn handle(&mut self, msg: UciCommand, ctx: &mut Self::Context) -> Self::Result {
+        let span = span_error();
+        let _enter = span.enter();
+
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "game_manager_actor receive command: {:?}",
@@ -318,7 +326,7 @@ impl Handler<UciCommand> for GameManager {
                                     .wait(ctx); // Wait for the future to complete within the actor context
                             }
                             Err(err) => {
-                                println!("Failed to retrieve engine actor: {:?}", err);
+                                tracing::error!("Failed to retrieve engine actor: {:?}", err);
                                 self.ts_best_move_opt = None;
                             }
                         }

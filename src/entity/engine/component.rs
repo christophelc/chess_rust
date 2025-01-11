@@ -9,5 +9,6 @@ pub mod evaluation;
 pub mod feature;
 pub mod mcts_tree;
 pub mod search_state;
+pub mod time_allocation;
 pub mod ts_best_move;
 pub mod ts_bitboard_move;

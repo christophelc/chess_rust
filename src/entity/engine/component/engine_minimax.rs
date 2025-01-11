@@ -10,7 +10,14 @@ use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
-#[derive(Debug)]
+use crate::span_debug;
+
+#[allow(dead_code)]
+fn span_debug() -> tracing::Span {
+    span_debug!("engine_minimax")
+}
+
+#[derive(Debug, Clone)]
 pub struct EngineMinimax {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -135,7 +142,6 @@ impl EngineMinimax {
         num_cpus: usize,
     ) -> Vec<Vec<bitboard::BitBoardMove>> {
         let moves = game.gen_moves();
-        println!("cpus: {}", num_cpus);
         let mut chunk_size = moves.len() / num_cpus;
         if chunk_size <= 4 {
             chunk_size = 4;

@@ -13,6 +13,12 @@ use crate::{
 
 use super::GameManager;
 
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("game_manager::handler_clock")
+}
+
 // Message to set the clocks in the Game actor
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
@@ -63,7 +69,6 @@ impl Handler<SetClocks> for GameManager {
 #[rtype(result = "Option<u64>")]
 pub struct GetClockRemainingTime(square::Color);
 
-#[cfg(test)]
 impl GetClockRemainingTime {
     pub fn new(color: square::Color) -> Self {
         GetClockRemainingTime(color)
@@ -150,6 +155,9 @@ impl Handler<StartOrSwitchClocks> for GameManager {
     type Result = ();
 
     fn handle(&mut self, msg: StartOrSwitchClocks, _ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "game_manager_actor receive {:?}",
@@ -165,7 +173,7 @@ impl Handler<StartOrSwitchClocks> for GameManager {
             }
             match color {
                 square::Color::White => {
-                    println!("Pause black, resume white");
+                    tracing::debug!("Pause black, resume white");
                     self.black_clock_actor_opt
                         .as_mut()
                         .unwrap()
@@ -176,7 +184,7 @@ impl Handler<StartOrSwitchClocks> for GameManager {
                         .do_send(chessclock::handler_clock::ResumeClock);
                 }
                 square::Color::Black => {
-                    println!("Pause white, resume black");
+                    tracing::debug!("Pause white, resume black");
                     self.black_clock_actor_opt
                         .as_mut()
                         .unwrap()
@@ -201,6 +209,9 @@ impl Handler<TimeOut> for GameManager {
     type Result = ();
 
     fn handle(&mut self, msg: TimeOut, _ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "game_manager_actor receive {:?}",
@@ -216,10 +227,10 @@ impl Handler<TimeOut> for GameManager {
                 .check_insufficient_material_for_color(color.switch(), bit_boards_white_and_black)
             {
                 game_state.set_end_game(game_state::EndGame::TimeOutDraw);
-                println!("set end game TimeOutDraw");
+                tracing::debug!("set end game TimeOutDraw");
             } else {
                 game_state.set_end_game(game_state::EndGame::TimeOutLost(color));
-                println!("set end game: TimeOutLost");
+                tracing::debug!("set end game: TimeOutLost");
             }
         } else {
             panic!("A clock has been started but no position has been set.")

@@ -7,7 +7,7 @@ use chess_actix::entity::engine::component::engine_mat;
 use chess_actix::entity::engine::component::engine_mcts;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_minimax;
-use chrono::{TimeZone, Utc, Local};
+use chrono::{Local, TimeZone, Utc};
 
 #[allow(unused_imports)]
 use entity::engine::component::engine_dummy as dummy;
@@ -34,7 +34,10 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
-const DEPTH: u8 = 3;
+use tracing_appender::rolling;
+use tracing_subscriber::{self, layer::SubscriberExt};
+
+const DEPTH: u8 = 4;
 
 #[allow(dead_code)]
 fn fen() {
@@ -158,15 +161,54 @@ async fn tui_loop(
 
 #[actix::main]
 async fn main() {
+    // for log stdout only
+    let plain_output = std::env::var("PLAIN_LOGS").unwrap_or_else(|_| "false".to_string()) == "true";    
+
+    // Initialize the global tracing subscriber
+    let file_appender = rolling::daily("./logs", "chess_rust.log");
+    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+    let (stdout_writer, _guard) = tracing_appender::non_blocking(std::io::stdout());    
+        // Use an environment filter for dynamic log level control
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    // Create a subscriber that logs to both file and stdout
+    let file_layer = tracing_subscriber::fmt::Layer::new()
+        .with_writer(file_writer)
+        .with_target(true);
+
+    let stdout_layer = tracing_subscriber::fmt::Layer::new()
+        .with_writer(stdout_writer)
+        .with_target(true)
+        .with_ansi(plain_output);
+    
+    let stdout_layer = if plain_output {
+        stdout_layer.with_timer(tracing_subscriber::fmt::time::SystemTime::default())
+    } else {
+        stdout_layer
+    };
+
+    // Combine the layers with the filter and initialize
+    let subscriber = tracing_subscriber::Registry::default()
+        .with(env_filter)
+        .with(file_layer)
+        .with(stdout_layer);
+
+    // Set the global default subscriber
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set global subscriber");
+
+
     let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
-    let timestamp = build_date.parse::<i64>().expect("BUILD_DATE should be a valid timestamp");
-    let utc_datetime = Utc.timestamp_opt(timestamp, 0)
+    let timestamp = build_date
+        .parse::<i64>()
+        .expect("BUILD_DATE should be a valid timestamp");
+    let utc_datetime = Utc
+        .timestamp_opt(timestamp, 0)
         .single()
         .expect("Invalid timestamp");
     let local_datetime = utc_datetime.with_timezone(&Local);
     let formatted_date = local_datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string();
     println!("info -> Build date: {}", formatted_date);
-
 
     let debug_actor_opt: Option<debug::DebugActor> = None;
     let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());

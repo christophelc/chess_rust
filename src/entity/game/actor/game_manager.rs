@@ -21,6 +21,12 @@ use crate::monitoring::debug;
 
 pub type GameManagerActor = Addr<GameManager>;
 
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("game_manager")
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct History {
     fen: String,
@@ -132,8 +138,11 @@ impl GameManager {
     }
 }
 
-fn async_clock_inc(debug: String, n_moves: u64, clock_actor: Addr<chessclock::Clock>) {
+fn async_clock_inc(debug_info: String, n_moves: u64, clock_actor: Addr<chessclock::Clock>) {
     use tokio::task;
+
+    let span = span_debug();
+    let _enter = span.enter();
 
     // Offload the sending to a background task
     task::spawn(async move {
@@ -141,11 +150,12 @@ fn async_clock_inc(debug: String, n_moves: u64, clock_actor: Addr<chessclock::Cl
             .send(chessclock::handler_clock::IncRemainingTime(n_moves))
             .await;
         match result {
-            Ok(response) => println!(
+            Ok(response) => tracing::debug!(
                 "Time for {} incremented successfully: {:?}",
-                debug, response
+                debug_info,
+                response
             ),
-            Err(e) => println!("Error incrementing time: {:?}", e),
+            Err(e) => tracing::debug!("Error incrementing time: {:?}", e),
         }
     });
 }

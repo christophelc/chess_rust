@@ -13,6 +13,12 @@ use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
 use crate::monitoring::debug;
 
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("engine_dispatcher")
+}
+
 pub struct EngineDispatcher {
     engine: Arc<dyn logic::Engine + Send + Sync>, // EngineActor dans un Arc
     debug_actor_opt: Option<debug::DebugActor>,
@@ -66,7 +72,11 @@ impl EngineDispatcher {
         game: &game_state::GameState,
         game_manager_actor: game_manager::GameManagerActor,
     ) {
-        self.game_manager_actor_opt = Some(game_manager_actor);
+        let span = span_debug();
+        let _enter = span.enter();
+
+        tracing::debug!("Engine {} start thinking...", self.engine.id().name());
+        self.game_manager_actor_opt = Some(game_manager_actor.clone());
         assert!(!self.is_thinking());
         self.game_opt = Some(game.clone());
         if let Some(debug_actor) = &self.debug_actor_opt {
@@ -94,12 +104,20 @@ impl EngineDispatcher {
         }
     }
     fn reset_thinking(&mut self) {
+        let span = span_debug();
+        let _enter = span.enter();
+
+        tracing::debug!("Engine {} abort thinking.", self.engine.id().name());
         self.set_is_thinking(false);
         if let Some(thread) = &self.thread_find_best_move_opt {
             thread.abort();
         }
     }
     fn stop_thinking(&mut self) {
+        let span = span_debug();
+        let _enter = span.enter();
+
+        tracing::debug!("Engine {} stop thinking.", self.engine.id().name());
         if self.is_thinking() {
             self.reset_thinking();
             self.game_opt = None;

@@ -12,7 +12,10 @@ const FACTOR_PAWN_BASE: i32 = 1000;
 pub const HALF_PAWN: i32 = FACTOR_PAWN_BASE / 2;
 const FACTOR_CONTROL_SQUARES: i32 = 10;
 
-const BITBOARD_CENTER: u64 = table::MASK_COL_D & table::MASK_ROW_4 | table::MASK_COL_D & table::MASK_ROW_5 | table::MASK_COL_E & table::MASK_ROW_4 | table::MASK_COL_E & table::MASK_ROW_5;
+const BITBOARD_CENTER: u64 = table::MASK_COL_D & table::MASK_ROW_4
+    | table::MASK_COL_D & table::MASK_ROW_5
+    | table::MASK_COL_E & table::MASK_ROW_4
+    | table::MASK_COL_E & table::MASK_ROW_5;
 
 pub fn handle_end_game_scenario(
     game: &game_state::GameState,
@@ -125,15 +128,22 @@ fn evaluate_dynamic_position(
         * FACTOR_CONTROL_SQUARES
 }
 
-fn evaluate_dynamic_position_one_side(control_squares: piece_move::ControlSquares, is_start_game: bool) -> i32 {
+fn evaluate_dynamic_position_one_side(
+    control_squares: piece_move::ControlSquares,
+    is_start_game: bool,
+) -> i32 {
     let mut score = 0;
-    let mask = bitboard::BitBoard::new(if is_start_game { BITBOARD_CENTER } else { u64::MAX });
+    let mask = bitboard::BitBoard::new(if is_start_game {
+        BITBOARD_CENTER
+    } else {
+        u64::MAX
+    });
     for piece_moves in control_squares.moves() {
         let control = *piece_moves.moves() & mask;
         let n_squares_control_except_pawns = control.count_ones();
         score += n_squares_control_except_pawns;
     }
-    let n_squares_control_pawns = (control_squares.panws_control() & mask).count_ones();    
+    let n_squares_control_pawns = (control_squares.panws_control() & mask).count_ones();
     score += score * 2 + n_squares_control_pawns;
     score as i32
 }
@@ -172,7 +182,9 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-    use crate::entity::engine::component::evaluation::{self, BITBOARD_CENTER, FACTOR_CONTROL_SQUARES};
+    use crate::entity::engine::component::evaluation::{
+        self, BITBOARD_CENTER, FACTOR_CONTROL_SQUARES,
+    };
     use crate::entity::game::component::bitboard::{piece_move, zobrist};
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
@@ -289,24 +301,24 @@ mod tests {
         let game = game_state::GameState::new(position, &zobrist_table);
 
         let (control_white, control_black) = game.gen_control_square();
-        let is_start_game = true;        
+        let is_start_game = true;
         let sc_white = evaluate_dynamic_position_one_side(control_white, is_start_game);
         assert_eq!(sc_white, 3);
-        let sc_black = evaluate_dynamic_position_one_side(control_black, is_start_game);        
+        let sc_black = evaluate_dynamic_position_one_side(control_black, is_start_game);
         assert_eq!(sc_black, 0);
 
         // The queen controls only the square d5
         let (control_white, control_black) = game.gen_control_square();
         let is_start_game = true;
-        let score = evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
+        let score =
+            evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
         assert_eq!(score, 3 * FACTOR_CONTROL_SQUARES);
 
         // The queen control plenty squares
         let (control_white, control_black) = game.gen_control_square();
         let is_start_game = false;
-        let score = evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
+        let score =
+            evaluation::evaluate_dynamic_position((control_white, control_black), is_start_game);
         assert_eq!(score, 23 * 3 * FACTOR_CONTROL_SQUARES);
-
-
     }
 }

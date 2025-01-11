@@ -10,6 +10,12 @@ use crate::entity::stat::component::stat_data;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("engine_mat")
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineMat {
     id_number: String,
@@ -265,31 +271,39 @@ impl logic::Engine for EngineMat {
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
     ) {
-        let mut stat_eval = stat_eval::StatEval::default();
-        let best_move_opt = self.mat_solver_init(
-            &game,
-            self_actor.clone(),
-            stat_actor_opt.clone(),
-            self.max_depth,
-            &mut stat_eval,
-        );
-        let best_move_opt = best_move_opt.map(|m| *m.bitboard_move());
-        self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
-            stat_actor_opt,
-        ));
-        if let Some(best_move) = best_move_opt {
-            let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
-            if let Some(debug_actor) = &self.debug_actor_opt {
-                debug_actor.do_send(debug::AddMessage(format!(
-                    "Engine of id {:?} reply is: '{:?}'",
-                    self.id(),
-                    reply
-                )));
+        let span = span_debug();
+        let _enter = span.enter();
+        let moves = logic::gen_moves(game.bit_position());
+        if !moves.is_empty() {
+            let mut stat_eval = stat_eval::StatEval::default();
+            let best_move_opt = self.mat_solver_init(
+                &game,
+                self_actor.clone(),
+                stat_actor_opt.clone(),
+                self.max_depth,
+                &mut stat_eval,
+            );
+            let best_move_opt = best_move_opt.map(|m| *m.bitboard_move());
+            self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
+                stat_actor_opt,
+            ));
+            if let Some(best_move) = best_move_opt {
+                let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
+                if let Some(debug_actor) = &self.debug_actor_opt {
+                    debug_actor.do_send(debug::AddMessage(format!(
+                        "Engine of id {:?} reply is: '{:?}'",
+                        self.id(),
+                        reply
+                    )));
+                }
+                self_actor.do_send(reply);
+            } else {
+                // No mate found, could implement a fallback strategy here
+                tracing::debug!("No mate found within depth limit {}", self.max_depth);
             }
-            self_actor.do_send(reply);
         } else {
-            // FIXME: send a message
-            println!("No mat in {} half moves or less found", self.max_depth);
+            // FIXME: Do nothing. The engine should be put asleep
+            panic!("To be implemented. When EndGame detected in game_manager, stop the engines");
         }
     }
 }

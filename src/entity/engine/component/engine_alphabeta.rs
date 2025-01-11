@@ -6,8 +6,8 @@ use super::{feature, search_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::zobrist;
-use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::game_state;
+use crate::entity::game::component::square::Switch;
 use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
@@ -19,12 +19,14 @@ pub struct EngineAlphaBeta {
     zobrist_table: zobrist::Zobrist,
     max_depth: u8,
     engine_mat_solver: engine_mat::EngineMat,
+    is_send_best_move: bool,
 }
 impl EngineAlphaBeta {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
         max_depth: u8,
+        is_send_best_move: bool,
     ) -> Self {
         assert!(max_depth >= 1 && max_depth <= search_state::MAX_DEPTH as u8);
         Self {
@@ -38,6 +40,7 @@ impl EngineAlphaBeta {
                 zobrist_table,
                 max_depth,
             ),
+            is_send_best_move,
         }
     }
     pub fn set_id_number(&mut self, id_number: &str) {
@@ -177,8 +180,10 @@ impl EngineAlphaBeta {
     ) -> bool {
         feature::FEATURE_NULL_MOVE_PRUNING
             && m.capture().is_none()
-            && is_max && beta_opt.is_some() 
-            && !is_max && alpha_opt.is_some()
+            && is_max
+            && beta_opt.is_some()
+            && !is_max
+            && alpha_opt.is_some()
             && Self::diff_opt(beta_opt, alpha_opt).unwrap_or(0) >= evaluation::HALF_PAWN
             && current_depth >= 2
             && max_depth - current_depth > 3
@@ -311,7 +316,7 @@ impl EngineAlphaBeta {
                     // best_score = min(best_score, score)
                     best_move_score_opt = Some(move_score);
                     //if current_depth == 0 { println!("{} -> best move: {}", current_depth, best_move_score_opt.as_ref().unwrap()); }
-                    if current_depth == 0 {
+                    if current_depth == 0 && self.is_send_best_move {
                         send_best_move(
                             self_actor.clone(),
                             *best_move_score_opt.as_ref().unwrap().bitboard_move(),
@@ -405,7 +410,7 @@ impl EngineAlphaBeta {
         {
             //println!("hit {:?}", move_score);
             if stat_eval.inc_n_transposition_hit() % 1_000_000 == 0 {
-                println!("hits: {}", stat_eval.n_transposition_hit());
+                tracing::debug!("hits: {}", stat_eval.n_transposition_hit());
             }
             game.play_back();
             //println!("transposition {}: {} / {} =>  {}: {}", long_algebraic_move.cast(), current_depth, max_depth, move_score.get_variant(), move_score.score());
@@ -417,8 +422,15 @@ impl EngineAlphaBeta {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
                 //println!("Rec analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // null move pruning
-                if Self::can_null_move(game, current_depth, max_depth, &m, alpha_opt, beta_opt, is_max)
-                {
+                if Self::can_null_move(
+                    game,
+                    current_depth,
+                    max_depth,
+                    &m,
+                    alpha_opt,
+                    beta_opt,
+                    is_max,
+                ) {
                     // not optimized. By computing first attackers, we will eliminate the need to play a null move first and check if it is valid
                     game.play_null_move(&self.zobrist_table);
                     if game.can_move() {
@@ -494,22 +506,27 @@ impl EngineAlphaBeta {
                     }
                 }
                 if feature::FEATURE_CAPTURE_HORIZON
-                && current_depth == max_depth
-                && game.check_status().is_check() {
-                    score_opt = Some(*self.alphabeta_inc_rec(
-                        variant,
-                        game,
-                        Some(&m),
-                        current_depth + 1,
-                        max_depth + 1,
-                        alpha_opt,
-                        beta_opt,
-                        self_actor.clone(),
-                        stat_actor_opt.clone(),
-                        stat_eval,
-                        transposition_table,
-                        state,
-                    ).score());
+                    && current_depth == max_depth
+                    && game.check_status().is_check()
+                {
+                    score_opt = Some(
+                        *self
+                            .alphabeta_inc_rec(
+                                variant,
+                                game,
+                                Some(&m),
+                                current_depth + 1,
+                                max_depth + 1,
+                                alpha_opt,
+                                beta_opt,
+                                self_actor.clone(),
+                                stat_actor_opt.clone(),
+                                stat_eval,
+                                transposition_table,
+                                state,
+                            )
+                            .score(),
+                    );
                 }
                 let score = if let Some(score) = score_opt {
                     score

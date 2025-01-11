@@ -8,11 +8,15 @@ use crate::entity::game::component::bitboard::zobrist;
 use crate::entity::game::component::square::Switch;
 use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
+use crate::span_debug;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
 const MAX_TREE_ITERATION: u64 = 1000;
-const IS_DEBUG: bool = false;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("engine_mcts")
+}
 
 #[derive(Default)]
 struct MctsStat {
@@ -40,7 +44,6 @@ pub struct EngineMcts {
     zobrist_table: zobrist::Zobrist,
     iterations_per_move: u64,
     c: f64,
-    is_debug: bool,
 }
 impl EngineMcts {
     pub fn new(
@@ -54,7 +57,6 @@ impl EngineMcts {
             zobrist_table,
             iterations_per_move,
             c: 1.0,
-            is_debug: IS_DEBUG,
         }
     }
     pub fn set_id_number(&mut self, id_number: &str) {
@@ -62,6 +64,9 @@ impl EngineMcts {
     }
 
     pub fn mcts(&self, game: &game_state::GameState) -> bitboard::BitBoardMove {
+        let span = span_debug();
+        let _enter = span.enter();
+
         let mut graph = mcts_tree::Graph::new();
         let moves = game.gen_moves();
         let root = mcts_tree::Node::build_root(game.clone(), &moves);
@@ -69,7 +74,7 @@ impl EngineMcts {
         let mut mcts_stat = MctsStat::default();
         for i in 0..MAX_TREE_ITERATION {
             if i % 100 == 0 {
-                println!("tree iteration number: {}", i);
+                tracing::debug!("tree iteration number: {}", i);
             }
             self.mcts_run(&mut graph, root_id, &mut mcts_stat);
         }
@@ -87,9 +92,9 @@ impl EngineMcts {
                 .iter()
                 .map(|n_idx| graph[*n_idx].visits())
                 .sum();
-            println!("total visits in children level 1: {}", total);
-            println!("total visits root: {}", graph[root_id].visits());
-            println!("{}", mcts_stat);
+            tracing::debug!("total visits in children level 1: {}", total);
+            tracing::debug!("total visits root: {}", graph[root_id].visits());
+            tracing::debug!("{}", mcts_stat);
             best_move
         } else {
             panic!("No move found")
@@ -101,15 +106,16 @@ impl EngineMcts {
         node_id: mcts_tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         if graph[node_id].is_terminal() {
             let (n_white_wins, n_black_wins) = Self::evaluate_end_game(graph[node_id].game());
             self.mcts_back_propagation(graph, node_id, n_white_wins, n_black_wins);
         } else {
             let node = &graph[node_id];
             if node.untried_moves().is_empty() {
-                if self.is_debug {
-                    println!("selection")
-                };
+                tracing::debug!("selection");
                 if node.children().is_empty() {
                     // generate moves
                     let moves = graph[node_id].game().gen_moves();
@@ -118,21 +124,18 @@ impl EngineMcts {
                         .filter(|m| m.capture() == Some(square::TypePiece::King))
                         .collect();
                     if !invalid_move.is_empty() {
-                        println!("{}", graph[node_id].game().bit_position().to().chessboard());
+                        tracing::debug!(
+                            "{}",
+                            graph[node_id].game().bit_position().to().chessboard()
+                        );
                     }
                     graph[node_id].set_untried_moves(moves);
                 } else {
                     // selection: all moves have been expanded: select the best ucb1 score
                     match mcts_tree::Node::argmax(graph, node.children(), self.c) {
-                        None => {
-                            if self.is_debug {
-                                println!("not found")
-                            }
-                        }
+                        None => tracing::debug!("not found"),
                         Some(idx) => {
-                            if self.is_debug {
-                                println!("found")
-                            };
+                            tracing::debug!("found");
                             let selected_node_idx = node.children().get(idx).unwrap();
                             self.mcts_run(graph, *selected_node_idx, mcts_stat)
                         }
@@ -142,9 +145,7 @@ impl EngineMcts {
             } else {
                 // expansion: add an untried move as a child
                 let expanded_node_idx = self.exploration(graph, node_id);
-                if self.is_debug {
-                    println!("simulation")
-                };
+                tracing::debug!("simulation");
                 let (n_white_wins, n_black_wins) =
                     self.mcts_simulation(graph, expanded_node_idx, mcts_stat);
                 self.mcts_back_propagation(graph, expanded_node_idx, n_white_wins, n_black_wins);
@@ -158,9 +159,7 @@ impl EngineMcts {
     ) -> mcts_tree::NodeIdx {
         let mut rng = rand::thread_rng();
         let node = &graph[node_id];
-        if self.is_debug {
-            println!("exploration / {}", node.untried_moves().len())
-        };
+        tracing::debug!("exploration / {}", node.untried_moves().len());
         let random_index = rng.gen_range(0..node.untried_moves().len()); // Random index
         mcts_tree::Node::exploration(graph, node_id, random_index, &self.zobrist_table)
     }
@@ -197,9 +196,6 @@ impl EngineMcts {
             let m = moves[random_index];
             let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
             let _ = game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false);
-            if self.is_debug {
-                //println!("{}", game.bit_position().to().chessboard());
-            }
             game.update_endgame_status();
         }
         mcts_stat.inc(
@@ -228,9 +224,10 @@ impl EngineMcts {
         n_white_wins: u64,
         n_black_wins: u64,
     ) {
-        if self.is_debug {
-            println!("back propagation\n")
-        };
+        let span = span_debug();
+        let _enter = span.enter();
+
+        tracing::debug!("back propagation\n");
         // FIXME: check if player_turm is the opposite
         let player_turn = graph[node_id]
             .game()
@@ -245,16 +242,14 @@ impl EngineMcts {
         graph[node_id].inc_stat(n_wins, self.iterations_per_move);
         let mut node_iter = node_id;
         while let Some(node_id) = graph[node_iter].parent() {
-            if self.is_debug {
-                println!(
-                    "inc {:?} {}/{} -> node updated = {}/{}",
-                    node_id,
-                    n_wins,
-                    self.iterations_per_move,
-                    graph[node_id].n_wins(),
-                    graph[node_id].visits()
-                )
-            };
+            tracing::debug!(
+                "inc {:?} {}/{} -> node updated = {}/{}",
+                node_id,
+                n_wins,
+                self.iterations_per_move,
+                graph[node_id].n_wins(),
+                graph[node_id].visits()
+            );
             graph[node_id].inc_stat(n_wins, self.iterations_per_move);
             node_iter = node_id;
         }

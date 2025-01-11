@@ -12,6 +12,12 @@ pub type NodeIdx = petgraph::graph::NodeIndex;
 pub type Graph = petgraph::graph::Graph<Node, EdgeMove>;
 pub struct EdgeMove(pub bitboard::BitBoardMove);
 
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("mcts_tree")
+}
+
 #[derive(Debug, Clone)]
 pub struct Node {
     index: Option<NodeIdx>,
@@ -131,6 +137,9 @@ impl Node {
         idx: usize,
         zobrist_table: &zobrist::Zobrist,
     ) -> NodeIdx {
+        let span = span_debug();
+        let _enter = span.enter();
+
         assert!(idx < graph[node_idx].untried_moves.len());
         let selected_move = graph[node_idx].untried_moves.swap_remove(idx);
         let long_algebraic_move =
@@ -147,7 +156,11 @@ impl Node {
         graph.add_edge(graph[node_idx].index.unwrap(), child_id, edge_move);
         // Update the parent's children list
         graph[node_idx].children.push(child_id);
-        //println!("node {:?} updated -> children: {:?}", node_idx, graph[node_idx].children());
+        tracing::debug!(
+            "node {:?} updated -> children: {:?}",
+            node_idx,
+            graph[node_idx].children()
+        );
         child_id
     }
 }
@@ -177,7 +190,7 @@ fn display_tree_to_file(
     level: i8,
     file: &mut std::fs::File,
 ) {
-    // Vérifier si le nœud est une feuille (pas de voisins sortants)
+    // Leaf ?
     if graph
         .neighbors_directed(node, petgraph::Direction::Outgoing)
         .next()
@@ -189,7 +202,7 @@ fn display_tree_to_file(
         let output = format!("{:indent$}{} {}\n", "", level, graph[node], indent = indent);
         let _ = file.write_all(output.as_bytes());
         if level < 5 {
-            // Parcourir les nœuds enfants (successeurs)
+            // Iterate over children
             for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
                 display_tree(graph, neighbor, indent + 3, level + 1);
                 // Augmenter l'indentation pour les enfants
@@ -199,6 +212,9 @@ fn display_tree_to_file(
 }
 
 pub fn display_tree(graph: &Graph, node: NodeIdx, indent: usize, level: i8) {
+    let span = span_debug();
+    let _enter = span.enter();
+
     let mut m_as_str: String = "".to_string();
     if let Some(parent) = graph[node].parent() {
         if let Some(edge_index) = graph.find_edge(parent, node) {
@@ -230,7 +246,7 @@ pub fn display_tree(graph: &Graph, node: NodeIdx, indent: usize, level: i8) {
                 graph[node],
                 indent = indent
             );
-            println!("{}", output);
+            tracing::debug!("{}", output);
         }
         if level < 5 {
             // Parcourir les nœuds enfants (successeurs)

@@ -1,6 +1,11 @@
 use actix::{ActorContext, AsyncContext, Context, Handler, Message};
 
 use super::Clock;
+use crate::span_debug;
+
+fn span_debug() -> tracing::Span {
+    span_debug!("chessclock::handler_clock")
+}
 
 // Define a message to set the remaining time
 #[derive(Debug, Message)]
@@ -17,6 +22,9 @@ impl Handler<SetRemainingTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: SetRemainingTime, _ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         self.remaining_time = msg.new_time;
         println!("Clock time set to: {}", self.remaining_time);
     }
@@ -30,10 +38,14 @@ impl Handler<IncRemainingTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: IncRemainingTime, _ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         self.remaining_time += msg.0 * self.inc_time;
-        println!(
+        tracing::debug!(
             "Clock id '{}' time set to: {} after increment",
-            self.id, self.remaining_time
+            self.id,
+            self.remaining_time
         );
     }
 }
@@ -52,8 +64,11 @@ impl Handler<SetIncTime> for Clock {
     type Result = ();
 
     fn handle(&mut self, msg: SetIncTime, _ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         self.inc_time = msg.0;
-        println!("Clock inc time set to: {}", self.inc_time);
+        tracing::debug!("Clock inc time set to: {}", self.inc_time);
     }
 }
 
@@ -66,9 +81,12 @@ impl Handler<PauseClock> for Clock {
     type Result = ();
 
     fn handle(&mut self, _msg: PauseClock, ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         if let Some(handle) = self.ticking_handle.take() {
             ctx.cancel_future(handle); // Cancel the ticking interval to pause the clock
-            println!("Clock paused");
+            tracing::debug!("Clock paused");
         }
     }
 }
@@ -82,9 +100,12 @@ impl Handler<ResumeClock> for Clock {
     type Result = ();
 
     fn handle(&mut self, _msg: ResumeClock, ctx: &mut Context<Self>) {
+        let span = span_debug();
+        let _enter = span.enter();
+
         if self.ticking_handle.is_none() {
             self.start_ticking(ctx); // Resume ticking if it was paused
-            println!("Clock resumed");
+            tracing::debug!("Clock resumed");
         }
     }
 }
