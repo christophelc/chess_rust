@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
@@ -63,6 +66,7 @@ impl EngineIddfs {
         b_move_score: &mut score::BitboardMoveScore,
         max_depth: u8,
         state: &mut search_state::SearchState,
+        is_stop: &Arc<AtomicBool>,
     ) {
         let window_aspiration = evaluation::HALF_PAWN;
 
@@ -83,6 +87,7 @@ impl EngineIddfs {
                 stat_eval,
                 transposition_table,
                 state,
+                is_stop,
             );
         }
         if let Some(alpha) = alpha_opt {
@@ -98,6 +103,7 @@ impl EngineIddfs {
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
+        is_stop: &Arc<AtomicBool>,
     ) -> bitboard::BitBoardMove {
         let span = span_debug();
         let _enter = span.enter();
@@ -119,6 +125,7 @@ impl EngineIddfs {
                 stat_actor_opt.clone(),
                 self.max_depth,
                 &mut stat_eval,
+                is_stop,
             )
         } else {
             None
@@ -134,6 +141,10 @@ impl EngineIddfs {
         tracing::info!("Starting iterative deepening search");
         // Boucle principale
         for max_depth in 1..=self.max_depth {
+            if is_stop.load(Ordering::Relaxed) {
+                tracing::debug!("Iddf detected interrupt before evaluation at max_depth {}", max_depth);
+                break;
+            }
             tracing::info!("Starting iteration at depth: {}", max_depth);
             let alphabeta_start = std::time::Instant::now();
             // evaluate move with aplha beta
@@ -150,6 +161,7 @@ impl EngineIddfs {
                 &mut stat_eval,
                 &mut transposition_table,
                 &mut state,
+                is_stop,
             );
             tracing::info!(
                 "Completed alphabeta at depth {} in {:?}, positions evaluated: {}, transpositions: {}",
@@ -171,6 +183,7 @@ impl EngineIddfs {
                     &mut b_move_score,
                     max_depth,
                     &mut state,
+                    is_stop,
                 );
                 tracing::debug!(
                     "Aspiration window completed in {:?}",
@@ -187,6 +200,10 @@ impl EngineIddfs {
                     stat_eval.n_positions_evaluated(),
                 );
                 stat_actor.do_send(msg);
+            }
+            if is_stop.load(Ordering::Relaxed) {
+                tracing::debug!("Iddf detected interrupt after evaluation of max_depth {}", max_depth);                
+                break;
             }
             //println!("best variant found: {}", b_move_score.get_variant());
             send_best_move(self_actor.clone(), *b_move_score.bitboard_move());
@@ -208,8 +225,17 @@ impl EngineIddfs {
 
             b_move_score_opt = Some(b_move_score);
         }
-
-        tracing::info!("IDDFS completed all iterations");
+        if is_stop.load(Ordering::Relaxed) {
+            tracing::debug!("IDDFS interrupted.");
+            if let Some(b_move_score) = b_move_score_opt.as_ref() {
+                tracing::debug!("Best move: {}", *b_move_score);                
+                send_best_move(self_actor.clone(), *b_move_score.bitboard_move());            
+            } else {
+                tracing::debug!("No best move found");
+            }
+        } else {
+            tracing::debug!("IDDFS completed all iterations");
+        }
         b_move_score_opt.map_or_else(
             || {
                 tracing::error!("No valid move found in IDDFS!");
@@ -246,6 +272,7 @@ impl logic::Engine for EngineIddfs {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,
     ) {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
@@ -255,10 +282,12 @@ impl logic::Engine for EngineIddfs {
             panic!("To be implemented. When EndGame detected in game_manager, stop the engines");
         }
         //tracing::info!(max_time = max_time.as_secs());
-        let best_move = self.iddfs_init(&game, self_actor.clone(), stat_actor_opt.clone());
+        let best_move = self.iddfs_init(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
+        tracing::debug!("Send EngineStopThinking");        
         self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
             stat_actor_opt,
         ));
+        tracing::debug!("Send EngineEndOfAnalysis");
         let reply = dispatcher::handler_engine::EngineEndOfAnalysis(best_move);
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(

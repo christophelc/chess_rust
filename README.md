@@ -55,6 +55,8 @@ The evaluation of a position is very basic. It is based on:
 - End games evaluation: a draw game is worth 0, a white mat is worth +∞ and a black mat is worth -∞. And we detect position with insufficient material like King and Knight agains King.
 - To force a draw, we added a bonus / malus. 
 
+There is Time management: this is a prerequiste to make tournaments against other computers. The algorithm is very basic as a first implementation.
+
 ### Forcing a draw
 
 Let us consider the following position using the FEN notation: 
@@ -72,6 +74,10 @@ If we want Black to take the pawn by playing the move ```81 Kxh7```, we have to 
 To compute controlled squares for both sides, we generate moves for Rook, Bishop, Knight, Queen and King. We just do not consider check.
 
 For pawns, we generate attacked squares by using bitwise operations directly on the pawn bitboard.
+
+### Logs
+
+Logs are generated under logs/
 
 ## TODO
 
@@ -100,8 +106,6 @@ Example of position: ```r4q1r/1b1kn3/p2p4/2pp1N1p/8/2PB4/P1P1QPPP/4R1K1 w - - 2 
 	- Set max_depth first
 	- Add other parameters for making tuning easier (enable / disable some heuristics for example)
 
-- Time management: this is a prerequiste to make tournaments against other computers. We do not want to lose a game just because of lack of time.
-
 - Reuse generated moves for Rook, Bishop, Knight, Queen during the controlled squares computation:
 	- To generate moves for one side more efficiently
 	- To filter legal moves (a move is legal if the king of the current player is not anymore under attack after the move)
@@ -129,9 +133,8 @@ Before going further, we need to be able to evaluate the strengh of our engine. 
 
 ### Preparation
 
-- Step 1: Add time management
-- Step 2: Make max_depth and heuristics configurable
-- Step 3: Benchmark the engine on several positions
+- Step 1: Make max_depth and heuristics configurable
+- Step 2: Benchmark the engine on several positions
 	- Use EPD (extended Position Description) test suites
 		- manage EPD format (FEN + am, bm, id)
 		- Compute a score based on the results:
@@ -142,7 +145,7 @@ Before going further, we need to be able to evaluate the strengh of our engine. 
 		- Game result: win, draw, loss
 		- Time to play for each side
 		
-- Step 4: Add AI.
+- Step 3: Add AI.
 
 ### Add time management
 

@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::entity::uci::component::event;
+use crate::entity::uci::component::{command::parser, event};
 use crate::entity::{game::actor::game_manager, stat::actor::stat_entity};
 use crate::monitoring::debug;
 
@@ -49,6 +49,24 @@ impl UciEntity {
             debug_actor_opt,
             stat_actor_opt,
         }
+    }
+    fn parse_input(&self, input: &str, self_uci_actor: Addr<UciEntity>) -> Vec<String> {
+        let mut errors: Vec<String> = vec![];        
+        let parser = parser::InputParser::new(&input, self.game_manager_actor.clone());
+        let command_or_error = parser.parse_input();
+        match command_or_error {
+            Ok(command) => {
+                if let Some(debug_actor) = &self.debug_actor_opt {
+                    debug_actor.do_send(debug::AddMessage(format!(
+                        "input '{}' send as command '{:?}' to uci_actor",
+                        input, command
+                    )));
+                }
+                self_uci_actor.do_send(command);
+            }
+            Err(err) => errors.push(err.to_string()),
+        }
+        errors
     }
 }
 

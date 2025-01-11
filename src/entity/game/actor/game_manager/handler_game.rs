@@ -4,7 +4,6 @@ use crate::{
     entity::{
         engine::component::{ts_best_move, ts_bitboard_move},
         game::component::{bitboard, game_state, parameters},
-        uci::actor::uci_entity,
     },
     monitoring::debug,
     ui::notation::long_notation,
@@ -12,43 +11,6 @@ use crate::{
 
 use super::GameManager;
 use crate::entity::engine::component::engine_logic as logic;
-
-#[derive(Debug, Message)]
-#[rtype(result = "()")]
-pub struct GetBestMoveFromUci {
-    uci_caller: uci_entity::UciActor,
-}
-impl GetBestMoveFromUci {
-    pub fn new(uci_caller: uci_entity::UciActor) -> Self {
-        Self { uci_caller }
-    }
-}
-
-impl Handler<GetBestMoveFromUci> for GameManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: GetBestMoveFromUci, _ctx: &mut Self::Context) -> Self::Result {
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(
-                "game_manager_actor receive GetBestMoveFromUci".to_string(),
-            ));
-        }
-        let engine_still_thinking = false;
-        let reply = uci_entity::handler_uci::UciResult::DisplayBestMove(
-            self.ts_best_move_opt.clone(),
-            !engine_still_thinking,
-        );
-        if let Some(debug_actor) = &self.debug_actor_opt {
-            debug_actor.do_send(debug::AddMessage(format!(
-                "game_manager_actor send to uci entity: '{:?}'",
-                reply
-            )));
-        }
-        msg.uci_caller.do_send(reply);
-    }
-}
-
-pub struct SendBestMoveToUci;
 
 #[derive(Debug, Message)]
 #[rtype(result = "Option<ts_best_move::TimestampedBestMove>")]

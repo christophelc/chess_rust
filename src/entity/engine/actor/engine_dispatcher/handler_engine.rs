@@ -1,4 +1,7 @@
-use actix::{Handler, Message};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use actix::{Arbiter, AsyncContext, Handler, Message};
 
 use crate::entity::engine::component::{engine_logic as logic, ts_best_move, ts_bitboard_move};
 use crate::entity::game::component::game_state;
@@ -100,6 +103,7 @@ impl Handler<EngineEndOfAnalysis> for EngineDispatcher {
     type Result = ();
 
     fn handle(&mut self, msg: EngineEndOfAnalysis, _ctx: &mut Self::Context) -> Self::Result {
+        tracing::debug!("Received end of analysis");
         self.reset_thinking();
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
@@ -132,9 +136,13 @@ impl Handler<EngineEndOfAnalysis> for EngineDispatcher {
                 forward
             )));
         }
+        tracing::debug!("uci_caller is {:?}", &self.uci_caller_opt);
         if let Some(uci_caller) = &self.uci_caller_opt {
+            tracing::debug!("Sending bestmove to uci");
             uci_caller.do_send(forward);
             self.set_best_move(Some(msg.0));
+        } else {
+            tracing::debug!("No uci defined. Cannot send best move to uci.");
         }
     }
 }
@@ -194,6 +202,110 @@ impl Handler<EngineSetStatus> for EngineDispatcher {
             )));
         }
         self.engine_status = msg.0;
+    }
+}
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct EngineInit;
+
+impl Handler<EngineInit> for EngineDispatcher {
+    type Result = ();
+
+    fn handle(&mut self, _msg: EngineInit, _ctx: &mut Self::Context) -> Self::Result {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_flag_clone = Arc::clone(&stop_flag);
+        // start non blocking task find_best_move
+        let self_actor = self.self_actor_opt.as_ref().unwrap().clone();
+        let stat_actor_opt = self.stat_actor_opt.as_ref().cloned();
+        let game_clone = self.game_opt.as_ref().unwrap().clone();
+        let engine = self.engine.clone();
+        tracing::debug!("Calling engine");
+        actix::Arbiter::spawn(
+            &Arbiter::new(),
+            async move {
+            tracing::debug!("Start computing");
+            engine.find_best_move(self_actor, stat_actor_opt, game_clone, &stop_flag_clone);
+            //thread::sleep(std::time::Duration::from_secs(10));
+            tracing::debug!("End computing");            
+        });
+        self.stop_flag = stop_flag;
+    }
+}
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct TimeoutCheck {
+    timeout: std::time::Duration,
+    thinking_id: u64,
+}
+impl TimeoutCheck {
+    pub fn new(timeout: std::time::Duration, thinking_id: u64) -> Self {
+        Self {
+            timeout,
+            thinking_id,
+        }
+    }
+}
+
+impl Handler<TimeoutCheck> for EngineDispatcher {
+    type Result = ();
+
+    fn handle(&mut self, msg: TimeoutCheck, _ctx: &mut Self::Context) -> Self::Result {
+        tracing::debug!("Timeout check triggered");
+        let stop_flag = Arc::clone(&self.stop_flag);
+        let current_thinking_id = self.thinking_id;
+        actix::Arbiter::spawn(
+            &Arbiter::new(),
+            async move {
+            tracing::debug!("Sleeping {:?}", msg.timeout);
+            tokio::time::sleep(msg.timeout).await;
+            tracing::debug!("current thinking_id {} vs previous thinking_id {}", current_thinking_id, msg.thinking_id);
+            if msg.thinking_id == current_thinking_id {
+                tracing::debug!("Timeout reached: stopping the engine.");
+                stop_flag.store(true, Ordering::SeqCst);
+            }
+        });
+    }
+}
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct EngineInitTimeLimit {
+    game: game_state::GameState
+}
+
+impl EngineInitTimeLimit {
+    pub fn new(game: &game_state::GameState) -> Self {
+        Self {
+            game: game.clone()
+        }
+    }
+}
+
+impl Handler<EngineInitTimeLimit> for EngineDispatcher {
+    type Result = ();
+
+    fn handle(&mut self, msg: EngineInitTimeLimit, ctx: &mut Self::Context) -> Self::Result {
+        tracing::debug!("Initializing engine with time limit");
+        
+        // Store game state and setup initial configuration
+        self.game_opt = Some(msg.game.clone());
+        let game_manager_actor = self.game_manager_actor_opt.as_ref().unwrap().clone();
+        let player_turn = msg.game.bit_position().bit_position_status().player_turn();
+        
+        // Schedule the timeout check
+        let fut = Self::get_max_time_for_move(game_manager_actor, msg.game.clone(), player_turn);
+        let ctx_addr = ctx.address();
+        let thinking_id = self.thinking_id;
+        actix::spawn(async move {
+            if let Some(max_time) = fut.await {
+                tracing::debug!("Scheduling timeout for {} seconds", max_time.as_secs());
+                ctx_addr.do_send(TimeoutCheck::new(max_time, thinking_id));
+            } else {
+                tracing::warn!("Could not determine max time for move.");
+            }
+        });
     }
 }
 
@@ -262,6 +374,7 @@ impl Handler<EngineStopThinking> for EngineDispatcher {
 
     fn handle(&mut self, msg: EngineStopThinking, _ctx: &mut Self::Context) {
         if let Some(debug_actor) = &self.debug_actor_opt {
+            tracing::debug!("Receive EngineStopThinking");
             debug_actor.do_send(debug::AddMessage(format!(
                 "EngineDispatcher for engine id {:?} receive {:?}",
                 self.engine.id(),

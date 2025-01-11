@@ -79,6 +79,9 @@ impl Handler<GetClockRemainingTime> for GameManager {
     type Result = ResponseFuture<Option<u64>>;
 
     fn handle(&mut self, msg: GetClockRemainingTime, _ctx: &mut Self::Context) -> Self::Result {
+        let span = span_debug();
+        let _enter = span.enter();
+        tracing::debug!("Clock receive msg {:?}", msg);
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "game_manager_actor receive {:?}",

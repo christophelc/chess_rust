@@ -38,7 +38,7 @@ impl DebugEntity {
     pub fn push(&mut self, message: DebugMessage) {
         let debug_data = DebugData::new(message);
         if self.is_show {
-            println!("debug => {}", debug_data);
+            tracing::debug!("debug => {}", debug_data);
         }
         self.stack.push(debug_data);
     }

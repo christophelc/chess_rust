@@ -37,7 +37,7 @@ impl Handler<ProcessEvents> for UciEntity {
                     }
                     Err(e) => {
                         // Handle error
-                        println!("Failed to send event: {:?}", e);
+                        tracing::error!("Failed to send event: {:?}", e);
                     }
                 }
             }

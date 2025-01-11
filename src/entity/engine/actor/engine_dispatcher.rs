@@ -1,14 +1,14 @@
 pub mod handler_engine;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use actix::prelude::*;
-use tokio::task::{spawn_local, JoinHandle};
+use crate::entity::engine::component::{engine_logic as logic, time_allocation, ts_bitboard_move};
 
-use crate::entity::engine::component::{engine_logic as logic, ts_bitboard_move};
 use crate::entity::game::actor::game_manager;
 use crate::entity::game::component::bitboard::BitBoardMove;
-use crate::entity::game::component::game_state;
+use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
 use crate::monitoring::debug;
@@ -29,7 +29,8 @@ pub struct EngineDispatcher {
     self_actor_opt: Option<Addr<EngineDispatcher>>,
     game_manager_actor_opt: Option<game_manager::GameManagerActor>,
     game_opt: Option<game_state::GameState>, // initial game to be played
-    thread_find_best_move_opt: Option<JoinHandle<()>>,
+    thinking_id: u64,
+    stop_flag: Arc<AtomicBool>,
 }
 impl EngineDispatcher {
     pub fn new(
@@ -47,7 +48,8 @@ impl EngineDispatcher {
             ts_best_move_opt: None,
             self_actor_opt: None,
             game_opt: None,
-            thread_find_best_move_opt: None,
+            thinking_id: 0,
+            stop_flag: Arc::new(AtomicBool::new(false)),
         }
     }
     fn get_best_move(&self) -> Option<ts_bitboard_move::TimestampedBitBoardMove> {
@@ -67,6 +69,24 @@ impl EngineDispatcher {
         self.engine_status.is_thinking()
     }
 
+    async fn get_max_time_for_move(
+        game_manager_actor: game_manager::GameManagerActor,
+        game: game_state::GameState,
+        player_turn: square::Color,
+    ) -> Option<std::time::Duration> {
+        tracing::debug!("start get_max_time_for_move...");        
+        let result = game_manager_actor
+        .send(game_manager::handler_clock::GetClockRemainingTime::new(
+            player_turn,
+        ))
+        .await;
+        tracing::debug!("end get_max_time_for_move: {:?}", result);        
+        match result {
+                Ok(clock_opt) => time_allocation::estimate_time_allocation(clock_opt, &game),
+                Err(err) => panic!("{:?}", err)
+        }
+    }
+
     fn start_thinking(
         &mut self,
         game: &game_state::GameState,
@@ -74,7 +94,7 @@ impl EngineDispatcher {
     ) {
         let span = span_debug();
         let _enter = span.enter();
-
+        self.thinking_id += 1;
         tracing::debug!("Engine {} start thinking...", self.engine.id().name());
         self.game_manager_actor_opt = Some(game_manager_actor.clone());
         assert!(!self.is_thinking());
@@ -87,15 +107,9 @@ impl EngineDispatcher {
         }
         self.engine_status = self.engine_status.clone().set_is_thinking(true);
 
-        // start non blocking task find_best_move
-        let self_actor = self.self_actor_opt.as_ref().unwrap().clone();
-        let stat_actor_opt = self.stat_actor_opt.as_ref().cloned();
-        let game = game.clone();
-        let engine = self.engine.clone();
-        let thread_find_best_move = spawn_local(async move {
-            engine.find_best_move(self_actor, stat_actor_opt, game);
-        });
-        self.thread_find_best_move_opt = Some(thread_find_best_move);
+        self.self_actor_opt.as_ref().unwrap().do_send(handler_engine::EngineInitTimeLimit::new(game));
+        self.self_actor_opt.as_ref().unwrap().do_send(handler_engine::EngineInit);
+
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(
                 "Start find best move for Engine id {:?}.",
@@ -108,10 +122,11 @@ impl EngineDispatcher {
         let _enter = span.enter();
 
         tracing::debug!("Engine {} abort thinking.", self.engine.id().name());
+        self.set_stop_flag(true);
         self.set_is_thinking(false);
-        if let Some(thread) = &self.thread_find_best_move_opt {
-            thread.abort();
-        }
+    }
+    fn set_stop_flag(&mut self, value: bool) {
+        self.stop_flag.store(value, Ordering::SeqCst);
     }
     fn stop_thinking(&mut self) {
         let span = span_debug();

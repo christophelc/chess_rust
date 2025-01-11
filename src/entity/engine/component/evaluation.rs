@@ -183,9 +183,9 @@ mod tests {
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
     use crate::entity::engine::component::evaluation::{
-        self, BITBOARD_CENTER, FACTOR_CONTROL_SQUARES,
+        self, FACTOR_CONTROL_SQUARES,
     };
-    use crate::entity::game::component::bitboard::{piece_move, zobrist};
+    use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(score, 6);
     }
 
-    use crate::entity::game::component::{game_state, square};
+    use crate::entity::game::component::game_state;
     #[cfg(test)]
     async fn get_game_state(
         game_manager_actor: &game_manager::GameManagerActor,
@@ -238,6 +238,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
+            false,
         );
         engine_player1.set_id_number("white");
         let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
@@ -250,6 +251,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
+            false,
         );
         engine_player2.set_id_number("black");
         let engine_player2_dispatcher = dispatcher::EngineDispatcher::new(

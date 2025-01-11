@@ -54,8 +54,12 @@ impl Handler<UciResult> for UciEntity {
                         debug_actor.do_send(debug::AddMessage(msg.to_string()));
                     }
                     if is_show {
-                        let _ = writeln!(self.stdout, "{}", msg);
-                        self.stdout.flush().unwrap();
+                        tracing::debug!("writing bestmove");
+                        let mut handle = std::io::BufWriter::new(io::stdout());                         
+                        //let mut handle = self.stdout.lock();
+                        writeln!(handle, "{}", msg).unwrap(); // Write message with a newline
+                        handle.flush().unwrap();
+                        tracing::debug!("done");
                     }
                 }
             }

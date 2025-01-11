@@ -26,7 +26,7 @@ impl Handler<SetRemainingTime> for Clock {
         let _enter = span.enter();
 
         self.remaining_time = msg.new_time;
-        println!("Clock time set to: {}", self.remaining_time);
+        tracing::debug!("Clock time set to: {}", self.remaining_time);
     }
 }
 

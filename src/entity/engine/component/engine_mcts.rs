@@ -1,6 +1,8 @@
 use actix::Addr;
 use rand::Rng;
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::{engine_logic as logic, mcts_tree};
@@ -63,7 +65,7 @@ impl EngineMcts {
         self.id_number = id_number.to_string();
     }
 
-    pub fn mcts(&self, game: &game_state::GameState) -> bitboard::BitBoardMove {
+    pub fn mcts(&self, game: &game_state::GameState, is_stop: &Arc<AtomicBool>) -> bitboard::BitBoardMove {
         let span = span_debug();
         let _enter = span.enter();
 
@@ -73,6 +75,9 @@ impl EngineMcts {
         let root_id = mcts_tree::add_node_to_graph(&mut graph, root.clone());
         let mut mcts_stat = MctsStat::default();
         for i in 0..MAX_TREE_ITERATION {
+            if is_stop.load(Ordering::Relaxed) {
+                break;
+            }
             if i % 100 == 0 {
                 tracing::debug!("tree iteration number: {}", i);
             }
@@ -278,10 +283,11 @@ impl logic::Engine for EngineMcts {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,        
     ) {
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.mcts(&game);
+            let best_move = self.mcts(&game, is_stop);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));

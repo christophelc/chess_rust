@@ -18,6 +18,7 @@ use chess_actix::{entity, monitoring, ui};
 use actix::Actor;
 use entity::game::actor::game_manager;
 use entity::game::component::square;
+use tokio::io::AsyncBufReadExt as _;
 use std::env;
 use std::io;
 use std::sync::Arc;
@@ -36,8 +37,10 @@ use ui::notation::{fen, san};
 
 use tracing_appender::rolling;
 use tracing_subscriber::{self, layer::SubscriberExt};
+use tokio::sync::mpsc;
 
 const DEPTH: u8 = 4;
+const LOG_FILE_ONLY: bool = false;
 
 #[allow(dead_code)]
 fn fen() {
@@ -161,42 +164,47 @@ async fn tui_loop(
 
 #[actix::main]
 async fn main() {
-    // for log stdout only
-    let plain_output = std::env::var("PLAIN_LOGS").unwrap_or_else(|_| "false".to_string()) == "true";    
+    // default to debug if PLAIN_LOGS undefined
+    let plain_output =
+        std::env::var("PLAIN_LOGS").unwrap_or_else(|_| "false".to_string()) == "true";
 
     // Initialize the global tracing subscriber
     let file_appender = rolling::daily("./logs", "chess_rust.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
-    let (stdout_writer, _guard) = tracing_appender::non_blocking(std::io::stdout());    
-        // Use an environment filter for dynamic log level control
+
+    // Use an environment filter for dynamic log level control
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
     // Create a subscriber that logs to both file and stdout
     let file_layer = tracing_subscriber::fmt::Layer::new()
         .with_writer(file_writer)
         .with_target(true);
 
-    let stdout_layer = tracing_subscriber::fmt::Layer::new()
-        .with_writer(stdout_writer)
-        .with_target(true)
-        .with_ansi(plain_output);
-    
-    let stdout_layer = if plain_output {
-        stdout_layer.with_timer(tracing_subscriber::fmt::time::SystemTime::default())
+    if !LOG_FILE_ONLY {
+        let (stdout_writer, _guard) = tracing_appender::non_blocking(std::io::stdout());
+        let stdout_layer = tracing_subscriber::fmt::Layer::new()
+            .with_writer(stdout_writer)
+            .with_target(true)
+            .with_ansi(plain_output);
+        let stdout_layer = if plain_output {
+            stdout_layer.with_timer(tracing_subscriber::fmt::time::SystemTime::default())
+        } else {
+            stdout_layer
+        };
+
+        // Combine the layers with the filter and initialize
+        let subscriber = tracing_subscriber::Registry::default()
+            .with(env_filter)
+            .with(file_layer)
+            .with(stdout_layer);
+        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");        
     } else {
-        stdout_layer
-    };
-
-    // Combine the layers with the filter and initialize
-    let subscriber = tracing_subscriber::Registry::default()
-        .with(env_filter)
-        .with(file_layer)
-        .with(stdout_layer);
-
-    // Set the global default subscriber
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Failed to set global subscriber");
-
+        let subscriber = tracing_subscriber::Registry::default()
+            .with(env_filter)
+            .with(file_layer);
+        // Set the global default subscriber
+        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
+    }
 
     let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
     let timestamp = build_date
@@ -262,12 +270,36 @@ async fn main() {
         //test(&game_actor).await;
         println!("Enter an uci command:");
 
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        // Spawn a task to handle async stdin reading
+        tokio::spawn(async move {
+            let stdin = tokio::io::stdin(); // Async stdin
+            let mut reader = tokio::io::BufReader::new(stdin).lines(); // Buffered line reader
+    
+            while let Ok(Some(line)) = reader.next_line().await {
+                if tx.send(line).is_err() {
+                    break; // Exit if the receiver is dropped
+                }
+            }
+        });
+    
+        // Main loop
         loop {
-            let _r = uci_entity_actor
-                .send(uci_entity::handler_read::ReadUserInput)
-                .await
-                .expect("Actix error");
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            tokio::select! {
+                // Handle user input
+                Some(input) = rx.recv() => {
+                    //println!("Received input: {}", input);
+                    let _r = uci_entity_actor
+                        .send(uci_entity::handler_read::ParseUserInput(input))
+                        .await
+                        .expect("Actix error");
+                }
+                // Handle timeout
+                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                    println!("");
+                }
+            }
         }
     } else {
         println!("Entering in tui mode");

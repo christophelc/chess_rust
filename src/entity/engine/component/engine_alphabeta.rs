@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
@@ -127,6 +130,7 @@ impl EngineAlphaBeta {
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
+        is_stop: &Arc<AtomicBool>,
     ) -> bitboard::BitBoardMove {
         //let num_cpus = num_cpus::get();
         let mut transposition_table = score::TranspositionScore::default();
@@ -143,6 +147,7 @@ impl EngineAlphaBeta {
             stat_actor_opt.clone(),
             self.max_depth,
             &mut stat_eval,
+            is_stop,
         );
         if let Some(mat_move) = mat_move_opt {
             return *mat_move.bitboard_move();
@@ -161,6 +166,7 @@ impl EngineAlphaBeta {
             &mut stat_eval,
             &mut transposition_table,
             &mut state,
+            is_stop,
         );
 
         *b_move_score.bitboard_move()
@@ -205,12 +211,22 @@ impl EngineAlphaBeta {
         stat_eval: &mut stat_eval::StatEval,
         transposition_table: &mut score::TranspositionScore,
         state: &mut search_state::SearchState,
+        is_stop: &Arc<AtomicBool>,
     ) -> score::BitboardMoveScore {
         let mut alpha_opt = alpha_opt;
         let mut beta_opt = beta_opt;
         let mut best_move_score_opt: Option<score::BitboardMoveScore> = None;
 
         let mut moves = game.gen_moves();
+        if is_stop.load(Ordering::Relaxed) {
+            tracing::debug!("Interrupt alphabeta for current_depth: {}", current_depth);
+            let mv = score::BitboardMoveScore::new(
+                *moves.first().unwrap(),
+                score::Score::new(0, 0, 0),
+                "".to_string(),
+            );
+            return mv;
+        }
         let is_max = game
             .bit_position()
             .bit_position_status()
@@ -229,6 +245,11 @@ impl EngineAlphaBeta {
 
         // alpha beta
         for (idx, (m_status, preorder)) in moves_status.iter().enumerate() {
+            if idx > 1 && is_stop.load(Ordering::Relaxed) {
+                tracing::debug!("Loop interrupt alphabeta for current_depth: {}", current_depth);
+                break;
+            }
+    
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
@@ -259,6 +280,7 @@ impl EngineAlphaBeta {
                 is_max,
                 transposition_table,
                 state,
+                is_stop,
             );
             let mut move_score = score::BitboardMoveScore::new(
                 *m_status.get_move(),
@@ -397,6 +419,7 @@ impl EngineAlphaBeta {
         is_max: bool,
         transposition_table: &mut score::TranspositionScore,
         state: &mut search_state::SearchState,
+        is_stop: &Arc<AtomicBool>,
     ) -> score::Score {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         // if current_depth >= 0 {
@@ -450,6 +473,7 @@ impl EngineAlphaBeta {
                             stat_eval,
                             transposition_table,
                             state,
+                            is_stop,
                         );
                         //println!("end null move {}", variant);
                         game.play_back_null_move();
@@ -480,6 +504,7 @@ impl EngineAlphaBeta {
                     stat_eval,
                     transposition_table,
                     state,
+                    is_stop,
                 );
                 let score = best_move_score.score();
                 score::Score::new(score.value(), current_depth, max_depth)
@@ -524,6 +549,7 @@ impl EngineAlphaBeta {
                                 stat_eval,
                                 transposition_table,
                                 state,
+                                is_stop,
                             )
                             .score(),
                     );
@@ -640,11 +666,12 @@ impl logic::Engine for EngineAlphaBeta {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,
     ) {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.alphabeta(&game, self_actor.clone(), stat_actor_opt.clone());
+            let best_move = self.alphabeta(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));

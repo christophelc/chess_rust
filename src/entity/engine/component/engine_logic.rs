@@ -1,3 +1,6 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use actix::prelude::*;
 
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -29,6 +32,7 @@ pub trait Engine {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,
     );
 }
 

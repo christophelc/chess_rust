@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use actix::Addr;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -46,6 +49,7 @@ impl EngineMinimax {
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
+        is_stop: &Arc<AtomicBool>,
     ) -> bitboard::BitBoardMove {
         let num_cpus = num_cpus::get();
 
@@ -66,6 +70,7 @@ impl EngineMinimax {
                     self_actor.clone(),
                     stat_actor_opt.clone(),
                     &mut stat_eval,
+                    is_stop,
                 );
                 let (best_move, score) = (
                     *bitboard_move_score.bitboard_move(),
@@ -109,7 +114,13 @@ impl EngineMinimax {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
+        is_stop: &Arc<AtomicBool>,
     ) -> score::BitboardMoveScore {
+        if is_stop.load(Ordering::Relaxed) {
+            let mv =
+                score::BitboardMoveScore::new(moves[0], score::Score::new(0, 0, 0), "".to_string());
+            return mv;
+        }
         let mut max_score_opt: Option<score::Score> = None;
         let mut best_move_opt: Option<bitboard::BitBoardMove> = None;
         for m in moves {
@@ -121,6 +132,7 @@ impl EngineMinimax {
                 stat_actor_opt.clone(),
                 stat_eval,
                 current_depth,
+                is_stop,
             );
             if max_score_opt.is_none() || score.is_greater_than(max_score_opt.as_ref().unwrap()) {
                 // Send best move
@@ -161,6 +173,7 @@ impl EngineMinimax {
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
         current_depth: u8,
+        is_stop: &Arc<AtomicBool>,
     ) -> score::Score {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
@@ -182,6 +195,7 @@ impl EngineMinimax {
                     self_actor.clone(),
                     stat_actor_opt.clone(),
                     stat_eval,
+                    is_stop,
                 );
                 let score = bitboard_move_score.score();
                 score::Score::new(-score.value(), current_depth, self.max_depth)
@@ -223,11 +237,12 @@ impl logic::Engine for EngineMinimax {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,        
     ) {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.minimax(&game, self_actor.clone(), stat_actor_opt.clone());
+            let best_move = self.minimax(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));

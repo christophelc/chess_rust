@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use actix::Addr;
 
 use super::engine_logic::{self as logic, Engine};
@@ -48,10 +51,11 @@ impl EngineMat {
         stat_actor_opt: Option<stat_entity::StatActor>,
         max_depth: u8,
         stat_eval: &mut stat_eval::StatEval,
+        is_stop: &Arc<AtomicBool>,
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
         let mut max_depth = max_depth;
-        println!("info looking for mat");
+        tracing::debug!("Lsooking for mat");
         let shortest_mat_opt = self.mat_solver(
             "",
             &mut game_clone,
@@ -61,6 +65,7 @@ impl EngineMat {
             stat_actor_opt.clone(),
             stat_eval,
             &mut max_depth,
+            is_stop,
         );
         println!("info end looking for mat");
         // if let Some(mat_move) = &shortest_mat_opt {
@@ -84,7 +89,11 @@ impl EngineMat {
         stat_actor_opt: Option<stat_entity::StatActor>,
         stat_eval: &mut stat_eval::StatEval,
         max_depth: &mut u8,
+        is_stop: &Arc<AtomicBool>,
     ) -> Option<score::BitboardMoveScoreMat> {
+        if is_stop.load(Ordering::Relaxed) {
+            return None;
+        }
         let game_clone = game.clone();
         let moves = if is_attacker {
             self.filter_move_with_check(&game_clone, &game.gen_moves(), stat_eval)
@@ -108,6 +117,7 @@ impl EngineMat {
                     stat_eval,
                     current_depth,
                     max_depth,
+                    is_stop,
                 );
                 match (move_mat_opt, &shortest_mat_opt) {
                     (Some(move_mat), Some(shortest_mat))
@@ -198,6 +208,7 @@ impl EngineMat {
         stat_eval: &mut stat_eval::StatEval,
         current_depth: u8,
         max_depth: &mut u8,
+        is_stop: &Arc<AtomicBool>,
     ) -> Option<score::BitboardMoveScoreMat> {
         let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast())
@@ -232,6 +243,7 @@ impl EngineMat {
                         stat_actor_opt.clone(),
                         stat_eval,
                         max_depth,
+                        is_stop,
                     )
                 } else {
                     self.update_stat(stat_eval, stat_actor_opt.as_ref());
@@ -270,6 +282,7 @@ impl logic::Engine for EngineMat {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
+        is_stop: &Arc<AtomicBool>,
     ) {
         let span = span_debug();
         let _enter = span.enter();
@@ -282,6 +295,7 @@ impl logic::Engine for EngineMat {
                 stat_actor_opt.clone(),
                 self.max_depth,
                 &mut stat_eval,
+                is_stop,
             );
             let best_move_opt = best_move_opt.map(|m| *m.bitboard_move());
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
@@ -310,6 +324,7 @@ impl logic::Engine for EngineMat {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
 
     use actix::Actor;
@@ -351,8 +366,9 @@ mod tests {
         let zobrist_table = &zobrist::Zobrist::new();
         let game = game_state::GameState::new(position, zobrist_table);
         let mut stat_eval = stat_eval::StatEval::default();
+        let flag_stop = Arc::new(AtomicBool::new(false));
         let mat_move_opt =
-            engine_player1.mat_solver_init(&game, self_actor, None, 6, &mut stat_eval);
+            engine_player1.mat_solver_init(&game, self_actor, None, 6, &mut stat_eval, &flag_stop);
         println!("{:?}", mat_move_opt);
     }
 
