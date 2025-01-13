@@ -7,6 +7,7 @@ use chess_actix::entity::engine::component::engine_mat;
 use chess_actix::entity::engine::component::engine_mcts;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_minimax;
+use chess_actix::entity::game::component::bitboard::zobrist;
 use chrono::{Local, TimeZone, Utc};
 
 #[allow(unused_imports)]
@@ -18,11 +19,11 @@ use chess_actix::{entity, monitoring, ui};
 use actix::Actor;
 use entity::game::actor::game_manager;
 use entity::game::component::square;
-use tokio::io::AsyncBufReadExt as _;
 use std::env;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tokio::io::AsyncBufReadExt as _;
 
 use entity::engine::actor::engine_dispatcher as dispatcher;
 use entity::game::component::bitboard::{
@@ -35,9 +36,9 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
+use tokio::sync::mpsc;
 use tracing_appender::rolling;
 use tracing_subscriber::{self, layer::SubscriberExt};
-use tokio::sync::mpsc;
 
 const DEPTH: u8 = 4;
 const LOG_FILE_ONLY: bool = false;
@@ -54,6 +55,7 @@ fn fen() {
 
 #[allow(dead_code)]
 async fn test(game_manager_actor: &game_manager::GameManagerActor) {
+    let zobrist_table = zobrist::Zobrist::new();
     println!("Inital position with move e4");
     let inputs = vec!["position startpos moves e2e4 "];
     let uci_reader = Box::new(uci_entity::UciReadVecStringWrapper::new(&inputs));
@@ -80,7 +82,7 @@ async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     let moves_as_str: Vec<String> = moves
         .iter()
         .map(|m| {
-            san::san_to_str(m, &moves, &san::Lang::LangFr)
+            san::san_to_str(m, &moves, &san::Lang::LangFr, &game_state, &zobrist_table)
                 .info()
                 .clone()
         })
@@ -197,13 +199,15 @@ async fn main() {
             .with(env_filter)
             .with(file_layer)
             .with(stdout_layer);
-        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");        
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set global subscriber");
     } else {
         let subscriber = tracing_subscriber::Registry::default()
             .with(env_filter)
             .with(file_layer);
         // Set the global default subscriber
-        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set global subscriber");
     }
 
     let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
@@ -276,14 +280,14 @@ async fn main() {
         tokio::spawn(async move {
             let stdin = tokio::io::stdin(); // Async stdin
             let mut reader = tokio::io::BufReader::new(stdin).lines(); // Buffered line reader
-    
+
             while let Ok(Some(line)) = reader.next_line().await {
                 if tx.send(line).is_err() {
                     break; // Exit if the receiver is dropped
                 }
             }
         });
-    
+
         // Main loop
         loop {
             tokio::select! {

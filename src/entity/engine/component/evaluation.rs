@@ -182,9 +182,7 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-    use crate::entity::engine::component::evaluation::{
-        self, FACTOR_CONTROL_SQUARES,
-    };
+    use crate::entity::engine::component::evaluation::{self, FACTOR_CONTROL_SQUARES};
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{

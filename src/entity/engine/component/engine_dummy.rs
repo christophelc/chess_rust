@@ -46,7 +46,7 @@ impl logic::Engine for EngineDummy {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         _stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
-        _is_stop: &Arc<AtomicBool>,        
+        _is_stop: &Arc<AtomicBool>,
     ) {
         let moves = game.gen_moves();
         let mut rng = ChaCha12Rng::from_entropy();

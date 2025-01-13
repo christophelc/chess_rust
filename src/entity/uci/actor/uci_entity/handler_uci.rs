@@ -55,7 +55,7 @@ impl Handler<UciResult> for UciEntity {
                     }
                     if is_show {
                         tracing::debug!("writing bestmove");
-                        let mut handle = std::io::BufWriter::new(io::stdout());                         
+                        let mut handle = std::io::BufWriter::new(io::stdout());
                         //let mut handle = self.stdout.lock();
                         writeln!(handle, "{}", msg).unwrap(); // Write message with a newline
                         handle.flush().unwrap();

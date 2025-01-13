@@ -142,7 +142,10 @@ impl EngineIddfs {
         // Boucle principale
         for max_depth in 1..=self.max_depth {
             if is_stop.load(Ordering::Relaxed) {
-                tracing::debug!("Iddf detected interrupt before evaluation at max_depth {}", max_depth);
+                tracing::debug!(
+                    "Iddf detected interrupt before evaluation at max_depth {}",
+                    max_depth
+                );
                 break;
             }
             tracing::info!("Starting iteration at depth: {}", max_depth);
@@ -202,7 +205,10 @@ impl EngineIddfs {
                 stat_actor.do_send(msg);
             }
             if is_stop.load(Ordering::Relaxed) {
-                tracing::debug!("Iddf detected interrupt after evaluation of max_depth {}", max_depth);                
+                tracing::debug!(
+                    "Iddf detected interrupt after evaluation of max_depth {}",
+                    max_depth
+                );
                 break;
             }
             //println!("best variant found: {}", b_move_score.get_variant());
@@ -228,8 +234,8 @@ impl EngineIddfs {
         if is_stop.load(Ordering::Relaxed) {
             tracing::debug!("IDDFS interrupted.");
             if let Some(b_move_score) = b_move_score_opt.as_ref() {
-                tracing::debug!("Best move: {}", *b_move_score);                
-                send_best_move(self_actor.clone(), *b_move_score.bitboard_move());            
+                tracing::debug!("Best move: {}", *b_move_score);
+                send_best_move(self_actor.clone(), *b_move_score.bitboard_move());
             } else {
                 tracing::debug!("No best move found");
             }
@@ -283,7 +289,7 @@ impl logic::Engine for EngineIddfs {
         }
         //tracing::info!(max_time = max_time.as_secs());
         let best_move = self.iddfs_init(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
-        tracing::debug!("Send EngineStopThinking");        
+        tracing::debug!("Send EngineStopThinking");
         self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
             stat_actor_opt,
         ));

@@ -65,7 +65,11 @@ impl EngineMcts {
         self.id_number = id_number.to_string();
     }
 
-    pub fn mcts(&self, game: &game_state::GameState, is_stop: &Arc<AtomicBool>) -> bitboard::BitBoardMove {
+    pub fn mcts(
+        &self,
+        game: &game_state::GameState,
+        is_stop: &Arc<AtomicBool>,
+    ) -> bitboard::BitBoardMove {
         let span = span_debug();
         let _enter = span.enter();
 
@@ -283,7 +287,7 @@ impl logic::Engine for EngineMcts {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
-        is_stop: &Arc<AtomicBool>,        
+        is_stop: &Arc<AtomicBool>,
     ) {
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {

@@ -51,7 +51,7 @@ impl UciEntity {
         }
     }
     fn parse_input(&self, input: &str, self_uci_actor: Addr<UciEntity>) -> Vec<String> {
-        let mut errors: Vec<String> = vec![];        
+        let mut errors: Vec<String> = vec![];
         let parser = parser::InputParser::new(&input, self.game_manager_actor.clone());
         let command_or_error = parser.parse_input();
         match command_or_error {

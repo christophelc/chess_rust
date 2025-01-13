@@ -221,13 +221,11 @@ impl Handler<EngineInit> for EngineDispatcher {
         let game_clone = self.game_opt.as_ref().unwrap().clone();
         let engine = self.engine.clone();
         tracing::debug!("Calling engine");
-        actix::Arbiter::spawn(
-            &Arbiter::new(),
-            async move {
+        actix::Arbiter::spawn(&Arbiter::new(), async move {
             tracing::debug!("Start computing");
             engine.find_best_move(self_actor, stat_actor_opt, game_clone, &stop_flag_clone);
             //thread::sleep(std::time::Duration::from_secs(10));
-            tracing::debug!("End computing");            
+            tracing::debug!("End computing");
         });
         self.stop_flag = stop_flag;
     }
@@ -255,12 +253,14 @@ impl Handler<TimeoutCheck> for EngineDispatcher {
         tracing::debug!("Timeout check triggered");
         let stop_flag = Arc::clone(&self.stop_flag);
         let current_thinking_id = self.thinking_id;
-        actix::Arbiter::spawn(
-            &Arbiter::new(),
-            async move {
+        actix::Arbiter::spawn(&Arbiter::new(), async move {
             tracing::debug!("Sleeping {:?}", msg.timeout);
             tokio::time::sleep(msg.timeout).await;
-            tracing::debug!("current thinking_id {} vs previous thinking_id {}", current_thinking_id, msg.thinking_id);
+            tracing::debug!(
+                "current thinking_id {} vs previous thinking_id {}",
+                current_thinking_id,
+                msg.thinking_id
+            );
             if msg.thinking_id == current_thinking_id {
                 tracing::debug!("Timeout reached: stopping the engine.");
                 stop_flag.store(true, Ordering::SeqCst);
@@ -272,14 +272,12 @@ impl Handler<TimeoutCheck> for EngineDispatcher {
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct EngineInitTimeLimit {
-    game: game_state::GameState
+    game: game_state::GameState,
 }
 
 impl EngineInitTimeLimit {
     pub fn new(game: &game_state::GameState) -> Self {
-        Self {
-            game: game.clone()
-        }
+        Self { game: game.clone() }
     }
 }
 
@@ -288,12 +286,12 @@ impl Handler<EngineInitTimeLimit> for EngineDispatcher {
 
     fn handle(&mut self, msg: EngineInitTimeLimit, ctx: &mut Self::Context) -> Self::Result {
         tracing::debug!("Initializing engine with time limit");
-        
+
         // Store game state and setup initial configuration
         self.game_opt = Some(msg.game.clone());
         let game_manager_actor = self.game_manager_actor_opt.as_ref().unwrap().clone();
         let player_turn = msg.game.bit_position().bit_position_status().player_turn();
-        
+
         // Schedule the timeout check
         let fut = Self::get_max_time_for_move(game_manager_actor, msg.game.clone(), player_turn);
         let ctx_addr = ctx.address();

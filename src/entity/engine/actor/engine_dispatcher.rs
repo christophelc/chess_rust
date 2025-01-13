@@ -3,8 +3,8 @@ pub mod handler_engine;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use actix::prelude::*;
 use crate::entity::engine::component::{engine_logic as logic, time_allocation, ts_bitboard_move};
+use actix::prelude::*;
 
 use crate::entity::game::actor::game_manager;
 use crate::entity::game::component::bitboard::BitBoardMove;
@@ -74,16 +74,16 @@ impl EngineDispatcher {
         game: game_state::GameState,
         player_turn: square::Color,
     ) -> Option<std::time::Duration> {
-        tracing::debug!("start get_max_time_for_move...");        
+        tracing::debug!("start get_max_time_for_move...");
         let result = game_manager_actor
-        .send(game_manager::handler_clock::GetClockRemainingTime::new(
-            player_turn,
-        ))
-        .await;
-        tracing::debug!("end get_max_time_for_move: {:?}", result);        
+            .send(game_manager::handler_clock::GetClockRemainingTime::new(
+                player_turn,
+            ))
+            .await;
+        tracing::debug!("end get_max_time_for_move: {:?}", result);
         match result {
-                Ok(clock_opt) => time_allocation::estimate_time_allocation(clock_opt, &game),
-                Err(err) => panic!("{:?}", err)
+            Ok(clock_opt) => time_allocation::estimate_time_allocation(clock_opt, &game),
+            Err(err) => panic!("{:?}", err),
         }
     }
 
@@ -107,8 +107,14 @@ impl EngineDispatcher {
         }
         self.engine_status = self.engine_status.clone().set_is_thinking(true);
 
-        self.self_actor_opt.as_ref().unwrap().do_send(handler_engine::EngineInitTimeLimit::new(game));
-        self.self_actor_opt.as_ref().unwrap().do_send(handler_engine::EngineInit);
+        self.self_actor_opt
+            .as_ref()
+            .unwrap()
+            .do_send(handler_engine::EngineInitTimeLimit::new(game));
+        self.self_actor_opt
+            .as_ref()
+            .unwrap()
+            .do_send(handler_engine::EngineInit);
 
         if let Some(debug_actor) = &self.debug_actor_opt {
             debug_actor.do_send(debug::AddMessage(format!(

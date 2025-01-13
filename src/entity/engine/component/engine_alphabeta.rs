@@ -246,10 +246,13 @@ impl EngineAlphaBeta {
         // alpha beta
         for (idx, (m_status, preorder)) in moves_status.iter().enumerate() {
             if idx > 1 && is_stop.load(Ordering::Relaxed) {
-                tracing::debug!("Loop interrupt alphabeta for current_depth: {}", current_depth);
+                tracing::debug!(
+                    "Loop interrupt alphabeta for current_depth: {}",
+                    current_depth
+                );
                 break;
             }
-    
+
             let long_algebraic_move =
                 long_notation::LongAlgebricNotationMove::build_from_b_move(*m_status.get_move());
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
@@ -671,7 +674,8 @@ impl logic::Engine for EngineAlphaBeta {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.alphabeta(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
+            let best_move =
+                self.alphabeta(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));

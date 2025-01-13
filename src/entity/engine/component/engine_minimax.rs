@@ -237,12 +237,13 @@ impl logic::Engine for EngineMinimax {
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
         game: game_state::GameState,
-        is_stop: &Arc<AtomicBool>,        
+        is_stop: &Arc<AtomicBool>,
     ) {
         // First generate moves
         let moves = logic::gen_moves(game.bit_position());
         if !moves.is_empty() {
-            let best_move = self.minimax(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
+            let best_move =
+                self.minimax(&game, self_actor.clone(), stat_actor_opt.clone(), is_stop);
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(
                 stat_actor_opt,
             ));
