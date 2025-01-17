@@ -30,6 +30,18 @@ Or if you want to use the CLI, here is an example. Type the 2 commands one after
 - ```position startpos```
 - ```go```.
 
+There are other modes:
+ ```
+ ./target/release/chess_rust human
+ ```
+for human vs human game
+
+and:
+```
+ ./target/release/chess_rust benchmark
+ ```
+ to run a benchmark based on epd files. The epd files have been taken from Githun and Wikipedia pages.
+
 ## Algorithms
 
 - Minimax (I have done negamax in fact)

@@ -1,3 +1,4 @@
+use chess_actix::benchmark;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_alphabeta;
 use chess_actix::entity::engine::component::engine_iddfs;
@@ -10,6 +11,7 @@ use chess_actix::entity::engine::component::engine_minimax;
 use chess_actix::entity::game::component::bitboard::zobrist;
 use chrono::{Local, TimeZone, Utc};
 
+use clap::Parser;
 #[allow(unused_imports)]
 use entity::engine::component::engine_dummy as dummy;
 
@@ -23,6 +25,7 @@ use std::env;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use tokio::io::AsyncBufReadExt as _;
 
 use entity::engine::actor::engine_dispatcher as dispatcher;
@@ -82,7 +85,7 @@ async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     let moves_as_str: Vec<String> = moves
         .iter()
         .map(|m| {
-            san::san_to_str(m, &moves, &san::Lang::LangFr, &game_state, &zobrist_table)
+            san::san_to_str(m, &moves, &san::Lang::LangFr, &game_state, &zobrist_table, false)
                 .info()
                 .clone()
         })
@@ -164,53 +167,65 @@ async fn tui_loop(
     }
 }
 
-#[actix::main]
-async fn main() {
-    // default to debug if PLAIN_LOGS undefined
+static LOG_GUARDS: OnceLock<(
+    tracing_appender::non_blocking::WorkerGuard,
+    Option<tracing_appender::non_blocking::WorkerGuard>,
+)> = OnceLock::new();
+fn init_trace() {
+    // Default to debug if PLAIN_LOGS undefined
     let plain_output =
         std::env::var("PLAIN_LOGS").unwrap_or_else(|_| "false".to_string()) == "true";
 
-    // Initialize the global tracing subscriber
+    // Configure file-based logging
     let file_appender = rolling::daily("./logs", "chess_rust.log");
-    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+    let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
 
-    // Use an environment filter for dynamic log level control
+    // Set up environment filter for log levels
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
-    // Create a subscriber that logs to both file and stdout
+
+    // Create file logging layer
     let file_layer = tracing_subscriber::fmt::Layer::new()
         .with_writer(file_writer)
         .with_target(true);
 
     if !LOG_FILE_ONLY {
-        let (stdout_writer, _guard) = tracing_appender::non_blocking(std::io::stdout());
+        // Configure stdout logging
+        let (stdout_writer, stdout_guard) = tracing_appender::non_blocking(std::io::stdout());
         let stdout_layer = tracing_subscriber::fmt::Layer::new()
             .with_writer(stdout_writer)
             .with_target(true)
             .with_ansi(plain_output);
-        let stdout_layer = if plain_output {
-            stdout_layer.with_timer(tracing_subscriber::fmt::time::SystemTime::default())
-        } else {
-            stdout_layer
-        };
 
-        // Combine the layers with the filter and initialize
+        // Combine file and stdout layers
         let subscriber = tracing_subscriber::Registry::default()
             .with(env_filter)
             .with(file_layer)
             .with(stdout_layer);
+
+        // Keep guards alive
+        LOG_GUARDS.get_or_init(|| (file_guard, Some(stdout_guard)));
         tracing::subscriber::set_global_default(subscriber)
             .expect("Failed to set global subscriber");
     } else {
+        // File-only logging
         let subscriber = tracing_subscriber::Registry::default()
             .with(env_filter)
             .with(file_layer);
-        // Set the global default subscriber
+
+        // Keep file guard alive
+        LOG_GUARDS.get_or_init(|| (file_guard, None));
         tracing::subscriber::set_global_default(subscriber)
             .expect("Failed to set global subscriber");
     }
+}
 
+fn trace_build_info() {
     let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
+    let git_commit = env!(
+        "GIT_COMMIT_HASH",
+        "GIT_COMMIT_HASH not set during compilation"
+    );
     let timestamp = build_date
         .parse::<i64>()
         .expect("BUILD_DATE should be a valid timestamp");
@@ -220,12 +235,21 @@ async fn main() {
         .expect("Invalid timestamp");
     let local_datetime = utc_datetime.with_timezone(&Local);
     let formatted_date = local_datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string();
-    println!("info -> Build date: {}", formatted_date);
+    tracing::debug!("Build date: {}", formatted_date);
+    tracing::debug!("Last commit hash: {}", git_commit);
+}
 
+struct BuildParams {
+    game_manager_actor: game_manager::GameManagerActor,
+    debug_actor_opt: Option<debug::DebugActor>,
+    stat_actor_opt: Option<actix::Addr<stat_entity::StatEntity>>,
+    stdin: Arc<Mutex<io::Stdin>>,
+}
+fn init_game_params() -> BuildParams {
     let debug_actor_opt: Option<debug::DebugActor> = None;
     let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());
     //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
-    let mut stdin = Arc::new(Mutex::new(io::stdin()));
+    let stdin = Arc::new(Mutex::new(io::stdin()));
     let mut game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
     //let mut engine_player1 = dummy::EngineDummy::new(debug_actor_opt.clone());
     //let mut engine_player1 = engine_mat::EngineMat::new(
@@ -258,6 +282,20 @@ async fn main() {
     let players = player::Players::new(player1, player2);
     game_manager.set_players(players);
     let game_manager_actor = game_manager.start();
+    BuildParams {
+        game_manager_actor,
+        debug_actor_opt,
+        stat_actor_opt,
+        stdin,
+    }
+}
+
+async fn uci_mode(
+    game_manager_actor: &game_manager::GameManagerActor,
+    debug_actor_opt: Option<debug::DebugActor>,
+    stat_actor_opt: Option<actix::Addr<stat_entity::StatEntity>>,
+    stdin: &mut Arc<Mutex<io::Stdin>>,
+) {
     let uci_reader = Box::new(uci_entity::UciReadWrapper::new(stdin.clone()));
     let uci_entity = uci_entity::UciEntity::new(
         uci_reader,
@@ -266,48 +304,101 @@ async fn main() {
         stat_actor_opt.clone(),
     );
     let uci_entity_actor = uci_entity.start();
+    println!("Entering in uci mode");
+    //fen();
+    //test(&game_actor).await;
+    println!("Enter an uci command:");
 
-    let args: Vec<String> = env::args().collect();
-    if args.len() <= 1 {
-        println!("Entering in uci mode");
-        //fen();
-        //test(&game_actor).await;
-        println!("Enter an uci command:");
+    let (tx, mut rx) = mpsc::unbounded_channel();
 
-        let (tx, mut rx) = mpsc::unbounded_channel();
+    // Spawn a task to handle async stdin reading
+    tokio::spawn(async move {
+        let stdin = tokio::io::stdin(); // Async stdin
+        let mut reader = tokio::io::BufReader::new(stdin).lines(); // Buffered line reader
 
-        // Spawn a task to handle async stdin reading
-        tokio::spawn(async move {
-            let stdin = tokio::io::stdin(); // Async stdin
-            let mut reader = tokio::io::BufReader::new(stdin).lines(); // Buffered line reader
-
-            while let Ok(Some(line)) = reader.next_line().await {
-                if tx.send(line).is_err() {
-                    break; // Exit if the receiver is dropped
-                }
-            }
-        });
-
-        // Main loop
-        loop {
-            tokio::select! {
-                // Handle user input
-                Some(input) = rx.recv() => {
-                    //println!("Received input: {}", input);
-                    let _r = uci_entity_actor
-                        .send(uci_entity::handler_read::ParseUserInput(input))
-                        .await
-                        .expect("Actix error");
-                }
-                // Handle timeout
-                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
-                    println!("");
-                }
+        while let Ok(Some(line)) = reader.next_line().await {
+            if tx.send(line).is_err() {
+                break; // Exit if the receiver is dropped
             }
         }
-    } else {
-        println!("Entering in tui mode");
-        println!("{:?}", args);
-        tui_loop(&game_manager_actor, &mut stdin).await;
+    });
+
+    // Main loop
+    loop {
+        tokio::select! {
+            // Handle user input
+            Some(input) = rx.recv() => {
+                //println!("Received input: {}", input);
+                let _r = uci_entity_actor
+                    .send(uci_entity::handler_read::ParseUserInput(input))
+                    .await
+                    .expect("Actix error");
+            }
+            // Handle timeout
+            _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                println!("");
+            }
+        }
+    }
+}
+
+/// Application CLI pour gérer différents modes
+#[derive(clap::Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// Commandes spécifiques
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(clap::Subcommand)]
+enum Command {
+    /// Mode humain (TUI)
+    Human,
+    /// Benchmark de performance
+    Benchmark,
+}
+
+#[actix::main]
+async fn main() {
+    init_trace();
+    trace_build_info();
+
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("Erreur de parsing des arguments: {e}");
+            std::process::exit(1);
+        }
+    };
+    match cli.command {
+        Some(Command::Human) => {
+            println!("Entering in tui mode");
+            let BuildParams {
+                game_manager_actor,
+                debug_actor_opt: _,
+                stat_actor_opt: _,
+                mut stdin,
+            } = init_game_params();
+            tui_loop(&game_manager_actor, &mut stdin).await;
+        }
+        Some(Command::Benchmark) => {
+            benchmark::launcher::benchmark("epd").unwrap();
+        }
+        None => {
+            let BuildParams {
+                game_manager_actor,
+                debug_actor_opt,
+                stat_actor_opt,
+                mut stdin,
+            } = init_game_params();
+            uci_mode(
+                &game_manager_actor,
+                debug_actor_opt,
+                stat_actor_opt,
+                &mut stdin,
+            )
+            .await;
+        }
     }
 }
