@@ -85,9 +85,16 @@ async fn test(game_manager_actor: &game_manager::GameManagerActor) {
     let moves_as_str: Vec<String> = moves
         .iter()
         .map(|m| {
-            san::san_to_str(m, &moves, &san::Lang::LangFr, &game_state, &zobrist_table, false)
-                .info()
-                .clone()
+            san::san_to_str(
+                m,
+                &moves,
+                &san::Lang::LangFr,
+                &game_state,
+                &zobrist_table,
+                false,
+            )
+            .info()
+            .clone()
         })
         .collect();
     println!("{:?}", moves_as_str);

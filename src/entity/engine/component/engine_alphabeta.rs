@@ -15,7 +15,7 @@ use crate::entity::stat::actor::stat_entity;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EngineAlphaBeta {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,

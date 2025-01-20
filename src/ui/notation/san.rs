@@ -169,14 +169,14 @@ fn san_to_str_no_check(
     let str = if move_to_translate.type_piece() != square::TypePiece::Pawn {
         match (is_ambiguous, moves_to.first()) {
             (false, Some(another_move)) if another_move.start().col() != from.col() => {
-                    // We have to specify the start column or row to remove any ambiguity
-                    format!("{}{}{}", piece_as_str, col_as_char(from.col()), to_as_str)
+                // We have to specify the start column or row to remove any ambiguity
+                format!("{}{}{}", piece_as_str, col_as_char(from.col()), to_as_str)
             }
             (false, Some(_)) => {
-                    // We have to specify the row to remove any ambiguity
-                    format!("{}{}{}", piece_as_str, (from.row() + 1), to_as_str)
+                // We have to specify the row to remove any ambiguity
+                format!("{}{}{}", piece_as_str, (from.row() + 1), to_as_str)
             }
-            _ => format!("{}{}", piece_as_str, to_as_str)
+            _ => format!("{}{}", piece_as_str, to_as_str),
         }
     } else {
         let promotion = if let Some(new_piece) = move_to_translate.promotion() {

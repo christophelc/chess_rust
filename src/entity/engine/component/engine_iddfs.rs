@@ -18,6 +18,7 @@ fn span_debug() -> tracing::Span {
     span_debug!("engine::component::iddfs")
 }
 
+#[derive(Debug, Clone)]
 pub struct EngineIddfs {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
@@ -98,7 +99,7 @@ impl EngineIddfs {
         }
     }
 
-    fn iddfs_init(
+    pub fn iddfs_init(
         &self,
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,

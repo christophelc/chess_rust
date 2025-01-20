@@ -1,7 +1,10 @@
 use std::fs;
 
 use crate::{
-    benchmark::epd_reader::{self, EpdRead},
+    benchmark::{
+        epd_reader::{self, EpdRead},
+        scoring,
+    },
     ui::notation::{epd, san},
 };
 
@@ -32,7 +35,7 @@ fn list_epd_files_in_folder(epd_folder: &str) -> Result<Vec<String>, std::io::Er
 
 #[derive(Debug)]
 pub struct EpdData {
-    folder: String,
+    file_path: String,
     epds: Vec<epd::Epd>,
 }
 impl std::fmt::Display for EpdData {
@@ -43,7 +46,7 @@ impl std::fmt::Display for EpdData {
             f,
             "{}{}{}\n{}\n{}",
             separator,
-            self.folder,
+            self.file_path,
             separator,
             epds_as_str.join("\n"),
             separator
@@ -51,15 +54,22 @@ impl std::fmt::Display for EpdData {
     }
 }
 impl EpdData {
-    pub fn new(folder: String, epds: Vec<epd::Epd>) -> Self {
-        Self { folder, epds }
+    pub fn new(file_path: String, epds: Vec<epd::Epd>) -> Self {
+        Self { file_path, epds }
+    }
+    pub fn file_path(&self) -> String {
+        self.file_path.clone()
+    }
+    pub fn epds(&self) -> &Vec<epd::Epd> {
+        &self.epds
     }
 }
 pub fn benchmark(epd_folder: &str) -> Result<Vec<EpdData>, EpdFileReaderError> {
     let data_all_files_or_error = read_epds_from_folder(epd_folder);
     if let Ok(data_all_files) = &data_all_files_or_error {
         for data_per_file in data_all_files {
-            println!("{}", data_per_file.to_string());
+            let epd_score = scoring::scoring(data_per_file);
+            println!("{} {}", data_per_file.to_string(), epd_score);
         }
     }
     data_all_files_or_error

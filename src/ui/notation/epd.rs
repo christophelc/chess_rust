@@ -34,7 +34,7 @@ pub enum EpdOperation {
     Am { san: String, long_notation: String },
     Bm { san: String, long_notation: String },
     Id(String),
-    Comment(String)
+    Comment(String),
 }
 impl fmt::Display for EpdOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -98,7 +98,8 @@ impl EpdOperation {
         match key.to_lowercase().as_str() {
             // FIXME: manage multiple moves for one SAN notation
             "am" => {
-                let long_notations = Self::san_to_long_notation_epd(value, lang, game, zobrist_table);
+                let long_notations =
+                    Self::san_to_long_notation_epd(value, lang, game, zobrist_table);
                 if long_notations.is_empty() {
                     return Err(EpdOperationError::InvalidMove(value.to_string()));
                 }
@@ -110,10 +111,11 @@ impl EpdOperation {
                     })
                     .collect();
                 Ok(operations)
-            },
+            }
             // FIXME: manage multiple moves for one SAN notation
             "bm" => {
-                let long_notations = Self::san_to_long_notation_epd(value, lang, game, zobrist_table);
+                let long_notations =
+                    Self::san_to_long_notation_epd(value, lang, game, zobrist_table);
                 if long_notations.is_empty() {
                     return Err(EpdOperationError::InvalidMove(value.to_string()));
                 }
@@ -125,8 +127,10 @@ impl EpdOperation {
                     })
                     .collect();
                 Ok(operations)
-            },
-            "c0" => Ok(vec![EpdOperation::Comment(value.trim_matches('"').to_string())]),
+            }
+            "c0" => Ok(vec![EpdOperation::Comment(
+                value.trim_matches('"').to_string(),
+            )]),
             "id" => Ok(vec![EpdOperation::Id(value.trim_matches('"').to_string())]),
             _ => Err(EpdOperationError::UnknownOperation(operation.to_string())),
         }
@@ -147,10 +151,10 @@ impl Epd {
             operations,
         }
     }
-    fn position(&self) -> &Position {
+    pub fn position(&self) -> &Position {
         &self.position
     }
-    fn operations(&self) -> &Vec<EpdOperation> {
+    pub fn operations(&self) -> &Vec<EpdOperation> {
         &self.operations
     }
     pub fn parse_operations(
@@ -191,7 +195,7 @@ impl Epd {
     pub fn decode(epd: &str, lang: &san::Lang) -> Result<Epd, EpdError> {
         let parts_operations: Vec<&str> = epd.split(';').collect();
         if parts_operations.len() <= 1 {
-            return Err(EpdError::InvalidFormat(epd.to_string()));            
+            return Err(EpdError::InvalidFormat(epd.to_string()));
         }
         // ensure we have the first 4 elements of a fen and at least one operation
         let parts: Vec<&str> = parts_operations[0].split_whitespace().collect();
@@ -220,7 +224,7 @@ impl Epd {
             operations_start_index = 4;
         }
         // Extract operations after the FEN part
-        let parts: Vec<&str> = epd.split_whitespace().collect();        
+        let parts: Vec<&str> = epd.split_whitespace().collect();
         let operations_str = parts[operations_start_index..].join(" ");
         let operations: Vec<&str> = operations_str.split(';').collect();
 
@@ -316,8 +320,14 @@ mod test {
     fn test_ambiguous_move() {
         let epd_str = "r1bqk2r/ppp2ppp/2n5/4P3/2Bp2n1/5N1P/PP1N1PP1/R2Q1RK1 b kq - 1 10 id \"CCR03\"; bm Nh6; am Ne5;";
         let epd = Epd::decode(epd_str, &san::Lang::LangEn).unwrap();
-        let expected = EpdOperation::Am { san: "Ne5".to_string(), long_notation: "g4e5".to_string()};
-        let expected2 = EpdOperation::Am { san: "Ne5".to_string(), long_notation: "c6e5".to_string()};
+        let expected = EpdOperation::Am {
+            san: "Ne5".to_string(),
+            long_notation: "g4e5".to_string(),
+        };
+        let expected2 = EpdOperation::Am {
+            san: "Ne5".to_string(),
+            long_notation: "c6e5".to_string(),
+        };
         assert!(epd.operations.contains(&expected));
         assert!(epd.operations.contains(&expected2))
     }

@@ -91,6 +91,15 @@ For pawns, we generate attacked squares by using bitwise operations directly on 
 
 Logs are generated under logs/
 
+### Time management
+
+We have added basic time management:
+- Compute a time limit for a move during the IDDFS 
+- Cancel the computation if it exceeds the time limit and if there is a best move available from the previous depth
+	- Retrieve the last best move found
+	- Cancel the alpha_beta engine
+
+
 ## TODO
 
 - Fix: In the position ```r3k2r/1b1p1pp1/1p1Pp3/pN5p/1n6/4B3/q4PPP/1R1QR1K1 b kq - 7 22``` black plays Qd5?? if FEATURE_LMR is on. For the moment, we have disabled it.
@@ -159,13 +168,9 @@ Before going further, we need to be able to evaluate the strengh of our engine. 
 		
 - Step 3: Add AI.
 
-### Add time management
+### Add time management 
+done
 
-We need to:
-- Compute a time limit for a move during the IDDFS 
-- Cancel the computation if it exceeds the time limit and if there is a best move available from the previous depth
-	- Retrieve the last best move found
-	- Cancel the alpha_beta engine
 
 ### Make the engine configurable
 
