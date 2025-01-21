@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use actix::Addr;
 
+use super::config::config;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -24,20 +25,20 @@ pub struct EngineMat {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    max_depth: u8,
+    conf: config::MatConfig,
 }
 impl EngineMat {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        max_depth: u8,
+        conf: &config::MatConfig,
     ) -> Self {
-        assert!(max_depth >= 1);
+        assert!(conf.max_depth >= 1);
         Self {
             id_number: "".to_string(),
             debug_actor_opt,
             zobrist_table,
-            max_depth: max_depth * 2 - 1,
+            conf: conf.clone(),
         }
     }
     pub fn set_id_number(&mut self, id_number: &str) {
@@ -49,12 +50,12 @@ impl EngineMat {
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
-        max_depth: u8,
+        conf: &config::MatConfig,
         stat_eval: &mut stat_eval::StatEval,
         is_stop: &Arc<AtomicBool>,
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
-        let mut max_depth = max_depth;
+        let mut max_depth = conf.max_depth;
         tracing::debug!("Lsooking for mat");
         let shortest_mat_opt = self.mat_solver(
             "",
@@ -233,7 +234,7 @@ impl EngineMat {
                 ))
             }
             game_state::EndGame::None => {
-                if current_depth < self.max_depth {
+                if current_depth < self.conf.max_depth {
                     self.mat_solver(
                         &updated_variant,
                         game,
@@ -269,7 +270,7 @@ impl logic::Engine for EngineMat {
         let name = format!(
             "{} max_depth {} - {}",
             MAT_ENGINE_ID_NAME.to_owned(),
-            self.max_depth,
+            self.conf.max_depth,
             self.id_number
         )
         .trim()
@@ -293,7 +294,7 @@ impl logic::Engine for EngineMat {
                 &game,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
-                self.max_depth,
+                &self.conf,
                 &mut stat_eval,
                 is_stop,
             );
@@ -313,7 +314,7 @@ impl logic::Engine for EngineMat {
                 self_actor.do_send(reply);
             } else {
                 // No mate found, could implement a fallback strategy here
-                tracing::debug!("No mate found within depth limit {}", self.max_depth);
+                tracing::debug!("No mate found within depth limit {}", self.conf.max_depth);
             }
         } else {
             // FIXME: Do nothing. The engine should be put asleep
@@ -330,6 +331,7 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+    use crate::entity::engine::component::config::config;
     use crate::entity::engine::component::evaluation::stat_eval;
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
@@ -353,7 +355,7 @@ mod tests {
         let engine_player1 = engine_mat::EngineMat::new(
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
-            MAT_DEPTH,
+            &config::MatConfig::new(MAT_DEPTH),
         );
         let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
             Arc::new(engine_player1.clone()),
@@ -368,7 +370,7 @@ mod tests {
         let mut stat_eval = stat_eval::StatEval::default();
         let flag_stop = Arc::new(AtomicBool::new(false));
         let mat_move_opt =
-            engine_player1.mat_solver_init(&game, self_actor, None, 6, &mut stat_eval, &flag_stop);
+            engine_player1.mat_solver_init(&game, self_actor, None, &config::MatConfig::new(6), &mut stat_eval, &flag_stop);
         println!("{:?}", mat_move_opt);
     }
 

@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use actix::Addr;
 
+use super::config::config;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{score, stat_eval};
-use super::{engine_alphabeta, engine_mat, feature, search_state};
+use super::{engine_alphabeta, engine_mat, search_state};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::evaluation;
 use crate::entity::game::component::bitboard::zobrist;
@@ -22,7 +23,7 @@ fn span_debug() -> tracing::Span {
 pub struct EngineIddfs {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
-    max_depth: u8,
+    conf:  config::IDDFSConfig,
     engine_alphabeta: engine_alphabeta::EngineAlphaBeta,
     engine_mat_solver: engine_mat::EngineMat,
 }
@@ -30,25 +31,26 @@ impl EngineIddfs {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        max_depth: u8,
+        conf: &config::IDDFSConfig,
     ) -> Self {
-        assert!(max_depth >= 1);
+        assert!(conf.max_depth >= 1);
         Self {
             id_number: "".to_string(),
             debug_actor_opt,
-            max_depth: max_depth * 2 - 1,
+            conf: conf.clone(),
             engine_alphabeta: engine_alphabeta::EngineAlphaBeta::new(
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table.clone(),
-                max_depth,
+                conf.max_depth,
+                conf.alphabeta_feature_conf.clone(),
                 false,
             ),
             engine_mat_solver: engine_mat::EngineMat::new(
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                8,
+                &config::MatConfig::new(8),
             ),
         }
     }
@@ -109,7 +111,7 @@ impl EngineIddfs {
         let span = span_debug();
         let _enter = span.enter();
 
-        tracing::info!("Starting IDDFS with max_depth: {}", self.max_depth);
+        tracing::info!("Starting IDDFS with max_depth: {}", self.conf.max_depth);
 
         let mut transposition_table = score::TranspositionScore::default();
         let mut stat_eval = stat_eval::StatEval::default();
@@ -118,13 +120,13 @@ impl EngineIddfs {
         let mut game_clone = game.clone();
 
         // Vérifiez si un coup rapide est possible avec le mat solver
-        if let Some(mat_move) = if feature::FEATURE_MAT_SOLVER {
+        if let Some(mat_move) = if self.conf.iddfs_feature_conf.f_mat_solver {
             tracing::debug!("Attempting mat solver");
             self.engine_mat_solver.mat_solver_init(
                 game,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
-                self.max_depth,
+                &config::MatConfig::new(self.conf.max_depth),
                 &mut stat_eval,
                 is_stop,
             )
@@ -141,7 +143,7 @@ impl EngineIddfs {
 
         tracing::info!("Starting iterative deepening search");
         // Boucle principale
-        for max_depth in 1..=self.max_depth {
+        for max_depth in 1..=self.conf.max_depth {
             if is_stop.load(Ordering::Relaxed) {
                 tracing::debug!(
                     "Iddf detected interrupt before evaluation at max_depth {}",
@@ -174,7 +176,7 @@ impl EngineIddfs {
                 stat_eval.n_positions_evaluated(),
                 stat_eval.n_transposition_hit()
             );
-            if feature::FEATURE_ASPIRATION_WINDOW {
+            if self.conf.iddfs_feature_conf.f_aspiration_window {
                 tracing::debug!("Applying aspiration window at depth {}", max_depth);
                 let window_start = std::time::Instant::now();
                 self.aspiration_window(
@@ -266,7 +268,7 @@ impl logic::Engine for EngineIddfs {
         let name = format!(
             "{} max_depth {} - {}",
             ALPHABETA_INC_ENGINE_ID_NAME.to_owned(),
-            self.max_depth,
+            self.conf.max_depth,
             self.id_number
         )
         .trim()

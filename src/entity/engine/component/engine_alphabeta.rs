@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use actix::Addr;
 
+use super::config::config;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{self, score, stat_eval};
-use super::{feature, search_state};
+use super::search_state;
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
 use crate::entity::engine::component::engine_mat;
 use crate::entity::game::component::bitboard::zobrist;
@@ -20,7 +21,7 @@ pub struct EngineAlphaBeta {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    max_depth: u8,
+    conf: config::AlphabetaConf,
     engine_mat_solver: engine_mat::EngineMat,
     is_send_best_move: bool,
 }
@@ -29,6 +30,7 @@ impl EngineAlphaBeta {
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
         max_depth: u8,
+        features: config::AlphabetaFeatureConf,
         is_send_best_move: bool,
     ) -> Self {
         assert!(max_depth >= 1 && max_depth <= search_state::MAX_DEPTH as u8);
@@ -36,12 +38,12 @@ impl EngineAlphaBeta {
             id_number: "".to_string(),
             debug_actor_opt,
             zobrist_table: zobrist_table.clone(),
-            max_depth: max_depth * 2 - 1,
+            conf: config::AlphabetaConf::new(max_depth * 2 - 1, features),
             engine_mat_solver: engine_mat::EngineMat::new(
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                max_depth,
+                &config::MatConfig::new(2*max_depth -1),
             ),
             is_send_best_move,
         }
@@ -89,7 +91,7 @@ impl EngineAlphaBeta {
         current_depth: u8,
         state: &search_state::SearchState,
     ) -> Vec<(score::MoveStatus, score::PreOrder)> {
-        if !feature::FEATURE_PREORDER {
+        if !self.conf.alpha_beta_features.f_preorder {
             return moves
                 .into_iter()
                 .map(|m| (score::MoveStatus::from_move(*m), score::PreOrder::Depth))
@@ -145,7 +147,7 @@ impl EngineAlphaBeta {
             game,
             self_actor.clone(),
             stat_actor_opt.clone(),
-            self.max_depth,
+            &config::MatConfig::new(self.conf.max_depth),
             &mut stat_eval,
             is_stop,
         );
@@ -158,7 +160,7 @@ impl EngineAlphaBeta {
             &mut game_clone,
             None,
             current_depth,
-            self.max_depth,
+            self.conf.max_depth,
             None,
             None,
             self_actor.clone(),
@@ -176,6 +178,7 @@ impl EngineAlphaBeta {
         beta_opt.zip(alpha_opt).map(|(beta, alpha)| beta - alpha)
     }
     fn can_null_move(
+        &self,
         game: &game_state::GameState,
         current_depth: u8,
         max_depth: u8,
@@ -184,7 +187,7 @@ impl EngineAlphaBeta {
         beta_opt: Option<i32>,
         is_max: bool,
     ) -> bool {
-        feature::FEATURE_NULL_MOVE_PRUNING
+        self.conf.alpha_beta_features.f_null_move_pruning
             && m.capture().is_none()
             && is_max
             && beta_opt.is_some()
@@ -258,7 +261,7 @@ impl EngineAlphaBeta {
             let updated_variant = format!("{} {}", variant, long_algebraic_move.cast());
             let updated_variant = updated_variant.trim();
             // Last move reduction (if we are not too close to max_depth)
-            let max_depth = if feature::FEATURE_LMR
+            let max_depth = if self.conf.alpha_beta_features.f_lmr
                 && current_depth > 3
                 && max_depth - current_depth > 0
                 && idx > 2
@@ -320,7 +323,7 @@ impl EngineAlphaBeta {
                     || beta_opt.is_some()
                         && alpha_opt.as_ref().unwrap() >= beta_opt.as_ref().unwrap()
                 {
-                    if feature::FEATURE_KILLER_MOVE {
+                    if self.conf.alpha_beta_features.f_killer_move {
                         state.add_killer_move(
                             current_depth as usize,
                             best_move_score_opt
@@ -386,7 +389,7 @@ impl EngineAlphaBeta {
         let hash = game.last_hash();
         // FIXME: sometimes, the value is overriden for the same hash, current_depth, max_depth (for a specific depth defined in iddfs).
         // Chekc if this is normal
-        if feature::FEATURE_TRANSPOSITION_TABLE {
+        if self.conf.alpha_beta_features.f_transposition_table {
             transposition_table.set_move_info(
                 &hash,
                 best_move_score_opt.as_ref().unwrap(),
@@ -448,7 +451,7 @@ impl EngineAlphaBeta {
             if !Self::goal_is_reached(current_depth >= max_depth, game.end_game()) {
                 //println!("Rec analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // null move pruning
-                if Self::can_null_move(
+                if self.can_null_move(
                     game,
                     current_depth,
                     max_depth,
@@ -515,7 +518,7 @@ impl EngineAlphaBeta {
                 //println!("Analysis of: {} - {} {} {:?}", variant, current_depth, max_depth, m.capture());
                 // capture (avoid horizon effect) ?
                 let mut score_opt: Option<score::Score> = None;
-                if feature::FEATURE_CAPTURE_HORIZON
+                if self.conf.alpha_beta_features.f_capture_horizon
                     && current_depth == max_depth
                     && m.capture().is_some()
                 {
@@ -533,7 +536,7 @@ impl EngineAlphaBeta {
                         score_opt = Some(score);
                     }
                 }
-                if feature::FEATURE_CAPTURE_HORIZON
+                if self.conf.alpha_beta_features.f_capture_horizon
                     && current_depth == max_depth
                     && game.check_status().is_check()
                 {
@@ -656,7 +659,7 @@ impl logic::Engine for EngineAlphaBeta {
         let name = format!(
             "{} max_depth {} - {}",
             ALPHABETA_ENGINE_ID_NAME.to_owned(),
-            self.max_depth,
+            self.conf.max_depth,
             self.id_number
         )
         .trim()

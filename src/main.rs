@@ -1,4 +1,5 @@
 use chess_actix::benchmark;
+use chess_actix::entity::engine::component::config::config;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_alphabeta;
 use chess_actix::entity::engine::component::engine_iddfs;
@@ -253,6 +254,11 @@ struct BuildParams {
     stdin: Arc<Mutex<io::Stdin>>,
 }
 fn init_game_params() -> BuildParams {
+    let conf = config::IDDFSConfig::new(
+        2*DEPTH -1,
+        config::IddfsFeatureConf::default(),
+        config::AlphabetaFeatureConf::default(),
+    );
     let debug_actor_opt: Option<debug::DebugActor> = None;
     let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());
     //let debug_actor_opt: Option<debug::DebugActor> = Some(debug::DebugEntity::new(true).start());
@@ -264,7 +270,7 @@ fn init_game_params() -> BuildParams {
     let mut engine_player1 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
-        DEPTH,
+        &conf
     );
     engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
@@ -275,7 +281,7 @@ fn init_game_params() -> BuildParams {
     let mut engine_player2 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
-        DEPTH,
+        &conf,
     );
     engine_player2.set_id_number("black");
     let engine_player2_dispatcher =

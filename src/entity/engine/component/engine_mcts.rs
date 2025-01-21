@@ -14,6 +14,8 @@ use crate::span_debug;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
+use super::config::config;
+
 const MAX_TREE_ITERATION: u64 = 1000;
 
 fn span_debug() -> tracing::Span {
@@ -44,21 +46,19 @@ pub struct EngineMcts {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    iterations_per_move: u64,
-    c: f64,
+    conf: config::MctsConfig,
 }
 impl EngineMcts {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        iterations_per_move: u64,
+        conf: &config::MctsConfig,
     ) -> Self {
         Self {
             id_number: "".to_string(),
             debug_actor_opt,
             zobrist_table,
-            iterations_per_move,
-            c: 1.0,
+            conf: conf.clone(),
         }
     }
     pub fn set_id_number(&mut self, id_number: &str) {
@@ -87,7 +87,7 @@ impl EngineMcts {
             }
             self.mcts_run(&mut graph, root_id, &mut mcts_stat);
         }
-        if let Some(idx) = mcts_tree::Node::argmax(&graph, graph[root_id].children(), self.c) {
+        if let Some(idx) = mcts_tree::Node::argmax(&graph, graph[root_id].children(), self.conf.c) {
             let best_move_id = graph[root_id].children().get(idx).unwrap();
             let best_move = if let Some(edge_index) = graph.find_edge(root_id, *best_move_id) {
                 let edge = graph.edge_weight(edge_index).unwrap();
@@ -141,7 +141,7 @@ impl EngineMcts {
                     graph[node_id].set_untried_moves(moves);
                 } else {
                     // selection: all moves have been expanded: select the best ucb1 score
-                    match mcts_tree::Node::argmax(graph, node.children(), self.c) {
+                    match mcts_tree::Node::argmax(graph, node.children(), self.conf.c) {
                         None => tracing::debug!("not found"),
                         Some(idx) => {
                             tracing::debug!("found");
@@ -180,7 +180,7 @@ impl EngineMcts {
     ) -> (u64, u64) {
         let mut n_white_wins: u64 = 0;
         let mut n_black_wins: u64 = 0;
-        for _i in 0..self.iterations_per_move {
+        for _i in 0..self.conf.iterations_per_move {
             let (n_white_win, n_black_win) =
                 self.mcts_one_simulation(graph, expanded_node_idx, mcts_stat);
             n_white_wins += n_white_win;
@@ -248,18 +248,18 @@ impl EngineMcts {
         } else {
             n_black_wins
         };
-        graph[node_id].inc_stat(n_wins, self.iterations_per_move);
+        graph[node_id].inc_stat(n_wins, self.conf.iterations_per_move);
         let mut node_iter = node_id;
         while let Some(node_id) = graph[node_iter].parent() {
             tracing::debug!(
                 "inc {:?} {}/{} -> node updated = {}/{}",
                 node_id,
                 n_wins,
-                self.iterations_per_move,
+                self.conf.iterations_per_move,
                 graph[node_id].n_wins(),
                 graph[node_id].visits()
             );
-            graph[node_id].inc_stat(n_wins, self.iterations_per_move);
+            graph[node_id].inc_stat(n_wins, self.conf.iterations_per_move);
             node_iter = node_id;
         }
     }
@@ -274,7 +274,7 @@ impl logic::Engine for EngineMcts {
         let name = format!(
             "{} iterations {} - {}",
             MCTS_ENGINE_ID_NAME.to_owned(),
-            self.iterations_per_move,
+            self.conf.iterations_per_move,
             self.id_number
         )
         .trim()

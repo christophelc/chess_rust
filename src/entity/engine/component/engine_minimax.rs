@@ -4,6 +4,7 @@ use std::sync::Arc;
 use actix::Addr;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use super::config::config;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{self, score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -25,20 +26,20 @@ pub struct EngineMinimax {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    max_depth: u8,
+    conf: config::MinimaxConf,
 }
 impl EngineMinimax {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        max_depth: u8,
+        conf: &config::MinimaxConf,
     ) -> Self {
-        assert!(max_depth >= 1);
+        assert!(conf.max_depth >= 1);
         Self {
             id_number: "".to_string(),
             debug_actor_opt,
             zobrist_table,
-            max_depth: max_depth * 2 - 1,
+            conf: conf.clone(),
         }
     }
     pub fn set_id_number(&mut self, id_number: &str) {
@@ -185,7 +186,7 @@ impl EngineMinimax {
         game.update_endgame_status();
 
         let score = if game.end_game() == game_state::EndGame::None {
-            if current_depth < self.max_depth {
+            if current_depth < self.conf.max_depth {
                 let moves = game.gen_moves();
                 let bitboard_move_score = self.minimax_rec(
                     &updated_variant,
@@ -198,16 +199,16 @@ impl EngineMinimax {
                     is_stop,
                 );
                 let score = bitboard_move_score.score();
-                score::Score::new(-score.value(), current_depth, self.max_depth)
+                score::Score::new(-score.value(), current_depth, self.conf.max_depth)
             } else {
                 score::Score::new(
                     evaluation::evaluate_position(game, stat_eval, &stat_actor_opt, self.id()),
                     current_depth,
-                    self.max_depth,
+                    self.conf.max_depth,
                 )
             }
         } else {
-            evaluation::handle_end_game_scenario(game, current_depth, self.max_depth)
+            evaluation::handle_end_game_scenario(game, current_depth, self.conf.max_depth)
         };
 
         game.play_back();
@@ -224,7 +225,7 @@ impl logic::Engine for EngineMinimax {
         let name = format!(
             "{} max_depth {} - {}",
             MINIMAX_ENGINE_ID_NAME.to_owned(),
-            self.max_depth,
+            self.conf.max_depth,
             self.id_number
         )
         .trim()

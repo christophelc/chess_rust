@@ -182,6 +182,7 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+    use crate::entity::engine::component::config::config;
     use crate::entity::engine::component::evaluation::{self, FACTOR_CONTROL_SQUARES};
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
@@ -236,6 +237,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
+            config::AlphabetaFeatureConf::default(),
             false,
         );
         engine_player1.set_id_number("white");
@@ -249,6 +251,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
+            config::AlphabetaFeatureConf::default(),            
             false,
         );
         engine_player2.set_id_number("black");

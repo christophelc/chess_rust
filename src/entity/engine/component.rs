@@ -5,6 +5,7 @@ pub mod engine_logic;
 pub mod engine_mat;
 pub mod engine_mcts;
 pub mod engine_minimax;
+pub mod config;
 pub mod evaluation;
 pub mod feature;
 pub mod mcts_tree;

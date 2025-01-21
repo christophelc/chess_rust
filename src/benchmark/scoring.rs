@@ -8,7 +8,7 @@ use std::{
 
 use actix::Actor;
 
-use crate::entity::engine::actor::engine_dispatcher as dispatcher;
+use crate::entity::engine::{actor::engine_dispatcher as dispatcher, component::config::config};
 use crate::{
     entity::{
         engine::component::engine_iddfs,
@@ -73,10 +73,10 @@ impl std::fmt::Display for EpdScore {
     }
 }
 
-fn init_game_params(depth: u8) -> engine_iddfs::EngineIddfs {
+fn init_game_params(conf: &config::IDDFSConfig) -> engine_iddfs::EngineIddfs {
     let game_manager = game_manager::GameManager::new(None);
     let mut engine_player =
-        engine_iddfs::EngineIddfs::new(None, game_manager.zobrist_table(), depth);
+        engine_iddfs::EngineIddfs::new(None, game_manager.zobrist_table(), conf);
     engine_player.set_id_number("computer");
     engine_player
 }
@@ -84,8 +84,9 @@ pub fn scoring(epd_data: &launcher::EpdData) -> f64 {
     let zobrist_table = zobrist::Zobrist::new();
     // TODO: replace by a config
     let conf_depth = 3;
+    let conf = config::IDDFSConfig::new(conf_depth, config::IddfsFeatureConf::default(), config::AlphabetaFeatureConf::default());
     let conf_max_time_sec = 3;
-    let engine = init_game_params(conf_depth);
+    let engine = init_game_params(&conf);
 
     let epd_evals: Vec<EpdEval> = epd_data
         .epds()
