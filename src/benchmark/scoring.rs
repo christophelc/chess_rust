@@ -8,7 +8,7 @@ use std::{
 
 use actix::Actor;
 
-use crate::entity::engine::{actor::engine_dispatcher as dispatcher, component::config::config};
+use crate::entity::engine::{actor::engine_dispatcher as dispatcher, component::config::config::{self, IDDFSConfig}};
 use crate::{
     entity::{
         engine::component::engine_iddfs,
@@ -36,6 +36,7 @@ pub struct EpdEval {
     id: String,
     am: Option<MovePlayed>,
     bm: Option<MovePlayed>,
+    best_move_opt: Option<String>,
     duration_ms: u128,
 }
 impl EpdEval {
@@ -43,24 +44,41 @@ impl EpdEval {
         id: String,
         am: Option<MovePlayed>,
         bm: Option<MovePlayed>,
+        best_move_opt: Option<String>,
         duration_ms: u128,
     ) -> Self {
         Self {
             id,
             am,
             bm,
+            best_move_opt,
             duration_ms,
         }
     }
 }
 
+pub struct Constraint {
+    max_time_sec: u64,
+}
+impl Constraint {
+    pub fn new(max_time_sec: u64) -> Self {
+        Self {
+            max_time_sec,
+        }
+    }
+    pub fn max_time_sec(&self) -> u64 {
+        self.max_time_sec
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct EpdScore {
-    am_count: u64,
-    am_ok: u64,
-    bm_count: u64,
-    bm_ok: u64,
-    time_bonus: u64,
+    pub am_count: u64,
+    pub am_ok: u64,
+    pub bm_count: u64,
+    pub bm_ok: u64,
+    pub time_bonus: u64,
+    pub best_move_opt: Option<String>,
 }
 impl EpdScore {
     pub fn score(&self) -> f64 {
@@ -69,7 +87,7 @@ impl EpdScore {
 }
 impl std::fmt::Display for EpdScore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "score: {}", self.score())
+        write!(f, "{:.3} - {} - am {}/{} - bm {}/{}", self.score(), self.best_move_opt.clone().unwrap_or("".to_string()), self.am_ok, self.am_count, self.bm_ok, self.bm_count)
     }
 }
 
@@ -80,25 +98,21 @@ fn init_game_params(conf: &config::IDDFSConfig) -> engine_iddfs::EngineIddfs {
     engine_player.set_id_number("computer");
     engine_player
 }
-pub fn scoring(epd_data: &launcher::EpdData) -> f64 {
+pub fn scoring<'a>(epd_data: &'a launcher::EpdData, engine_conf: &IDDFSConfig, constraint: &Constraint) -> Vec<(&'a epd::Epd, EpdScore)> {
     let zobrist_table = zobrist::Zobrist::new();
-    // TODO: replace by a config
-    let conf_depth = 3;
-    let conf = config::IDDFSConfig::new(conf_depth, config::IddfsFeatureConf::default(), config::AlphabetaFeatureConf::default());
-    let conf_max_time_sec = 3;
-    let engine = init_game_params(&conf);
+    let engine = init_game_params(engine_conf);
 
     let epd_evals: Vec<EpdEval> = epd_data
         .epds()
         .into_iter()
-        .map(|epd| epd_eval(epd, conf_max_time_sec, &zobrist_table, &engine))
+        .map(|epd| epd_eval(epd, constraint.max_time_sec(), &zobrist_table, &engine))
         .collect();
     let scores: Vec<EpdScore> = epd_evals
         .into_iter()
-        .map(|epd_eval| epd_score(&epd_eval, conf_max_time_sec))
+        .map(|epd_eval| epd_score(&epd_eval, constraint.max_time_sec()))
         .collect();
-    let total = scores.iter().map(|epd_score| epd_score.score()).sum();
-    total
+    let data_with_score = epd_data.epds().into_iter().zip(scores).collect();
+    data_with_score
 }
 
 fn epd_score(epd_eval: &EpdEval, max_duration_sec: u64) -> EpdScore {
@@ -118,6 +132,7 @@ fn epd_score(epd_eval: &EpdEval, max_duration_sec: u64) -> EpdScore {
     if epd_eval.duration_ms < max_duration_sec as u128 * 1000 {
         epd_score.time_bonus += 1;
     }
+    epd_score.best_move_opt = epd_eval.best_move_opt.clone();
     epd_score
 }
 
@@ -187,10 +202,10 @@ fn epd_eval(
 
     let am_moved_played: Option<MovePlayed>;
     let bm_moved_played: Option<MovePlayed>;
-    match b_move_opt {
-        Some(b_move) => {
-            let move_str =
-                notation::long_notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast();
+    let b_move_opt = b_move_opt.map(|b_move|
+        notation::long_notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast());
+    match b_move_opt.as_ref() {
+        Some(move_str) => {
             let am_played = ams.contains(&move_str);
             am_moved_played = if ams.is_empty() {
                 None
@@ -229,6 +244,6 @@ fn epd_eval(
             };
         }
     }
-    let epd_eval = EpdEval::new(id, am_moved_played, bm_moved_played, duration.as_millis());
+    let epd_eval = EpdEval::new(id, am_moved_played, bm_moved_played, b_move_opt, duration.as_millis());
     epd_eval
 }

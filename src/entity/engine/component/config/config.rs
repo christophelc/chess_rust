@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::entity::engine::component::feature;
 
 #[derive(Debug, Clone)]
@@ -7,12 +9,24 @@ pub struct DummyConf {}
 pub struct MinimaxConf {
     pub max_depth: u8,
 }
+impl fmt::Display for MinimaxConf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "max_depth: {}", self.max_depth)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct AlphabetaConf {
     pub max_depth: u8,
     pub alpha_beta_features: AlphabetaFeatureConf,
 }
+impl fmt::Display for AlphabetaConf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "max_depth: {}", self.max_depth)?;
+        writeln!(f, "alphabeta_features: {}", self.alpha_beta_features)        
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AlphabetaFeatureConf {
     pub f_null_move_pruning: bool,
@@ -24,7 +38,18 @@ pub struct AlphabetaFeatureConf {
     pub f_check_horizon: bool,
     pub f_cannot_win_force_null: bool,
 }
-impl AlphabetaFeatureConf {
+impl fmt::Display for AlphabetaFeatureConf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "f_null_move_pruning : {}", self.f_null_move_pruning)?;
+        writeln!(f, "f_transposition_table: {}", self.f_transposition_table)?;
+        writeln!(f, "f_preorder: {}", self.f_preorder)?;
+        writeln!(f, "f_lmr: {}", self.f_lmr)?;
+        writeln!(f, "f_killer_move: {}", self.f_killer_move)?;
+        writeln!(f, "f_capture_horizon: {}", self.f_capture_horizon)?;
+        writeln!(f, "f_check_horizon: {}", self.f_check_horizon)?;
+        writeln!(f, "f_cannot_win_force_null: {}", self.f_cannot_win_force_null)
+    }
+}impl AlphabetaFeatureConf {
     pub fn default() -> Self {
         Self {
             f_null_move_pruning: feature::FEATURE_NULL_MOVE_PRUNING,
@@ -62,6 +87,13 @@ impl IDDFSConfig {
         }
     }
 }
+impl fmt::Display for IDDFSConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "max_depth: {}", self.max_depth)?;
+        writeln!(f, "iddfs_feature_conf: {}", self.iddfs_feature_conf)?;
+        writeln!(f, "alphabeta_feature_conf: {}", self.alphabeta_feature_conf)
+    }
+}
 #[derive(Debug, Clone)]
 pub struct IddfsFeatureConf {
     pub f_mat_solver: bool,
@@ -75,10 +107,21 @@ impl IddfsFeatureConf {
         }
     }
 }
+impl fmt::Display for IddfsFeatureConf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "f_mat_solver: {}", self.f_mat_solver)?;
+        writeln!(f, "f_aspiration_window: {}", self.f_aspiration_window)
+    }        
+}
 
 #[derive(Debug, Clone)]
 pub struct MatConfig {
     pub max_depth: u8,
+}
+impl fmt::Display for MatConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "max_depth: {}", self.max_depth)
+    }
 }
 impl MatConfig {
     pub fn new(max_depth: u8) -> Self {
@@ -92,6 +135,12 @@ impl MatConfig {
 pub struct MctsConfig {
     pub iterations_per_move: u64,
     pub c: f64,
+}
+impl fmt::Display for MctsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "iterations_per_move: {}", self.iterations_per_move)?;
+        writeln!(f, "c: {}", self.c)
+    }
 }
 impl MctsConfig {
     pub fn new(iterations_per_move: u64) -> Self {

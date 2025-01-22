@@ -154,8 +154,8 @@ Before going further, we need to be able to evaluate the strengh of our engine. 
 
 ### Preparation
 
-- Step 1: Make max_depth and heuristics configurable
-- Step 2: Benchmark the engine on several positions
+- Step 1: Make max_depth and heuristics configurable (done)
+- Step 2: Benchmark the engine on several positions (done)
 	- Use EPD (extended Position Description) test suites
 		- manage EPD format (FEN + am, bm, id)
 		- Compute a score based on the results:
