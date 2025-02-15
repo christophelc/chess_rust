@@ -5,8 +5,8 @@
 This chess program is for educative purpose and a motivation to learn Rust and improve my AI skills. 
 
 We don't want to be too specific to chess games. We will not go to far in the use of heuristics. For 
-example, we will not use Syzygy tables for chess finals or we will not chess libraries. Our target is to:
-- Get an engine that is not too strong and not to bad,
+example, we will not use Syzygy tables for chess finals or we will not use chess libraries. Our target is to:
+- Get an engine that is not too strong and not too bad,
 - Improve its level with the help of AI.
 
 ## Getting started
@@ -40,7 +40,7 @@ and:
 ```
  ./target/release/chess_rust benchmark
  ```
- to run a benchmark based on epd files. The epd files have been taken from Githun and Wikipedia pages.
+ to run a benchmark based on epd files. The epd files have been taken from Github and Wikipedia pages.
 
 ## Algorithms
 
