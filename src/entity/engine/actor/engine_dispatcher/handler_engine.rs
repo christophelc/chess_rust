@@ -253,7 +253,7 @@ impl Handler<TimeoutCheck> for EngineDispatcher {
         tracing::debug!("Timeout check triggered");
         let stop_flag = Arc::clone(&self.stop_flag);
         let current_thinking_id = self.thinking_id;
-        actix::Arbiter::spawn(&Arbiter::new(), async move {
+        self.heavy_task_arbiter.spawn(async move {
             tracing::debug!("Sleeping {:?}", msg.timeout);
             tokio::time::sleep(msg.timeout).await;
             tracing::debug!(

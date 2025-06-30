@@ -12,6 +12,7 @@ use crate::entity::game::component::{game_state, square};
 use crate::entity::stat::actor::stat_entity;
 use crate::entity::uci::actor::uci_entity;
 use crate::monitoring::debug;
+use actix::{Actor, Addr};
 
 use crate::span_debug;
 
@@ -20,6 +21,7 @@ fn span_debug() -> tracing::Span {
 }
 
 pub struct EngineDispatcher {
+    heavy_task_arbiter: Arbiter,
     engine: Arc<dyn logic::Engine + Send + Sync>, // EngineActor dans un Arc
     debug_actor_opt: Option<debug::DebugActor>,
     stat_actor_opt: Option<stat_entity::StatActor>,
@@ -39,6 +41,7 @@ impl EngineDispatcher {
         stat_actor_opt: Option<stat_entity::StatActor>,
     ) -> Self {
         Self {
+            heavy_task_arbiter: Arbiter::new(),
             engine,
             debug_actor_opt,
             uci_caller_opt: None,
