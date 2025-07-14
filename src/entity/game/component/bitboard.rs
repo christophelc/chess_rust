@@ -158,6 +158,13 @@ pub struct BitPosition {
     hash_positions: zobrist::ZobristHistory,
 }
 impl BitPosition {
+    pub fn empty() -> Self {
+        Self {
+            bit_boards_white_and_black: BitBoardsWhiteAndBlack::empty(), 
+            bit_position_status: BitPositionStatus::default(),
+            hash_positions: zobrist::ZobristHistory::default()
+        }
+    }
     pub fn play_back(
         &mut self,
         bit_position_status: BitPositionStatus,
@@ -188,6 +195,16 @@ fn pos2index(u: u64) -> u8 {
 }
 
 impl BitPosition {
+    pub fn add_piece_without_control(
+        &mut self,
+        piece: square::Piece,
+        square: u8,
+        hash: &mut zobrist::ZobristHash,
+        zobrist_table: &zobrist::Zobrist,        
+    ) {
+        *hash = hash.xor_piece(zobrist_table, piece, square as usize);
+        self.bit_boards_white_and_black.add_piece(piece, square);
+    }
     pub fn move_piece(
         &mut self,
         b_move: &BitBoardMove,
@@ -307,6 +324,20 @@ pub struct BitBoardsWhiteAndBlack {
 }
 
 impl BitBoardsWhiteAndBlack {
+    pub fn empty() -> Self {
+        let empty_board = ChessBoard::empty();
+        BitBoardsWhiteAndBlack::from(empty_board)
+    }
+
+    pub fn add_piece(&mut self, piece: square::Piece, square: u8) {
+        match piece.color() {
+            square::Color::White =>
+                self.bit_board_white.add_piece(piece, square),
+            square::Color::Black =>
+                self.bit_board_black.add_piece(piece, square),
+        }
+    }
+    
     pub fn xor(&self, bitboard_white_and_black: BitBoardsWhiteAndBlack) -> BitBoardsWhiteAndBlack {
         BitBoardsWhiteAndBlack {
             bit_board_white: self
@@ -748,6 +779,17 @@ pub struct BitBoards {
     pawns: piece_move::PawnsBitBoard,
 }
 impl BitBoards {
+    pub fn add_piece(&mut self, piece: square::Piece, square: u8) {
+        let mask = BitIndex(square).bitboard();
+        match piece.type_piece() {
+            TypePiece::Rook => self.rooks.xor_mut(mask),
+            TypePiece::Bishop => self.bishops.xor_mut(mask),
+            TypePiece::Knight => self.knights.xor_mut(mask),
+            TypePiece::Queen => self.queens.xor_mut(mask),
+            TypePiece::King => self.king.xor_mut(mask),
+            TypePiece::Pawn => self.pawns.xor_mut(mask),
+        }
+    }
     pub fn xor(&self, bitboard: &BitBoards) -> BitBoards {
         BitBoards {
             rooks: piece_move::RooksBitBoard::new(
@@ -1282,8 +1324,7 @@ mod tests {
 
     #[test]
     fn test_bit_position_from_empty_board() {
-        let empty_board = ChessBoard::build([[Square::Empty; 8]; 8]);
-        let bit_position = BitBoardsWhiteAndBlack::from(empty_board);
+        let bit_position = BitBoardsWhiteAndBlack::empty();
 
         assert_eq!(*bit_position.bit_board_white.rooks.bitboard(), BitBoard(0));
         assert_eq!(

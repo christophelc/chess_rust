@@ -1,9 +1,15 @@
-use crate::entity::game::component::{coord, square};
+use crate::entity::game::component::{coord, square::{self, Square}};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ChessBoard {
     squares: [[square::Square; 8]; 8],
 }
+impl ChessBoard {
+    pub fn empty() -> Self {
+        ChessBoard::build([[Square::Empty; 8]; 8])
+    }
+}
+
 pub struct ChessBoardIterator<'a> {
     board: &'a ChessBoard,
     row: usize,
