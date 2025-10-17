@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use crate::{entity::game::component::{bitboard::{zobrist::{self, ZobristHash}, BitPosition}, game_state::GameState, square::{self, Piece, TypePiece}}, ui::notation::fen::Position};
 use itertools::Itertools; 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pieces {
     piece: Piece,
     n: u8
@@ -34,20 +36,22 @@ impl SetPieces {
         pieces.piece.color() == color
     }
 
-    pub fn from(pieces: &[Pieces]) -> Self {
-        let is_king_white_valid = pieces
+    pub fn from(l_pieces: &[Pieces]) -> Self {
+        let is_king_white_valid = l_pieces
         .into_iter()
         .find(|iter| Self::check_king(*iter, square::Color::White))
         .is_some();
-        let is_king_black_valid = pieces
+        let is_king_black_valid = l_pieces
         .into_iter()
         .find(|iter| Self::check_king(*iter, square::Color::Black))
         .is_some();
         assert!(is_king_white_valid, "Missing white king");
         assert!(is_king_black_valid, "Missing black king");
+        let distinct_pieces = l_pieces.into_iter().map(|pieces| pieces.piece).collect::<HashSet<Piece>>();
+        assert!(distinct_pieces.len() == l_pieces.len(), "Duplicate pieces in set");
         
         let mut set_of_pieces = Vec::<Piece>::new();
-        pieces.into_iter().for_each(|iter| {
+        l_pieces.into_iter().for_each(|iter| {
             set_of_pieces.extend(std::iter::repeat(iter.piece().clone()).take(iter.n() as usize))
         });
         Self {
@@ -62,6 +66,10 @@ pub struct BitPositionIterator {
     zobrist_table: zobrist::Zobrist,
 }
 
+// Iterator that generates valid BitPositions from a SetPieces.
+// It generates all permutations of piece placements and filters out invalid positions.
+// Filtering is done by check_valid_bitboard function.
+// Caveat: Duplicate positions may be generated if the SetPieces contains identical pieces
 impl BitPositionIterator {
     pub fn new(set: SetPieces) -> Self {
         let piece_count = set.pieces.len();
@@ -141,6 +149,16 @@ fn test_valid_set_with_kings() {
     }
 
     #[test]
+    #[should_panic(expected = "Duplicate pieces in set")]    
+    fn test_invalid_set() {
+        let white_king = Pieces::new(Piece::new(TypePiece::King, Color::White), 1);
+        let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
+        let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);        
+        let pieces = vec![white_king, black_king, white_pawn.clone(), white_pawn];        
+        let set_pieces = SetPieces::from(&pieces);        
+    }
+
+    #[test]
     #[should_panic(expected = "Missing white king")]
     fn test_missing_white_king_should_panic() {
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
@@ -166,6 +184,19 @@ fn test_valid_set_with_kings() {
         let two_white_kings = Pieces::new(Piece::new(TypePiece::King, Color::White), 2);
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
         let pieces = vec![two_white_kings, black_king];
+
+        let _ = SetPieces::from(&pieces); // constructor panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Duplicate pieces in set")]
+    fn test_duplicate_pieces_should_panic() {
+        let white_king = Pieces::new(Piece::new(TypePiece::King, Color::White), 1);
+        let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
+        let pawns = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 1);
+        let duplicate_pawns = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 1);
+
+        let pieces = vec![white_king, black_king, pawns, duplicate_pawns];
 
         let _ = SetPieces::from(&pieces); // constructor panic
     }
