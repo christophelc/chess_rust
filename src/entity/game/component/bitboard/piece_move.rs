@@ -1346,7 +1346,7 @@ mod tests {
     #[ignore]
     fn test_empty_bitboard() {
         let bitboard = BitBoard(0);
-        assert_eq!(list_index(&bitboard), vec![]);
+        assert_eq!(list_index(&bitboard), vec![] as Vec<u8>);
     }
 
     #[test]
