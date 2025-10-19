@@ -994,7 +994,7 @@ pub struct BitPositionStatus {
 impl Default for BitPositionStatus {
     fn default() -> Self {
         BitPositionStatus {
-            flags: 0,
+            flags: Self::PLAYER_TURN_WHITE,
             pawn_en_passant: -1,
             n_half_moves: 0,
             n_moves: 0,
@@ -1264,6 +1264,12 @@ use square::TypePiece;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_empty_white_turn() {
+        let bit_position = BitPosition::empty();
+        assert!(bit_position.bit_position_status().player_turn_white());
+    }
 
     #[test]
     fn test_bit_position_status_from() {

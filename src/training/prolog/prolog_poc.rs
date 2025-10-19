@@ -1,25 +1,10 @@
 use scryer_prolog::{MachineBuilder, Term, /* Machine, QueryState, etc. */};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs};
 use anyhow::{anyhow, Result};
 
-#[cfg(test)]
-
-fn prolog_program() -> &'static str {
-    r#"
-    % :- module(seq, [n_consecutifs/3]).
-
-    n_consecutifs(N, Start, L) :-
-        integer(N), N >= 0,
-        integer(Start),
-        End is Start + N - 1,
-        range_(Start, End, L).
-
-    range_(A, B, []) :- A > B, !.
-    range_(A, B, [A|R]) :-
-        A =< B,
-        A1 is A + 1,
-        range_(A1, B, R).
-    "#
+fn prolog_program() -> std::io::Result<String> {
+    let content = fs::read_to_string("prolog/training/poc.pl")?;
+    Ok(content)
 }
 
 fn term_to_vec_i64(t: &Term) -> Result<Vec<i64>> {
@@ -72,21 +57,25 @@ mod tests {
 
     use super::*;
 
+    fn read_prolog_program() -> String {
+        prolog_program().expect("Erreur when reading Prolog program")
+    }
+
     #[test]
     fn test_n_consecutifs_basique() {
-        let result = run_n_consecutifs(5, 10, prolog_program()).expect("Erreur d'exécution Prolog");
+        let result = run_n_consecutifs(5, 10, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, vec![10, 11, 12, 13, 14]);
     }
 
     #[test]
     fn test_n_consecutifs_zero() {
-        let result = run_n_consecutifs(0, 42, prolog_program()).expect("Erreur d'exécution Prolog");
+        let result = run_n_consecutifs(0, 42, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, Vec::<i64>::new());
     }
 
     #[test]
     fn test_n_consecutifs_un() {
-        let result = run_n_consecutifs(1, -3, prolog_program()).expect("Erreur d'exécution Prolog");
+        let result = run_n_consecutifs(1, -3, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, vec![-3]);
     }
 }
