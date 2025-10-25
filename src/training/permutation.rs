@@ -156,7 +156,7 @@ fn test_valid_set_with_kings() {
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
         let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);        
         let pieces = vec![white_king, black_king, white_pawn.clone(), white_pawn];        
-        let set_pieces = SetPieces::from(&pieces);        
+        let _set_pieces = SetPieces::from(&pieces);        
     }
 
     #[test]
