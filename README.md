@@ -217,6 +217,14 @@ Gpu Based (like with Alphago) ?
 
 Avoid the use of convolutional network and consider only CPU based computing (NNUE) as a first approach. Analyse what we can do with a NNUE.
 
+### First step
+
+Generate positions KRK
+
+- First try with Prolog. Same with Datalog through Crepe.
+- CozoDB ?
+
+
 
 ## Conclusion
 

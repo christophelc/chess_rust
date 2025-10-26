@@ -1,0 +1,8 @@
+# flix/flix.toml
+name        = "KRK"
+version     = "0.1.0"
+flix        = "0.46.0"         # version du compilateur cible (pas critique)
+description = "Logical reasoning engine for KRK chess endgame"
+license     = "MIT"
+authors     = ["Your Name <you@example.com>"]
+
