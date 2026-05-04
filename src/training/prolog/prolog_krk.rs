@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Result};
-use scryer_prolog::{LeafAnswer, Machine, MachineBuilder, QueryState, Term};
+use scryer_prolog::{LeafAnswer, Machine, QueryState, Term};
+//use scryer_prolog::MachineBuilder;
 use std::{collections::BTreeMap, fs};
 
-use crate::entity::game::component::{bitboard::{zobrist::{self, ZobristHash}, BitBoard, BitPosition}, game_state::GameState, square::{Color, Piece, TypePiece}};
+use crate::entity::game::component::{bitboard::{zobrist::{self, ZobristHash}, BitPosition}, game_state::GameState, square::{Color, Piece, TypePiece}};
 
 // ------------ Prolog program (unchanged) ------------
 fn prolog_program() -> std::io::Result<String> {

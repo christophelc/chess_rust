@@ -222,7 +222,13 @@ Avoid the use of convolutional network and consider only CPU based computing (NN
 Generate positions KRK
 
 - First try with Prolog. Same with Datalog through Crepe.
-- CozoDB ?
+- Ascent ? Aggregator
+- CozoDB ? Not maintained anymore ?
+- TerminusDb
+- TypeDb
+- Go Rules Zen Engine (Clara rules) ?
+- DDlog ? heavier to install
+- Soufflé (C++)
 
 
 

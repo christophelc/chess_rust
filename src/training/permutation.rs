@@ -1,7 +1,40 @@
 use std::collections::HashSet;
 
-use crate::{entity::game::component::{bitboard::{zobrist::{self, ZobristHash}, BitPosition}, game_state::GameState, square::{self, Piece, TypePiece}}, ui::notation::fen::Position};
+use crate::{entity::game::component::{bitboard::{BitPosition, zobrist::{self, ZobristHash}}, game_state::GameState, square::{self, Piece, TypePiece}}, ui::notation::fen::{EncodeUserInput, Fen}};
+use crate::training::permutation::square::Color;
 use itertools::Itertools; 
+use std::io::{Write, BufWriter};
+
+pub fn generate_positions_from(set: SetPieces) -> impl Iterator<Item = BitPosition> {
+    BitPositionIterator::new(set)
+}
+
+pub fn generate_krk() -> impl Iterator<Item = BitPosition> {
+        let white_king = Piece::new(TypePiece::King, Color::White);
+        let white_rook = Piece::new(TypePiece::Rook, Color::White);
+        let black_king = Piece::new(TypePiece::King, Color::Black);
+
+        let set = SetPieces {
+            pieces: vec![white_king, white_rook, black_king],
+        };
+
+        let positions = generate_positions_from(set);
+        positions
+}
+
+pub fn prepare_krk_as_fen_white_turn_to_csv(file_name: &str) -> std::io::Result<()> {
+    let positions = generate_krk();
+    // open file in write mode
+    let file = std::fs::File::create(file_name)?; // overwrite if exists
+    let mut writer = BufWriter::new(file);    
+    writeln!(writer, "fen;mat_in").expect("Failed to write header to file");
+    positions.for_each(|bit_position| {
+        let position = bit_position.to();
+        let fen = Fen::encode(&position).expect("Failed to encode position");
+        writeln!(writer, "{};", fen).expect("Failed to write to file");
+    });
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct Pieces {
@@ -116,11 +149,6 @@ pub fn check_valid_bitboard(bit_position: &BitPosition, zobrist_table: &zobrist:
     !check_status.is_check()
 }
 
-pub fn generate_positions_from(set: SetPieces) -> impl Iterator<Item = BitPosition> {
-    BitPositionIterator::new(set)
-}
-
-
 #[cfg(test)]
 mod tests {
     use crate::{training::permutation::square::Color, ui::notation::fen::{self, EncodeUserInput}};
@@ -204,18 +232,11 @@ fn test_valid_set_with_kings() {
 
     #[test]
     fn test_generate_positions_king_rook_vs_king() {
-        let white_king = Piece::new(TypePiece::King, Color::White);
-        let white_rook = Piece::new(TypePiece::Rook, Color::White);
-        let black_king = Piece::new(TypePiece::King, Color::Black);
-
-        let set = SetPieces {
-            pieces: vec![white_king, white_rook, black_king],
-        };
-
-        let mut positions = generate_positions_from(set);
+        let mut positions = generate_krk();
         
         // Take the first valid position
         let first = positions.next();
+        println!("{}", first.clone().unwrap().to().chessboard());
         assert!(first.is_some(), "No valid position generated");
 
         let bit_position = first.unwrap();

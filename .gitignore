@@ -7,3 +7,4 @@ perf.data*
 profile.json
 test_suites.txt
 logs/
+*.csv
