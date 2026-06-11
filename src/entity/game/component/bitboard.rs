@@ -160,9 +160,9 @@ pub struct BitPosition {
 impl BitPosition {
     pub fn empty() -> Self {
         Self {
-            bit_boards_white_and_black: BitBoardsWhiteAndBlack::empty(), 
+            bit_boards_white_and_black: BitBoardsWhiteAndBlack::empty(),
             bit_position_status: BitPositionStatus::default(),
-            hash_positions: zobrist::ZobristHistory::default()
+            hash_positions: zobrist::ZobristHistory::default(),
         }
     }
     pub fn play_back(
@@ -200,7 +200,7 @@ impl BitPosition {
         piece: square::Piece,
         square: u8,
         hash: &mut zobrist::ZobristHash,
-        zobrist_table: &zobrist::Zobrist,        
+        zobrist_table: &zobrist::Zobrist,
     ) {
         *hash = hash.xor_piece(zobrist_table, piece, square as usize);
         self.bit_boards_white_and_black.add_piece(piece, square);
@@ -331,13 +331,11 @@ impl BitBoardsWhiteAndBlack {
 
     pub fn add_piece(&mut self, piece: square::Piece, square: u8) {
         match piece.color() {
-            square::Color::White =>
-                self.bit_board_white.add_piece(piece, square),
-            square::Color::Black =>
-                self.bit_board_black.add_piece(piece, square),
+            square::Color::White => self.bit_board_white.add_piece(piece, square),
+            square::Color::Black => self.bit_board_black.add_piece(piece, square),
         }
     }
-    
+
     pub fn xor(&self, bitboard_white_and_black: BitBoardsWhiteAndBlack) -> BitBoardsWhiteAndBlack {
         BitBoardsWhiteAndBlack {
             bit_board_white: self

@@ -68,7 +68,7 @@ impl EngineMat {
             &mut max_depth,
             is_stop,
         );
-        println!("info end looking for mat");
+        // println!("info end looking for mat");
         // if let Some(mat_move) = &shortest_mat_opt {
         //     println!("============");
         //     println!("{}", mat_move.variant());
@@ -215,7 +215,7 @@ impl EngineMat {
         let updated_variant = format!("{} {}", variant, long_algebraic_move.cast())
             .trim()
             .to_string();
-        println!("variant mat ? {}", updated_variant);
+        // println!("variant mat ? {}", updated_variant);
         game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false)
             .unwrap();
         game.update_endgame_status();
@@ -369,8 +369,14 @@ mod tests {
         let game = game_state::GameState::new(position, zobrist_table);
         let mut stat_eval = stat_eval::StatEval::default();
         let flag_stop = Arc::new(AtomicBool::new(false));
-        let mat_move_opt =
-            engine_player1.mat_solver_init(&game, self_actor, None, &config::MatConfig::new(6), &mut stat_eval, &flag_stop);
+        let mat_move_opt = engine_player1.mat_solver_init(
+            &game,
+            self_actor,
+            None,
+            &config::MatConfig::new(6),
+            &mut stat_eval,
+            &flag_stop,
+        );
         println!("{:?}", mat_move_opt);
     }
 

@@ -1,4 +1,7 @@
-use crate::entity::game::component::{coord, square::{self, Square}};
+use crate::entity::game::component::{
+    coord,
+    square::{self, Square},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ChessBoard {
@@ -57,7 +60,7 @@ impl ChessBoard {
         &self.squares
     }
 
-    pub fn iter(&self) -> ChessBoardIterator {
+    pub fn iter(&self) -> ChessBoardIterator<'_> {
         ChessBoardIterator {
             board: self,
             row: 0,

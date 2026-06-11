@@ -43,7 +43,7 @@ impl EngineAlphaBeta {
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                &config::MatConfig::new(2*max_depth -1),
+                &config::MatConfig::new(2 * max_depth - 1),
             ),
             is_send_best_move,
         }

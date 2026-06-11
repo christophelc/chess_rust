@@ -23,7 +23,7 @@ fn span_debug() -> tracing::Span {
 pub struct EngineIddfs {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
-    conf:  config::IDDFSConfig,
+    conf: config::IDDFSConfig,
     engine_alphabeta: engine_alphabeta::EngineAlphaBeta,
     engine_mat_solver: engine_mat::EngineMat,
 }

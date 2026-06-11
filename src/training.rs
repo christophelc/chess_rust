@@ -1,3 +1,3 @@
-pub mod prolog;
-pub mod permutation;
 pub mod datalog;
+pub mod permutation;
+pub mod prolog;

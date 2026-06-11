@@ -74,7 +74,7 @@ impl Iterator for AttackersIterator<'_> {
     }
 }
 impl Attackers {
-    pub fn iter(&self) -> AttackersIterator {
+    pub fn iter(&self) -> AttackersIterator<'_> {
         AttackersIterator {
             attackers: self,
             index: 0,

@@ -3,7 +3,14 @@ use scryer_prolog::{LeafAnswer, Machine, QueryState, Term};
 //use scryer_prolog::MachineBuilder;
 use std::{collections::BTreeMap, fs};
 
-use crate::entity::game::component::{bitboard::{zobrist::{self, ZobristHash}, BitPosition}, game_state::GameState, square::{Color, Piece, TypePiece}};
+use crate::entity::game::component::{
+    bitboard::{
+        zobrist::{self, ZobristHash},
+        BitPosition,
+    },
+    game_state::GameState,
+    square::{Color, Piece, TypePiece},
+};
 
 // ------------ Prolog program (unchanged) ------------
 fn prolog_program() -> std::io::Result<String> {
@@ -51,7 +58,7 @@ impl<'a> Iterator for PlIter<'a> {
 
         match leaf {
             LeafAnswer::LeafAnswer { bindings, .. } => Some(Ok(bindings)), // move out
-            LeafAnswer::True  => Some(Err(anyhow!("no variables (True)"))),
+            LeafAnswer::True => Some(Err(anyhow!("no variables (True)"))),
             LeafAnswer::False => None, // end of search
             LeafAnswer::Exception(t) => Some(Err(anyhow!("exception: {t:?}"))),
         }
@@ -67,8 +74,8 @@ pub struct KrkIter<'a> {
 
 impl<'a> KrkIter<'a> {
     pub fn new(machine: &'a mut Machine, is_white_turn: bool) -> Self {
-        Self { 
-            inner: PlIter::new(machine, "krk(WK, WR, BK)."), 
+        Self {
+            inner: PlIter::new(machine, "krk(WK, WR, BK)."),
             zobrist_table: zobrist::Zobrist::new(),
             is_white_turn,
         }
@@ -77,7 +84,7 @@ impl<'a> KrkIter<'a> {
     /// If you ever want to tweak the query (e.g., add constraints),
     /// you can pass a different one here without changing the iterator type.
     pub fn with_query(machine: &'a mut Machine, white_turn: bool, query: &str) -> Self {
-        Self { 
+        Self {
             inner: PlIter::new(machine, query),
             zobrist_table: zobrist::Zobrist::new(),
             is_white_turn: white_turn,
@@ -101,9 +108,9 @@ impl<'a> Iterator for KrkIter<'a> {
         loop {
             // Drive the inner iterator
             let bindings = match self.inner.next() {
-                Some(Ok(b))  => b,
+                Some(Ok(b)) => b,
                 Some(Err(e)) => return Some(Err(e)), // surface inner error
-                None         => return None,         // end of iteration
+                None => return None,                 // end of iteration
             };
 
             // Build the position
@@ -114,13 +121,37 @@ impl<'a> Iterator for KrkIter<'a> {
             let black_king = Piece::new(TypePiece::King, Color::Black);
             let white_rook = Piece::new(TypePiece::Rook, Color::White);
 
-            let wk = match get_i(&bindings, "WK") { Ok(v) => v, Err(e) => return Some(Err(e)) };
-            let wr = match get_i(&bindings, "WR") { Ok(v) => v, Err(e) => return Some(Err(e)) };
-            let bk = match get_i(&bindings, "BK") { Ok(v) => v, Err(e) => return Some(Err(e)) };
+            let wk = match get_i(&bindings, "WK") {
+                Ok(v) => v,
+                Err(e) => return Some(Err(e)),
+            };
+            let wr = match get_i(&bindings, "WR") {
+                Ok(v) => v,
+                Err(e) => return Some(Err(e)),
+            };
+            let bk = match get_i(&bindings, "BK") {
+                Ok(v) => v,
+                Err(e) => return Some(Err(e)),
+            };
 
-            bit_position.add_piece_without_control(white_king, wk as u8, &mut zobrist_hash, &self.zobrist_table);
-            bit_position.add_piece_without_control(white_rook, wr as u8, &mut zobrist_hash, &self.zobrist_table);
-            bit_position.add_piece_without_control(black_king, bk as u8, &mut zobrist_hash, &self.zobrist_table);
+            bit_position.add_piece_without_control(
+                white_king,
+                wk as u8,
+                &mut zobrist_hash,
+                &self.zobrist_table,
+            );
+            bit_position.add_piece_without_control(
+                white_rook,
+                wr as u8,
+                &mut zobrist_hash,
+                &self.zobrist_table,
+            );
+            bit_position.add_piece_without_control(
+                black_king,
+                bk as u8,
+                &mut zobrist_hash,
+                &self.zobrist_table,
+            );
 
             // we don't verify check if black turn since prolog already ensures kings distant enough
             if !self.is_white_turn || check_valid_bitboard(&bit_position, &self.zobrist_table) {
@@ -133,7 +164,6 @@ impl<'a> Iterator for KrkIter<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,12 +173,12 @@ mod tests {
     fn read_prolog_program() -> String {
         prolog_program().expect("Erreur when reading Prolog program")
     }
-    
+
     #[test]
     fn check_control() {
         let mut bit_position = BitPosition::empty();
-        let mut zobrist_hash = ZobristHash::default();        
-        let zobrist_table =  zobrist::Zobrist::new();
+        let mut zobrist_hash = ZobristHash::default();
+        let zobrist_table = zobrist::Zobrist::new();
 
         let white_king = Piece::new(TypePiece::King, Color::White);
         let black_king = Piece::new(TypePiece::King, Color::Black);
@@ -156,9 +186,24 @@ mod tests {
         let wk = 0u64;
         let bk = 63u64;
         let wr = 7u64;
-        bit_position.add_piece_without_control(white_king, wk as u8, &mut zobrist_hash, &zobrist_table);
-        bit_position.add_piece_without_control(white_rook, wr as u8, &mut zobrist_hash, &zobrist_table);
-        bit_position.add_piece_without_control(black_king, bk as u8, &mut zobrist_hash, &zobrist_table);
+        bit_position.add_piece_without_control(
+            white_king,
+            wk as u8,
+            &mut zobrist_hash,
+            &zobrist_table,
+        );
+        bit_position.add_piece_without_control(
+            white_rook,
+            wr as u8,
+            &mut zobrist_hash,
+            &zobrist_table,
+        );
+        bit_position.add_piece_without_control(
+            black_king,
+            bk as u8,
+            &mut zobrist_hash,
+            &zobrist_table,
+        );
         assert!(!check_valid_bitboard(&bit_position, &zobrist_table))
     }
 
@@ -177,7 +222,7 @@ mod tests {
         assert_eq!(v.len(), 5, "Prolog must return five positions");
 
         // Check constraints over returned bitboards
-        for bitboard in &v {            
+        for bitboard in &v {
             let wk = bitboard
                 .bit_boards_white_and_black()
                 .bit_board_white()
@@ -199,7 +244,7 @@ mod tests {
                 .bitboard()
                 .index()
                 .value() as i32;
-                       
+
             // squares are 0..=63
             assert!((0..=63).contains(&wk));
             assert!((0..=63).contains(&wr));
@@ -218,7 +263,6 @@ mod tests {
 
         Ok(())
     }
-
 
     #[ignore]
     #[test]

@@ -1,32 +1,42 @@
 use std::collections::HashSet;
 
-use crate::{entity::game::component::{bitboard::{BitPosition, zobrist::{self, ZobristHash}}, game_state::GameState, square::{self, Piece, TypePiece}}, ui::notation::fen::{EncodeUserInput, Fen}};
 use crate::training::permutation::square::Color;
-use itertools::Itertools; 
-use std::io::{Write, BufWriter};
+use crate::{
+    entity::game::component::{
+        bitboard::{
+            zobrist::{self, ZobristHash},
+            BitPosition,
+        },
+        game_state::GameState,
+        square::{self, Piece, TypePiece},
+    },
+    ui::notation::fen::{EncodeUserInput, Fen},
+};
+use itertools::Itertools;
+use std::io::{BufWriter, Write};
 
 pub fn generate_positions_from(set: SetPieces) -> impl Iterator<Item = BitPosition> {
     BitPositionIterator::new(set)
 }
 
 pub fn generate_krk() -> impl Iterator<Item = BitPosition> {
-        let white_king = Piece::new(TypePiece::King, Color::White);
-        let white_rook = Piece::new(TypePiece::Rook, Color::White);
-        let black_king = Piece::new(TypePiece::King, Color::Black);
+    let white_king = Piece::new(TypePiece::King, Color::White);
+    let white_rook = Piece::new(TypePiece::Rook, Color::White);
+    let black_king = Piece::new(TypePiece::King, Color::Black);
 
-        let set = SetPieces {
-            pieces: vec![white_king, white_rook, black_king],
-        };
+    let set = SetPieces {
+        pieces: vec![white_king, white_rook, black_king],
+    };
 
-        let positions = generate_positions_from(set);
-        positions
+    let positions = generate_positions_from(set);
+    positions
 }
 
 pub fn prepare_krk_as_fen_white_turn_to_csv(file_name: &str) -> std::io::Result<()> {
     let positions = generate_krk();
     // open file in write mode
     let file = std::fs::File::create(file_name)?; // overwrite if exists
-    let mut writer = BufWriter::new(file);    
+    let mut writer = BufWriter::new(file);
     writeln!(writer, "fen;mat_in").expect("Failed to write header to file");
     positions.for_each(|bit_position| {
         let position = bit_position.to();
@@ -39,16 +49,16 @@ pub fn prepare_krk_as_fen_white_turn_to_csv(file_name: &str) -> std::io::Result<
 #[derive(Debug, Clone)]
 pub struct Pieces {
     piece: Piece,
-    n: u8
+    n: u8,
 }
 impl Pieces {
     pub fn new(piece: Piece, n: u8) -> Self {
         assert!(n >= 1, "{}", format!("Invalid number of piece for {}", n));
-        assert!(piece.type_piece() != TypePiece::King || n == 1, "Only one king");
-        Self {
-            piece,
-            n
-        }
+        assert!(
+            piece.type_piece() != TypePiece::King || n == 1,
+            "Only one king"
+        );
+        Self { piece, n }
     }
     pub fn piece(&self) -> Piece {
         self.piece
@@ -60,35 +70,41 @@ impl Pieces {
 
 #[derive(Debug)]
 pub struct SetPieces {
-    pieces: Vec<Piece>
+    pieces: Vec<Piece>,
 }
 impl SetPieces {
     fn check_king(pieces: &Pieces, color: square::Color) -> bool {
-        pieces.piece.type_piece() == TypePiece::King && 
-        pieces.n() == 1 && 
-        pieces.piece.color() == color
+        pieces.piece.type_piece() == TypePiece::King
+            && pieces.n() == 1
+            && pieces.piece.color() == color
     }
 
     pub fn from(l_pieces: &[Pieces]) -> Self {
         let is_king_white_valid = l_pieces
-        .into_iter()
-        .find(|iter| Self::check_king(*iter, square::Color::White))
-        .is_some();
+            .into_iter()
+            .find(|iter| Self::check_king(*iter, square::Color::White))
+            .is_some();
         let is_king_black_valid = l_pieces
-        .into_iter()
-        .find(|iter| Self::check_king(*iter, square::Color::Black))
-        .is_some();
+            .into_iter()
+            .find(|iter| Self::check_king(*iter, square::Color::Black))
+            .is_some();
         assert!(is_king_white_valid, "Missing white king");
         assert!(is_king_black_valid, "Missing black king");
-        let distinct_pieces = l_pieces.into_iter().map(|pieces| pieces.piece).collect::<HashSet<Piece>>();
-        assert!(distinct_pieces.len() == l_pieces.len(), "Duplicate pieces in set");
-        
+        let distinct_pieces = l_pieces
+            .into_iter()
+            .map(|pieces| pieces.piece)
+            .collect::<HashSet<Piece>>();
+        assert!(
+            distinct_pieces.len() == l_pieces.len(),
+            "Duplicate pieces in set"
+        );
+
         let mut set_of_pieces = Vec::<Piece>::new();
         l_pieces.into_iter().for_each(|iter| {
             set_of_pieces.extend(std::iter::repeat(iter.piece().clone()).take(iter.n() as usize))
         });
         Self {
-            pieces: set_of_pieces
+            pieces: set_of_pieces,
         }
     }
 }
@@ -128,7 +144,12 @@ impl Iterator for BitPositionIterator {
             let mut zobrist_hash = ZobristHash::default();
 
             for (piece, &square) in self.set.pieces.iter().zip(squares.iter()) {
-                bit_position.add_piece_without_control(piece.clone(), square, &mut zobrist_hash, &self.zobrist_table);
+                bit_position.add_piece_without_control(
+                    piece.clone(),
+                    square,
+                    &mut zobrist_hash,
+                    &self.zobrist_table,
+                );
             }
 
             if check_valid_bitboard(&bit_position, &self.zobrist_table) {
@@ -151,11 +172,14 @@ pub fn check_valid_bitboard(bit_position: &BitPosition, zobrist_table: &zobrist:
 
 #[cfg(test)]
 mod tests {
-    use crate::{training::permutation::square::Color, ui::notation::fen::{self, EncodeUserInput}};
     use super::*;
+    use crate::{
+        training::permutation::square::Color,
+        ui::notation::fen::{self, EncodeUserInput},
+    };
 
     #[test]
-fn test_valid_set_with_kings() {
+    fn test_valid_set_with_kings() {
         let white_king = Pieces::new(Piece::new(TypePiece::King, Color::White), 1);
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
         let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);
@@ -169,22 +193,30 @@ fn test_valid_set_with_kings() {
         assert_eq!(set_pieces.pieces.len(), 1 + 1 + 8 + 2);
 
         // Count number of white kings
-        let white_kings = set_pieces.pieces.iter().filter(|p| p.type_piece() == TypePiece::King && p.color() == Color::White).count();
+        let white_kings = set_pieces
+            .pieces
+            .iter()
+            .filter(|p| p.type_piece() == TypePiece::King && p.color() == Color::White)
+            .count();
         assert_eq!(white_kings, 1);
 
         // Count number of black knights
-        let black_knights = set_pieces.pieces.iter().filter(|p| p.type_piece() == TypePiece::Knight && p.color() == Color::Black).count();
+        let black_knights = set_pieces
+            .pieces
+            .iter()
+            .filter(|p| p.type_piece() == TypePiece::Knight && p.color() == Color::Black)
+            .count();
         assert_eq!(black_knights, 2);
     }
 
     #[test]
-    #[should_panic(expected = "Duplicate pieces in set")]    
+    #[should_panic(expected = "Duplicate pieces in set")]
     fn test_invalid_set() {
         let white_king = Pieces::new(Piece::new(TypePiece::King, Color::White), 1);
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
-        let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);        
-        let pieces = vec![white_king, black_king, white_pawn.clone(), white_pawn];        
-        let set_pieces = SetPieces::from(&pieces);        
+        let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);
+        let pieces = vec![white_king, black_king, white_pawn.clone(), white_pawn];
+        let set_pieces = SetPieces::from(&pieces);
     }
 
     #[test]
@@ -233,7 +265,7 @@ fn test_valid_set_with_kings() {
     #[test]
     fn test_generate_positions_king_rook_vs_king() {
         let mut positions = generate_krk();
-        
+
         // Take the first valid position
         let first = positions.next();
         println!("{}", first.clone().unwrap().to().chessboard());
@@ -255,7 +287,7 @@ fn test_valid_set_with_kings() {
     #[test]
     fn test_invalid_position_kings_too_close() {
         let zobrist_table = zobrist::Zobrist::new();
-        let fen_invalid = "Kk6/8/8/8/8/8/8/R7 w q - 0 1"; 
+        let fen_invalid = "Kk6/8/8/8/8/8/8/R7 w q - 0 1";
         let position = fen::Fen::decode(fen_invalid).expect("Failed to decode FEN");
         let bit_position = &BitPosition::from(position);
         let is_valid = check_valid_bitboard(bit_position, &zobrist_table);

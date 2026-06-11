@@ -251,7 +251,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
-            config::AlphabetaFeatureConf::default(),            
+            config::AlphabetaFeatureConf::default(),
             false,
         );
         engine_player2.set_id_number("black");

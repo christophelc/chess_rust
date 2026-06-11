@@ -8,7 +8,10 @@ use std::{
 
 use actix::Actor;
 
-use crate::entity::engine::{actor::engine_dispatcher as dispatcher, component::config::config::{self, IDDFSConfig}};
+use crate::entity::engine::{
+    actor::engine_dispatcher as dispatcher,
+    component::config::config::{self, IDDFSConfig},
+};
 use crate::{
     entity::{
         engine::component::engine_iddfs,
@@ -62,9 +65,7 @@ pub struct Constraint {
 }
 impl Constraint {
     pub fn new(max_time_sec: u64) -> Self {
-        Self {
-            max_time_sec,
-        }
+        Self { max_time_sec }
     }
     pub fn max_time_sec(&self) -> u64 {
         self.max_time_sec
@@ -87,7 +88,16 @@ impl EpdScore {
 }
 impl std::fmt::Display for EpdScore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:.3} - {} - am {}/{} - bm {}/{}", self.score(), self.best_move_opt.clone().unwrap_or("".to_string()), self.am_ok, self.am_count, self.bm_ok, self.bm_count)
+        write!(
+            f,
+            "{:.3} - {} - am {}/{} - bm {}/{}",
+            self.score(),
+            self.best_move_opt.clone().unwrap_or("".to_string()),
+            self.am_ok,
+            self.am_count,
+            self.bm_ok,
+            self.bm_count
+        )
     }
 }
 
@@ -98,7 +108,11 @@ fn init_game_params(conf: &config::IDDFSConfig) -> engine_iddfs::EngineIddfs {
     engine_player.set_id_number("computer");
     engine_player
 }
-pub fn scoring<'a>(epd_data: &'a launcher::EpdData, engine_conf: &IDDFSConfig, constraint: &Constraint) -> Vec<(&'a epd::Epd, EpdScore)> {
+pub fn scoring<'a>(
+    epd_data: &'a launcher::EpdData,
+    engine_conf: &IDDFSConfig,
+    constraint: &Constraint,
+) -> Vec<(&'a epd::Epd, EpdScore)> {
     let zobrist_table = zobrist::Zobrist::new();
     let engine = init_game_params(engine_conf);
 
@@ -202,8 +216,9 @@ fn epd_eval(
 
     let am_moved_played: Option<MovePlayed>;
     let bm_moved_played: Option<MovePlayed>;
-    let b_move_opt = b_move_opt.map(|b_move|
-        notation::long_notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast());
+    let b_move_opt = b_move_opt.map(|b_move| {
+        notation::long_notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast()
+    });
     match b_move_opt.as_ref() {
         Some(move_str) => {
             let am_played = ams.contains(&move_str);
@@ -244,6 +259,12 @@ fn epd_eval(
             };
         }
     }
-    let epd_eval = EpdEval::new(id, am_moved_played, bm_moved_played, b_move_opt, duration.as_millis());
+    let epd_eval = EpdEval::new(
+        id,
+        am_moved_played,
+        bm_moved_played,
+        b_move_opt,
+        duration.as_millis(),
+    );
     epd_eval
 }

@@ -5,7 +5,9 @@ use crate::{
     benchmark::{
         epd_reader::{self, EpdRead},
         scoring,
-    }, entity::engine::component::config::config, ui::notation::{epd, san}
+    },
+    entity::engine::component::config::config,
+    ui::notation::{epd, san},
 };
 
 use super::{epd_reader::EpdFileReaderError, scoring::EpdScore};
@@ -38,15 +40,16 @@ pub struct EpdResult<'a> {
     file_path: String,
     result: Vec<(&'a epd::Epd, EpdScore)>,
 }
-impl <'a> EpdResult<'a> {
+impl<'a> EpdResult<'a> {
     pub fn new(file_path: String, result: Vec<(&'a epd::Epd, EpdScore)>) -> Self {
-        Self {
-            file_path, 
-            result,
-        }
+        Self { file_path, result }
     }
     pub fn total(&self) -> f64 {
-        let total: Vec<f64> = self.result.iter().map(|(_epd, epd_score)| epd_score.score()).collect();
+        let total: Vec<f64> = self
+            .result
+            .iter()
+            .map(|(_epd, epd_score)| epd_score.score())
+            .collect();
         total.iter().sum()
     }
 }
@@ -59,7 +62,7 @@ impl fmt::Display for EpdResult<'_> {
             epd_total.am_count += epd_score.am_count;
             epd_total.am_ok += epd_score.am_ok;
             epd_total.bm_count += epd_score.bm_count;
-            epd_total.bm_ok += epd_score.bm_ok;            
+            epd_total.bm_ok += epd_score.bm_ok;
         });
         writeln!(f, "{}", epd_total)?;
         writeln!(f, "total: {:.3}", self.total())
@@ -101,7 +104,11 @@ pub fn benchmark(epd_folder: &str) -> Result<Vec<EpdData>, EpdFileReaderError> {
     let data_all_files_or_error = read_epds_from_folder(epd_folder);
     let conf_depth = 3;
     let max_time_sec = 3;
-    let engine_conf = config::IDDFSConfig::new(conf_depth, config::IddfsFeatureConf::default(), config::AlphabetaFeatureConf::default());
+    let engine_conf = config::IDDFSConfig::new(
+        conf_depth,
+        config::IddfsFeatureConf::default(),
+        config::AlphabetaFeatureConf::default(),
+    );
     let constraint = scoring::Constraint::new(max_time_sec);
     let mut results: Vec<EpdResult> = vec![];
     if let Ok(data_all_files) = &data_all_files_or_error {

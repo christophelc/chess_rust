@@ -1,6 +1,6 @@
-use scryer_prolog::{MachineBuilder, Term, /* Machine, QueryState, etc. */};
-use std::{collections::BTreeMap, fs};
 use anyhow::{anyhow, Result};
+use scryer_prolog::{MachineBuilder, Term /* Machine, QueryState, etc. */};
+use std::{collections::BTreeMap, fs};
 
 fn prolog_program() -> std::io::Result<String> {
     let content = fs::read_to_string("prolog/training/poc.pl")?;
@@ -39,11 +39,12 @@ fn run_n_consecutifs(n: i64, start: i64, program: &str) -> Result<Vec<i64>> {
 
     // LeafAnswer::LeafAnswer { bindings, .. }
     let bindings: &BTreeMap<String, Term> = match first {
-        scryer_prolog::LeafAnswer::LeafAnswer { ref bindings , .. } => bindings,
+        scryer_prolog::LeafAnswer::LeafAnswer { ref bindings, .. } => bindings,
         scryer_prolog::LeafAnswer::True => return Err(anyhow!("réponse sans variables (True)")),
         scryer_prolog::LeafAnswer::False => return Err(anyhow!("échec de la requête (False)")),
-        scryer_prolog::LeafAnswer::Exception(ref term) =>
-            return Err(anyhow!("exception Prolog: {term:?}")),
+        scryer_prolog::LeafAnswer::Exception(ref term) => {
+            return Err(anyhow!("exception Prolog: {term:?}"))
+        }
     };
 
     let l_term = bindings
@@ -63,19 +64,22 @@ mod tests {
 
     #[test]
     fn test_n_consecutifs_basique() {
-        let result = run_n_consecutifs(5, 10, &read_prolog_program()).expect("Erreur d'exécution Prolog");
+        let result =
+            run_n_consecutifs(5, 10, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, vec![10, 11, 12, 13, 14]);
     }
 
     #[test]
     fn test_n_consecutifs_zero() {
-        let result = run_n_consecutifs(0, 42, &read_prolog_program()).expect("Erreur d'exécution Prolog");
+        let result =
+            run_n_consecutifs(0, 42, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, Vec::<i64>::new());
     }
 
     #[test]
     fn test_n_consecutifs_un() {
-        let result = run_n_consecutifs(1, -3, &read_prolog_program()).expect("Erreur d'exécution Prolog");
+        let result =
+            run_n_consecutifs(1, -3, &read_prolog_program()).expect("Erreur d'exécution Prolog");
         assert_eq!(result, vec![-3]);
     }
 }

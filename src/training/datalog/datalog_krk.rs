@@ -45,6 +45,6 @@ mod tests {
             println!("WK={wk}, WR={wr}, BK={bk}");
         }
         // black turn => no filter positions where black is in check
-        assert_eq!(krk.len(), 223944); 
+        assert_eq!(krk.len(), 223944);
     }
 }

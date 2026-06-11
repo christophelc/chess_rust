@@ -23,7 +23,7 @@ pub struct AlphabetaConf {
 impl fmt::Display for AlphabetaConf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "max_depth: {}", self.max_depth)?;
-        writeln!(f, "alphabeta_features: {}", self.alpha_beta_features)        
+        writeln!(f, "alphabeta_features: {}", self.alpha_beta_features)
     }
 }
 
@@ -47,9 +47,14 @@ impl fmt::Display for AlphabetaFeatureConf {
         writeln!(f, "f_killer_move: {}", self.f_killer_move)?;
         writeln!(f, "f_capture_horizon: {}", self.f_capture_horizon)?;
         writeln!(f, "f_check_horizon: {}", self.f_check_horizon)?;
-        writeln!(f, "f_cannot_win_force_null: {}", self.f_cannot_win_force_null)
+        writeln!(
+            f,
+            "f_cannot_win_force_null: {}",
+            self.f_cannot_win_force_null
+        )
     }
-}impl AlphabetaFeatureConf {
+}
+impl AlphabetaFeatureConf {
     pub fn default() -> Self {
         Self {
             f_null_move_pruning: feature::FEATURE_NULL_MOVE_PRUNING,
@@ -79,7 +84,11 @@ pub struct IDDFSConfig {
     pub alphabeta_feature_conf: AlphabetaFeatureConf,
 }
 impl IDDFSConfig {
-    pub fn new(max_depth: u8, iddfs_feature_conf: IddfsFeatureConf, alphabeta_feature_conf: AlphabetaFeatureConf) -> Self {
+    pub fn new(
+        max_depth: u8,
+        iddfs_feature_conf: IddfsFeatureConf,
+        alphabeta_feature_conf: AlphabetaFeatureConf,
+    ) -> Self {
         Self {
             max_depth,
             iddfs_feature_conf,
@@ -103,7 +112,7 @@ impl IddfsFeatureConf {
     pub fn default() -> Self {
         Self {
             f_mat_solver: feature::FEATURE_MAT_SOLVER,
-            f_aspiration_window: feature::FEATURE_ASPIRATION_WINDOW,            
+            f_aspiration_window: feature::FEATURE_ASPIRATION_WINDOW,
         }
     }
 }
@@ -111,7 +120,7 @@ impl fmt::Display for IddfsFeatureConf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "f_mat_solver: {}", self.f_mat_solver)?;
         writeln!(f, "f_aspiration_window: {}", self.f_aspiration_window)
-    }        
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -125,9 +134,7 @@ impl fmt::Display for MatConfig {
 }
 impl MatConfig {
     pub fn new(max_depth: u8) -> Self {
-        Self {
-            max_depth,
-        }
+        Self { max_depth }
     }
 }
 

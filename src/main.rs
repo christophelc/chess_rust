@@ -255,7 +255,7 @@ struct BuildParams {
 }
 fn init_game_params() -> BuildParams {
     let conf = config::IDDFSConfig::new(
-        2*DEPTH -1,
+        2 * DEPTH - 1,
         config::IddfsFeatureConf::default(),
         config::AlphabetaFeatureConf::default(),
     );
@@ -270,7 +270,7 @@ fn init_game_params() -> BuildParams {
     let mut engine_player1 = engine_iddfs::EngineIddfs::new(
         debug_actor_opt.clone(),
         game_manager.zobrist_table(),
-        &conf
+        &conf,
     );
     engine_player1.set_id_number("white");
     let engine_player1_dispatcher =
