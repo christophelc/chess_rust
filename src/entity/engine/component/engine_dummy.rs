@@ -2,7 +2,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use actix::prelude::*;
-use rand::seq::SliceRandom;
+use rand::rng;
+use rand::seq::IndexedRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
@@ -49,7 +50,9 @@ impl logic::Engine for EngineDummy {
         _is_stop: &Arc<AtomicBool>,
     ) {
         let moves = game.gen_moves();
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut trng = rng();        
+        let mut rng = ChaCha12Rng::try_from_rng(&mut trng)
+            .expect("failed to initialize RNG");
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(None));

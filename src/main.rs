@@ -26,7 +26,6 @@ use std::env;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 use tokio::io::AsyncBufReadExt as _;
 
 use entity::engine::actor::engine_dispatcher as dispatcher;
@@ -41,11 +40,9 @@ use monitoring::debug;
 use ui::notation::{fen, san};
 
 use tokio::sync::mpsc;
-use tracing_appender::rolling;
-use tracing_subscriber::{self, layer::SubscriberExt};
+use chess_actix::trace::init_trace;
 
 const DEPTH: u8 = 4;
-const LOG_FILE_ONLY: bool = false;
 
 #[allow(dead_code)]
 fn fen() {
@@ -172,59 +169,6 @@ async fn tui_loop(
             }
             _ => println!("Please enter a move to a format like e2e4"),
         }
-    }
-}
-
-static LOG_GUARDS: OnceLock<(
-    tracing_appender::non_blocking::WorkerGuard,
-    Option<tracing_appender::non_blocking::WorkerGuard>,
-)> = OnceLock::new();
-fn init_trace() {
-    // Default to debug if PLAIN_LOGS undefined
-    let plain_output =
-        std::env::var("PLAIN_LOGS").unwrap_or_else(|_| "false".to_string()) == "true";
-
-    // Configure file-based logging
-    let file_appender = rolling::daily("./logs", "chess_rust.log");
-    let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
-
-    // Set up environment filter for log levels
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
-
-    // Create file logging layer
-    let file_layer = tracing_subscriber::fmt::Layer::new()
-        .with_writer(file_writer)
-        .with_target(true);
-
-    if !LOG_FILE_ONLY {
-        // Configure stdout logging
-        let (stdout_writer, stdout_guard) = tracing_appender::non_blocking(std::io::stdout());
-        let stdout_layer = tracing_subscriber::fmt::Layer::new()
-            .with_writer(stdout_writer)
-            .with_target(true)
-            .with_ansi(plain_output);
-
-        // Combine file and stdout layers
-        let subscriber = tracing_subscriber::Registry::default()
-            .with(env_filter)
-            .with(file_layer)
-            .with(stdout_layer);
-
-        // Keep guards alive
-        LOG_GUARDS.get_or_init(|| (file_guard, Some(stdout_guard)));
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("Failed to set global subscriber");
-    } else {
-        // File-only logging
-        let subscriber = tracing_subscriber::Registry::default()
-            .with(env_filter)
-            .with(file_layer);
-
-        // Keep file guard alive
-        LOG_GUARDS.get_or_init(|| (file_guard, None));
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("Failed to set global subscriber");
     }
 }
 

@@ -6,23 +6,23 @@ build = "build.rs"
 
 [dependencies]
 actix = "0.13.5"
-actix-rt = "2.10.0"
-chrono = "0.4.39"
-clap = { version = "4.5.26", features = ["derive"] }
-num_cpus = "1.16.0"
-petgraph = "0.6.5"
-rand = "0.8.5"
-rand_chacha = "0.3.1"
-rayon = "1.10.0"
-thiserror = "2.0.11"
-tokio = { version = "1.40.0", features = ["full"]}
-tracing = "0.1.41"
-tracing-appender = "0.2.3"
+actix-rt = "2.11.0"
+chrono = "0.4.45"
+clap = { version = "4.6", features = ["derive"] }
+num_cpus = "1.17.0"
+petgraph = "0.8.3"
+rand = "0.10.1"
+rand_chacha = "0.10.0"
+rayon = "1.12.0"
+thiserror = "2.0.18"
+tokio = { version = "1.52.3", features = ["full"]}
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
-itertools = "0.14"
-anyhow = "1.0"
+itertools = "0.15.0"
+anyhow = "1.0.102"
 scryer-prolog = "0.10"
-crepe = "0.1.8"
+crepe = "0.2.0"
 ascent = "0.8.0"
 
 [lib]

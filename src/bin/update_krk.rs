@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::sync::atomic::AtomicBool;
@@ -15,6 +16,7 @@ use chess_actix::monitoring::debug;
 use chess_actix::ui::notation::fen::{self, EncodeUserInput, Position};
 use chess_actix::ui::notation::long_notation::LongAlgebricNotationMove;
 use entity::engine::actor::engine_dispatcher as dispatcher;
+use chess_actix::trace::init_trace;
 
 async fn try_mat_in(
     max_depth: u8, 
@@ -60,7 +62,8 @@ async fn update_line(
     }
 }
 
-async fn update_file(
+// take input file and update it with position from which mat can be achieved in one move, and write to output file
+async fn init_update_file(
     input: &str, 
     output: &str,
     engine_player1: &EngineMat,
@@ -92,6 +95,14 @@ async fn update_file(
 
 #[actix::main]
 async fn main() {
+    init_trace();    
+    let args: Vec<String> = env::args().collect();
+    let mat_in = if args.len() > 1 {
+        args[1].parse::<u8>().unwrap_or(1)
+    } else {
+        1
+    };
+
     let max_depth = 1;
     let debug_actor_opt: Option<debug::DebugActor> = None;
     //let debug_actor_opt = Some(debug::DebugEntity::new(true).start());
@@ -110,13 +121,18 @@ async fn main() {
     );
     let self_actor = engine_player1_dispatcher.start();
 
-    let input = "krk_position.csv";
-    let output = "krk_position_updated.csv";
-
-    if let Err(e) = update_file(input, output, &engine_player1, self_actor, max_depth).await {
-        eprintln!("Error updating file: {}", e);
+    if mat_in > 1 {
+        tracing::info!("Mat in {} is not supported yet, using mat in 1", mat_in);
     } else {
-        println!("File updated successfully.");
+        tracing::info!("Updating file with mat in 1 positions...");
+        let input = "krk_position.csv";
+        let output = "krk_position_updated.csv";
+
+        if let Err(e) = init_update_file(input, output, &engine_player1, self_actor, max_depth).await {
+            tracing::error!("Error updating file: {}", e);
+        } else {
+            tracing::info!("File updated successfully.");
+        }
     }
 }
 

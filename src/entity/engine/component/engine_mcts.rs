@@ -1,5 +1,5 @@
 use actix::Addr;
-use rand::Rng;
+use rand::RngExt;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -166,10 +166,10 @@ impl EngineMcts {
         graph: &mut mcts_tree::Graph,
         node_id: mcts_tree::NodeIdx,
     ) -> mcts_tree::NodeIdx {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let node = &graph[node_id];
         tracing::debug!("exploration / {}", node.untried_moves().len());
-        let random_index = rng.gen_range(0..node.untried_moves().len()); // Random index
+        let random_index = rng.random_range(0..node.untried_moves().len()); // Random index
         mcts_tree::Node::exploration(graph, node_id, random_index, &self.zobrist_table)
     }
     fn mcts_simulation(
@@ -195,13 +195,13 @@ impl EngineMcts {
         node_id: mcts_tree::NodeIdx,
         mcts_stat: &mut MctsStat,
     ) -> (u64, u64) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut game = graph[node_id].game().clone();
         let mut n_moves_gen: u64 = 0;
         while game.end_game() == game_state::EndGame::None {
             let moves = game.gen_moves();
             n_moves_gen += moves.len() as u64;
-            let random_index = rng.gen_range(0..moves.len());
+            let random_index = rng.random_range(0..moves.len());
             let m = moves[random_index];
             let long_algebraic_move = long_notation::LongAlgebricNotationMove::build_from_b_move(m);
             let _ = game.play_moves(&[long_algebraic_move], &self.zobrist_table, None, false);

@@ -1,5 +1,5 @@
 /// Zobrish hash
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 use std::fmt;
 
 use crate::entity::game::component::{bitboard, square};
@@ -78,18 +78,18 @@ impl Zobrist {
         // Generate random values for each piece and square
         for piece in 0..12 {
             for square in 0..64 {
-                self.piece_square[piece][square] = rng.gen();
+                self.piece_square[piece][square] = rng.random();
             }
         }
         // Generate values for castle rights and en passant capture
         for i in 0..4 {
-            self.castling_rights[i] = rng.gen();
+            self.castling_rights[i] = rng.random();
         }
         for i in 0..64 {
-            self.en_passant[i] = rng.gen();
+            self.en_passant[i] = rng.random();
         }
         // player turn
-        self.side_to_move = rng.gen();
+        self.side_to_move = rng.random();
         self
     }
     pub fn new() -> Self {
