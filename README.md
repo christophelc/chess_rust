@@ -219,9 +219,10 @@ Avoid the use of convolutional network and consider only CPU based computing (NN
 
 ### First step
 
-Generate positions KRK
+Generate positions KRK: Done
 
 - First try with Prolog. Same with Datalog through Crepe.
+Done
 - Ascent ? Aggregator
 - CozoDB ? Not maintained anymore ?
 - TerminusDb
@@ -230,7 +231,26 @@ Generate positions KRK
 - DDlog ? heavier to install
 - Soufflé (C++)
 
+### Second step
 
+Generate Mat in n moves: Done
+Convention: Mate in 1 = 1 ply; mate in 2 = 3 plies; mate in n = 2n − 1 plies.
+
+```cargo build --release --bin update_krk```
+
+and then:
+
+```chess_rust git:(dev) cargo run --bin update_krk -- 1```
+
+or
+
+```./target/release/update_krk 1```
+
+Iterate over 1, 2... 17
+
+### Third step
+
+Create an AI playing KRK endgames based on database/krk.csv
 
 ## Conclusion
 

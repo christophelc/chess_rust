@@ -1,7 +1,7 @@
 use chrono::{Local, TimeZone, Utc};
+use std::sync::OnceLock;
 use tracing_appender::rolling;
 use tracing_subscriber::{self, layer::SubscriberExt};
-use std::sync::OnceLock;
 
 const LOG_FILE_ONLY: bool = false;
 
@@ -58,7 +58,7 @@ pub fn init_trace() {
     }
 }
 
-fn trace_build_info() {
+pub fn trace_build_info() {
     let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
     let git_commit = env!(
         "GIT_COMMIT_HASH",
@@ -76,4 +76,3 @@ fn trace_build_info() {
     tracing::debug!("Build date: {}", formatted_date);
     tracing::debug!("Last commit hash: {}", git_commit);
 }
-

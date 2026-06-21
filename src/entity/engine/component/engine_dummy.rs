@@ -50,9 +50,8 @@ impl logic::Engine for EngineDummy {
         _is_stop: &Arc<AtomicBool>,
     ) {
         let moves = game.gen_moves();
-        let mut trng = rng();        
-        let mut rng = ChaCha12Rng::try_from_rng(&mut trng)
-            .expect("failed to initialize RNG");
+        let mut trng = rng();
+        let mut rng = ChaCha12Rng::try_from_rng(&mut trng).expect("failed to initialize RNG");
         let best_move_opt = moves.choose(&mut rng).cloned();
         if let Some(best_move) = best_move_opt {
             self_actor.do_send(dispatcher::handler_engine::EngineStopThinking::new(None));

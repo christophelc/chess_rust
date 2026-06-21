@@ -8,3 +8,4 @@ profile.json
 test_suites.txt
 logs/
 *.csv
+*.bkp

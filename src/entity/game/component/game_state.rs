@@ -22,14 +22,10 @@ pub enum EndGame {
     TimeOutLost(square::Color), // color of the player that has lost
     TimeOutDraw,                // Timeout but only a King, King + Bishop or Knight
     NullAgreement,              // Two players agree to end the game
-    PositionReached,            // A position is reached (for mat solver for instance)
 }
 impl EndGame {
     pub fn is_mat(&self) -> bool {
         matches!(self, EndGame::Mat(_))
-    }
-    pub fn is_position_rach(&self) -> bool {
-        matches!(self, EndGame::PositionReached)
     }
 }
 
@@ -55,7 +51,6 @@ pub struct GameState {
     hash_positions: zobrist::ZobristHistory,
     backup: Vec<BackMove>,
     end_game: EndGame,
-    position_to_reach: Option<bitboard::BitPosition>,
 }
 impl PartialEq for GameState {
     fn eq(&self, other: &Self) -> bool {
@@ -67,23 +62,16 @@ impl PartialEq for GameState {
     }
 }
 impl GameState {
-    pub fn new(
-        position: fen::Position,
-        zobrist_table: &zobrist::Zobrist,
-    ) -> Self {
+    pub fn new(position: fen::Position, zobrist_table: &zobrist::Zobrist) -> Self {
         let mut game_state = GameState {
             bit_position: bitboard::BitPosition::from(position),
             hash_positions: zobrist::ZobristHistory::default(),
             backup: vec![],
             end_game: EndGame::None,
-            position_to_reach: None,
         };
         // init moves and game status
         game_state.init_hash_table(zobrist_table);
         game_state
-    }
-    pub fn set_position_to_reach(&mut self, position_to_reach: bitboard::BitPosition) {
-        self.position_to_reach = Some(position_to_reach);
     }
     pub fn set_end_game(&mut self, end_game: EndGame) {
         self.end_game = end_game;
@@ -121,13 +109,7 @@ impl GameState {
     }
 
     pub fn end_game(&self) -> EndGame {
-        if self.position_to_reach.is_some()
-            && self.position_to_reach.as_ref().unwrap() == &self.bit_position
-        {
-            EndGame::PositionReached
-        } else {
-            self.end_game.clone()
-        }
+        self.end_game.clone()
     }
 
     pub fn check_end_game(&self, check_status: CheckStatus, moves_is_empty: bool) -> EndGame {

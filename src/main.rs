@@ -10,7 +10,6 @@ use chess_actix::entity::engine::component::engine_mcts;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_minimax;
 use chess_actix::entity::game::component::bitboard::zobrist;
-use chrono::{Local, TimeZone, Utc};
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -22,7 +21,6 @@ use chess_actix::{entity, monitoring, ui};
 use actix::Actor;
 use entity::game::actor::game_manager;
 use entity::game::component::square;
-use std::env;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -39,8 +37,8 @@ use fen::EncodeUserInput;
 use monitoring::debug;
 use ui::notation::{fen, san};
 
+use chess_actix::trace::{init_trace, trace_build_info};
 use tokio::sync::mpsc;
-use chess_actix::trace::init_trace;
 
 const DEPTH: u8 = 4;
 
@@ -170,25 +168,6 @@ async fn tui_loop(
             _ => println!("Please enter a move to a format like e2e4"),
         }
     }
-}
-
-fn trace_build_info() {
-    let build_date = env!("BUILD_DATE", "BUILD_DATE not set during compilation");
-    let git_commit = env!(
-        "GIT_COMMIT_HASH",
-        "GIT_COMMIT_HASH not set during compilation"
-    );
-    let timestamp = build_date
-        .parse::<i64>()
-        .expect("BUILD_DATE should be a valid timestamp");
-    let utc_datetime = Utc
-        .timestamp_opt(timestamp, 0)
-        .single()
-        .expect("Invalid timestamp");
-    let local_datetime = utc_datetime.with_timezone(&Local);
-    let formatted_date = local_datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string();
-    tracing::debug!("Build date: {}", formatted_date);
-    tracing::debug!("Last commit hash: {}", git_commit);
 }
 
 struct BuildParams {

@@ -56,7 +56,7 @@ impl EngineMat {
     ) -> Option<score::BitboardMoveScoreMat> {
         let mut game_clone = game.clone();
         let mut max_depth = conf.max_depth;
-        tracing::debug!("Lsooking for mat");
+        //tracing::debug!("Looking for mat");
         let shortest_mat_opt = self.mat_solver(
             "",
             &mut game_clone,
@@ -75,7 +75,7 @@ impl EngineMat {
         //     println!("============");
         // }
         if let Some(mat_move) = &shortest_mat_opt {
-            println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());
+            //println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());
         }
         shortest_mat_opt
     }
@@ -125,7 +125,7 @@ impl EngineMat {
                         // maximize (find the shortest mat)
                         if is_attacker && shortest_mat.mat_in() > move_mat.mat_in() =>
                     {
-                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant());
+                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant(), false);
                         shortest_mat_opt = Some(m_mat.clone());
                         let mat_in = m_mat.mat_in();
                         if *max_depth >= mat_in {
@@ -137,11 +137,11 @@ impl EngineMat {
                         // minimize
                         if !is_attacker && shortest_mat.mat_in() < move_mat.mat_in() =>
                     {
-                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant());
+                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant(), false);
                         shortest_mat_opt = Some(m_mat);
                     }
                     (Some(move_mat), None) => {
-                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant());
+                        let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant(), false);
                         shortest_mat_opt = Some(m_mat);
                     }
                     (None, _) => {
@@ -231,6 +231,7 @@ impl EngineMat {
                     m,
                     current_depth + 1,
                     &updated_variant,
+                    false,
                 ))
             }
             game_state::EndGame::None => {
@@ -333,7 +334,7 @@ mod tests {
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
     use crate::entity::engine::component::config::config;
     use crate::entity::engine::component::evaluation::stat_eval;
-    use crate::entity::game::component::bitboard::zobrist;
+    use crate::entity::game::component::bitboard::{self, zobrist};
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{engine::component::engine_mat, game::actor::game_manager},
@@ -367,6 +368,42 @@ mod tests {
         let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
         let zobrist_table = &zobrist::Zobrist::new();
         let game = game_state::GameState::new(position, zobrist_table);
+        let mut stat_eval = stat_eval::StatEval::default();
+        let flag_stop = Arc::new(AtomicBool::new(false));
+        let mat_move_opt = engine_player1.mat_solver_init(
+            &game,
+            self_actor,
+            None,
+            &config::MatConfig::new(6),
+            &mut stat_eval,
+            &flag_stop,
+        );
+        println!("{:?}", mat_move_opt);
+    }
+
+    #[actix::test]
+    async fn test_game_end_when_position_reach() {
+        const MAT_DEPTH: u8 = 1;
+
+        let debug_actor_opt: Option<debug::DebugActor> = None;
+        let game_manager = game_manager::GameManager::new(debug_actor_opt.clone());
+        let engine_player1 = engine_mat::EngineMat::new(
+            debug_actor_opt.clone(),
+            game_manager.zobrist_table(),
+            &config::MatConfig::new(MAT_DEPTH),
+        );
+        let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
+            Arc::new(engine_player1.clone()),
+            debug_actor_opt.clone(),
+            None,
+        );
+        let self_actor = engine_player1_dispatcher.start();
+        let start_fen = "7k/1R6/6K1/8/8/8/8/8 w - - 0 0";
+        let start_position = fen::Fen::decode(start_fen).expect("Failed to decode FEN");
+        let end_fen = "6k1/R7/6K1/8/8/8/8/8 w - - 0 0";
+        let end_position = fen::Fen::decode(end_fen).expect("Failed to decode FEN");
+        let zobrist_table = &zobrist::Zobrist::new();
+        let mut game = game_state::GameState::new(start_position, zobrist_table);
         let mut stat_eval = stat_eval::StatEval::default();
         let flag_stop = Arc::new(AtomicBool::new(false));
         let mat_move_opt = engine_player1.mat_solver_init(

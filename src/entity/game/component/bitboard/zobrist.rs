@@ -118,13 +118,12 @@ impl ZobristHash {
     pub fn value(&self) -> u64 {
         self.0
     }
-    pub fn zobrist_hash_from_position(
+    pub fn zobrist_partial_hash_from_position(
         bit_position: &bitboard::BitPosition,
         zobrist: &Zobrist,
     ) -> Self {
         let mut zobrist_hash = ZobristHash::default();
         let bit_boards_white_and_black = bit_position.bit_boards_white_and_black();
-        let status = bit_position.bit_position_status();
 
         // Calculer le hash des bitboards
         for square_idx in 0..64 {
@@ -134,6 +133,15 @@ impl ZobristHash {
                 zobrist_hash = zobrist_hash.xor_piece(zobrist, piece, square_idx as usize)
             }
         }
+        zobrist_hash
+    }
+
+    pub fn zobrist_hash_from_position(
+        bit_position: &bitboard::BitPosition,
+        zobrist: &Zobrist,
+    ) -> Self {
+        let mut zobrist_hash = Self::zobrist_partial_hash_from_position(bit_position, zobrist);
+        let status = bit_position.bit_position_status();
 
         if status.castling_white_king_side() {
             zobrist_hash = zobrist_hash.xor_castling_white_king_side(zobrist);

@@ -183,17 +183,27 @@ pub struct BitboardMoveScoreMat {
     bitboard_move: bitboard::BitBoardMove,
     mat_in: u8,
     variant: String,
+    is_position_reached: bool,
 }
 impl BitboardMoveScoreMat {
-    pub fn new(bitboard_move: bitboard::BitBoardMove, mat_in: u8, variant: &str) -> Self {
+    pub fn new(
+        bitboard_move: bitboard::BitBoardMove,
+        mat_in: u8,
+        variant: &str,
+        is_position_reached: bool,
+    ) -> Self {
         Self {
             bitboard_move,
             mat_in,
             variant: variant.to_string(),
+            is_position_reached,
         }
     }
     pub fn mat_in(&self) -> u8 {
         self.mat_in
+    }
+    pub fn is_position_reached(&self) -> bool {
+        self.is_position_reached
     }
     pub fn bitboard_move(&self) -> &bitboard::BitBoardMove {
         &self.bitboard_move
