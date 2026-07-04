@@ -387,6 +387,12 @@ impl ControlSquares {
 }
 
 pub trait GenMoves {
+    fn gen_moves_no_check(
+        &self,
+        color: &square::Color,
+        capture_en_passant: Option<&bitboard::BitIndex>,
+        bit_position_status: &bitboard::BitPositionStatus,
+    ) -> Vec<PieceMoves>;
     fn gen_moves_for_all(
         &self,
         color: &square::Color,
@@ -764,6 +770,54 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         }
     }
 
+    fn gen_moves_no_check(
+        &self,
+        color: &square::Color,
+        capture_en_passant: Option<&bitboard::BitIndex>,
+        bit_position_status: &bitboard::BitPositionStatus,
+    ) -> Vec<PieceMoves> {
+        let bit_board = self.bit_board(color);
+        let bit_board_opponent = self.bit_board(&color.switch());
+
+        let can_castle_king_side =
+            bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), color);
+        let can_castle_queen_side =
+            bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), color);
+        let mut moves_all: Vec<PieceMoves> = vec![];
+        let moves = bit_board
+            .rooks
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board
+            .bishops
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board
+            .knights
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board.king.gen_moves_no_check(
+            color,
+            bit_board,
+            bit_board_opponent,
+            can_castle_king_side,
+            can_castle_queen_side,
+        );
+        moves_all.extend(moves);
+        let moves = bit_board
+            .queens
+            .gen_moves_no_check(color, bit_board, bit_board_opponent);
+        moves_all.extend(moves);
+        let moves = bit_board.pawns.gen_moves_no_check(
+            color,
+            bit_board,
+            bit_board_opponent,
+            capture_en_passant,
+        );
+        moves_all.extend(moves);
+        moves_all
+    }
+
     fn gen_moves_for_all(
         &self,
         color: &square::Color,
@@ -775,47 +829,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         let bit_board_opponent = self.bit_board(&color.switch());
         let moves_all = match check_status {
             CheckStatus::None => {
-                let can_castle_king_side =
-                    bit_position_status.can_castle_king_side(bit_board.concat_bit_boards(), color);
-                let can_castle_queen_side =
-                    bit_position_status.can_castle_queen_side(bit_board.concat_bit_boards(), color);
-                let mut moves_all: Vec<PieceMoves> = vec![];
-                let moves =
-                    bit_board
-                        .rooks
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
-                moves_all.extend(moves);
-                let moves =
-                    bit_board
-                        .bishops
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
-                moves_all.extend(moves);
-                let moves =
-                    bit_board
-                        .knights
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
-                moves_all.extend(moves);
-                let moves = bit_board.king.gen_moves_no_check(
-                    color,
-                    bit_board,
-                    bit_board_opponent,
-                    can_castle_king_side,
-                    can_castle_queen_side,
-                );
-                moves_all.extend(moves);
-                let moves =
-                    bit_board
-                        .queens
-                        .gen_moves_no_check(color, bit_board, bit_board_opponent);
-                moves_all.extend(moves);
-                let moves = bit_board.pawns.gen_moves_no_check(
-                    color,
-                    bit_board,
-                    bit_board_opponent,
-                    capture_en_passant,
-                );
-                moves_all.extend(moves);
-                moves_all
+                Self::gen_moves_no_check(&self, color, capture_en_passant, bit_position_status)
             }
             CheckStatus::Simple {
                 attacker: _,

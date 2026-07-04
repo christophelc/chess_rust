@@ -234,7 +234,13 @@ Done
 ### Second step
 
 Generate Mat in n moves: Done
-Convention: Mate in 1 = 1 ply; mate in 2 = 3 plies; mate in n = 2n − 1 plies.
+
+Convention: 
+- Mate in 1 = 1 ply
+- Mate in 2 = 3 plies
+- Mate in n = 2n − 1 plies
+
+Build:
 
 ```cargo build --release --bin update_krk```
 
@@ -246,7 +252,11 @@ or
 
 ```./target/release/update_krk 1```
 
-Iterate over 1, 2... 17
+Iterate over 1, 2... 14
+
+Remark: we handle equivalent moves like in this example:
+
+```8/8/8/8/8/1R6/k7/2K5 w - - 0 0;2;b3c3,b3d3,b3e3,b3f3,b3g3,b3h3,c1c2```
 
 ### Third step
 
