@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use crepe::crepe;
 
 crepe! {

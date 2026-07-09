@@ -4,7 +4,7 @@ use std::sync::Arc;
 use actix::Addr;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::config::config;
+use super::config::config_params;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{self, score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -26,13 +26,13 @@ pub struct EngineMinimax {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    conf: config::MinimaxConf,
+    conf: config_params::MinimaxConf,
 }
 impl EngineMinimax {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        conf: &config::MinimaxConf,
+        conf: &config_params::MinimaxConf,
     ) -> Self {
         assert!(conf.max_depth >= 1);
         Self {
@@ -75,7 +75,7 @@ impl EngineMinimax {
                 );
                 let (best_move, score) = (
                     *bitboard_move_score.bitboard_move(),
-                    bitboard_move_score.score().clone(),
+                    *bitboard_move_score.score(),
                 );
                 // FIXME: send graph to actor
                 if self.debug_actor_opt.is_some() {
@@ -96,11 +96,11 @@ impl EngineMinimax {
         if results.is_empty() {
             return None;
         }
-        let (mut best_move, mut best_score) = results[0].clone();
+        let (mut best_move, mut best_score) = results[0];
         for (b_move, score) in results.iter() {
             if score.value() > best_score.value() {
                 best_move = *b_move;
-                best_score = score.clone();
+                best_score = *score;
             }
         }
         Some((best_move, best_score))

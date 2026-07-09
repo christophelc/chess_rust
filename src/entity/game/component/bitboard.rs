@@ -1286,11 +1286,11 @@ mod tests {
         let bit_status = BitPositionStatus::from(&status);
 
         // Verify the values are correctly set in BitPositionStatus
-        assert_eq!(bit_status.castling_white_queen_side(), true);
-        assert_eq!(bit_status.castling_white_king_side(), false);
-        assert_eq!(bit_status.castling_black_queen_side(), true);
-        assert_eq!(bit_status.castling_black_king_side(), false);
-        assert_eq!(bit_status.player_turn_white(), false);
+        assert!(bit_status.castling_white_queen_side());
+        assert!(!bit_status.castling_white_king_side());
+        assert!(bit_status.castling_black_queen_side());
+        assert!(!bit_status.castling_black_king_side());
+        assert!(!bit_status.player_turn_white());
         assert_eq!(bit_status.pawn_en_passant(), Some(BitIndex(20))); // e3 -> 20
         assert_eq!(bit_status.n_half_moves(), 25);
         assert_eq!(bit_status.n_moves(), 50);
@@ -1313,10 +1313,10 @@ mod tests {
         let status = bit_status.to();
 
         // Verify the values are correctly set in PositionStatus
-        assert_eq!(status.castling_white_queen_side(), true);
-        assert_eq!(status.castling_white_king_side(), false);
-        assert_eq!(status.castling_black_queen_side(), true);
-        assert_eq!(status.castling_black_king_side(), false);
+        assert!(status.castling_white_queen_side());
+        assert!(!status.castling_white_king_side());
+        assert!(status.castling_black_queen_side());
+        assert!(!status.castling_black_king_side());
         assert_eq!(status.player_turn(), square::Color::Black);
         assert_eq!(
             status.pawn_en_passant(),
@@ -1488,7 +1488,7 @@ mod tests {
     #[test]
     fn test_bit_iterator_single_bit() {
         let bitboard = BitIndex(5).bitboard(); // Only the 6th bit is set (index 5)
-        let mut iterator = BitIterator { bitboard: bitboard };
+        let mut iterator = BitIterator { bitboard };
         assert_eq!(iterator.next(), Some(BitIndex(5)));
         assert_eq!(iterator.next(), None);
     }
@@ -1506,9 +1506,9 @@ mod tests {
     #[test]
     fn test_bit_iterator_full_bitboard() {
         let bitboard = BitBoard(!0); // All bits are set
-        let mut iterator = BitIterator { bitboard: bitboard };
+        let mut iterator = BitIterator { bitboard };
         let mut count = 0;
-        while let Some(_) = iterator.next() {
+        for _ in iterator.by_ref() {
             count += 1;
         }
         assert_eq!(count, 64); // Ensure all 64 bits are iterated

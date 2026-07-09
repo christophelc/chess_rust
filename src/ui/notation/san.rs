@@ -60,12 +60,11 @@ pub fn san_to_long_notation(
 ) -> Option<String> {
     let san_moves: Vec<String> = san_str
         .split(" ")
-        .into_iter()
         .filter(|m| !m.is_empty())
         .map(|m| m.to_string())
         .collect();
     let raw_move: Vec<_> = moves
-        .into_iter()
+        .iter()
         .filter(|b_move| {
             san_moves.contains(san_to_str(b_move, moves, lang, game, zobrist_table, false).info())
         })
@@ -83,12 +82,11 @@ pub fn san_to_long_notation_epd(
 ) -> Vec<String> {
     let san_moves: Vec<String> = san_str
         .split(" ")
-        .into_iter()
         .filter(|m| !m.is_empty())
         .map(|m| m.to_string())
         .collect();
     let raw_move: Vec<_> = moves
-        .into_iter()
+        .iter()
         .filter(|b_move| {
             san_moves.contains(san_to_str(b_move, moves, lang, game, zobrist_table, false).info()) ||
             san_moves.contains(san_to_str(b_move, moves, lang, game, zobrist_table, true).info()) ||

@@ -8,13 +8,15 @@ pub struct SearchState {
     killer_moves: [[Option<bitboard::BitBoardMove>; 2]; MAX_DEPTH],
 }
 
-impl SearchState {
-    pub fn new() -> Self {
+impl Default for SearchState {
+    fn default() -> Self {
         SearchState {
             killer_moves: [[None; 2]; MAX_DEPTH],
         }
     }
+}
 
+impl SearchState {
     // Ajoute un killer move pour une profondeur donnée
     pub fn add_killer_move(&mut self, depth: usize, mv: bitboard::BitBoardMove) {
         // Vérifie si le coup est déjà stocké

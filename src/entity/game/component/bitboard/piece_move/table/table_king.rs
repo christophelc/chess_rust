@@ -74,7 +74,7 @@ mod tests {
     #[allow(dead_code)]
     fn gen_move_king_at(index: u8) -> u64 {
         let is_row_1 = index < 8;
-        let is_col_a = index % 8 == 0;
+        let is_col_a = index.is_multiple_of(8);
         let is_row_8 = index >= 56;
         let is_col_h = index % 8 == 7;
         let deltas: Vec<i8> = match (is_row_1, is_col_a, is_row_8, is_col_h) {

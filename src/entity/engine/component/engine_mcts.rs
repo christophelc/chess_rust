@@ -14,7 +14,7 @@ use crate::span_debug;
 use crate::ui::notation::long_notation;
 use crate::{entity::game::component::bitboard, monitoring::debug};
 
-use super::config::config;
+use super::config::config_params;
 
 const MAX_TREE_ITERATION: u64 = 1000;
 
@@ -46,13 +46,13 @@ pub struct EngineMcts {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    conf: config::MctsConfig,
+    conf: config_params::MctsConfig,
 }
 impl EngineMcts {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        conf: &config::MctsConfig,
+        conf: &config_params::MctsConfig,
     ) -> Self {
         Self {
             id_number: "".to_string(),

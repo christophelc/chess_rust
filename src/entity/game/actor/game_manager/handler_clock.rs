@@ -122,7 +122,7 @@ impl SetClockRemainingTime {
     #[cfg(test)]
     pub fn new(color: &square::Color, remaining_time: u64) -> Self {
         Self {
-            color: color.clone(),
+            color: *color,
             remaining_time,
         }
     }

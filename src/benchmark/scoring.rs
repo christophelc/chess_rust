@@ -10,7 +10,7 @@ use actix::Actor;
 
 use crate::entity::engine::{
     actor::engine_dispatcher as dispatcher,
-    component::config::config::{self, IDDFSConfig},
+    component::config::config_params::{self, IDDFSConfig},
 };
 use crate::{
     entity::{
@@ -30,12 +30,14 @@ use super::launcher;
 
 #[derive(Debug)]
 pub struct MovePlayed {
+    #[allow(dead_code)]
     mv: String,
     is_played: bool,
 }
 
 #[derive(Debug)]
 pub struct EpdEval {
+    #[allow(dead_code)]
     id: String,
     am: Option<MovePlayed>,
     bm: Option<MovePlayed>,
@@ -101,7 +103,7 @@ impl std::fmt::Display for EpdScore {
     }
 }
 
-fn init_game_params(conf: &config::IDDFSConfig) -> engine_iddfs::EngineIddfs {
+fn init_game_params(conf: &config_params::IDDFSConfig) -> engine_iddfs::EngineIddfs {
     let game_manager = game_manager::GameManager::new(None);
     let mut engine_player =
         engine_iddfs::EngineIddfs::new(None, game_manager.zobrist_table(), conf);
@@ -118,14 +120,14 @@ pub fn scoring<'a>(
 
     let epd_evals: Vec<EpdEval> = epd_data
         .epds()
-        .into_iter()
+        .iter()
         .map(|epd| epd_eval(epd, constraint.max_time_sec(), &zobrist_table, &engine))
         .collect();
     let scores: Vec<EpdScore> = epd_evals
         .into_iter()
         .map(|epd_eval| epd_score(&epd_eval, constraint.max_time_sec()))
         .collect();
-    let data_with_score = epd_data.epds().into_iter().zip(scores).collect();
+    let data_with_score = epd_data.epds().iter().zip(scores).collect();
     data_with_score
 }
 
@@ -157,7 +159,7 @@ fn epd_eval(
     engine_iddfs: &engine_iddfs::EngineIddfs,
 ) -> EpdEval {
     let position = epd_el.position();
-    let game = game_state::GameState::new(*position, &zobrist_table);
+    let game = game_state::GameState::new(*position, zobrist_table);
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_clone = Arc::clone(&stop_flag);
     let engine_dispatcher =
@@ -221,7 +223,7 @@ fn epd_eval(
     });
     match b_move_opt.as_ref() {
         Some(move_str) => {
-            let am_played = ams.contains(&move_str);
+            let am_played = ams.contains(move_str);
             am_moved_played = if ams.is_empty() {
                 None
             } else {
@@ -230,7 +232,7 @@ fn epd_eval(
                     is_played: am_played,
                 })
             };
-            let bm_played = bms.contains(&move_str);
+            let bm_played = bms.contains(move_str);
             bm_moved_played = if bms.is_empty() {
                 None
             } else {
@@ -259,12 +261,11 @@ fn epd_eval(
             };
         }
     }
-    let epd_eval = EpdEval::new(
+    EpdEval::new(
         id,
         am_moved_played,
         bm_moved_played,
         b_move_opt,
         duration.as_millis(),
-    );
-    epd_eval
+    )
 }

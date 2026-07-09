@@ -7,7 +7,7 @@ macro_rules! span_debug {
         tracing::span!(
             tracing::Level::DEBUG,
             $module_name,
-            app_version = crate::monitoring::version::version()
+            app_version = $crate::monitoring::version::version()
         )
     };
 }
@@ -18,7 +18,7 @@ macro_rules! span_error {
         tracing::span!(
             tracing::Level::ERROR,
             $module_name,
-            app_version = crate::monitoring::version::version()
+            app_version = $crate::monitoring::version::version()
         )
     };
 }

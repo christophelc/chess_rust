@@ -54,8 +54,8 @@ impl fmt::Display for AlphabetaFeatureConf {
         )
     }
 }
-impl AlphabetaFeatureConf {
-    pub fn default() -> Self {
+impl Default for AlphabetaFeatureConf {
+    fn default() -> Self {
         Self {
             f_null_move_pruning: feature::FEATURE_NULL_MOVE_PRUNING,
             f_transposition_table: feature::FEATURE_TRANSPOSITION_TABLE,
@@ -108,8 +108,8 @@ pub struct IddfsFeatureConf {
     pub f_mat_solver: bool,
     pub f_aspiration_window: bool,
 }
-impl IddfsFeatureConf {
-    pub fn default() -> Self {
+impl Default for IddfsFeatureConf {
+    fn default() -> Self {
         Self {
             f_mat_solver: feature::FEATURE_MAT_SOLVER,
             f_aspiration_window: feature::FEATURE_ASPIRATION_WINDOW,

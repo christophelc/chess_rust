@@ -629,9 +629,7 @@ mod tests {
         let moves: Vec<String> = game
             .gen_moves()
             .into_iter()
-            .map(|b_move| {
-                long_notation::LongAlgebricNotationMove::build_from_b_move(b_move.clone()).cast()
-            })
+            .map(|b_move| long_notation::LongAlgebricNotationMove::build_from_b_move(b_move).cast())
             .collect();
         println!("{:?}", moves);
         let fen = fen::Fen::encode(&game_opt.unwrap().bit_position().to())

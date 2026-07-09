@@ -13,12 +13,12 @@ mod tests {
     async fn test_engine_dummy() {
         let inputs = vec!["position startpos", "go"];
         let game_manager_actor = build_game_manager_actor(inputs.clone()).await;
-        let msg = game_manager::handler_engine::GetCurrentEngine::default();
+        let msg = game_manager::handler_engine::GetCurrentEngine;
         let result = game_manager_actor.send(msg).await;
         let mut vec_engine_id: Vec<String> = vec![];
         if let Ok(Some(engine_actor)) = result {
             let engine_id_opt = engine_actor
-                .send(dispatcher::handler_engine::EngineGetId::default())
+                .send(dispatcher::handler_engine::EngineGetId)
                 .await;
             if let Ok(Some(engine_id)) = engine_id_opt {
                 vec_engine_id.push(engine_id.name().to_string());

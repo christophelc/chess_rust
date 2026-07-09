@@ -829,7 +829,7 @@ impl GenMoves for bitboard::BitBoardsWhiteAndBlack {
         let bit_board_opponent = self.bit_board(&color.switch());
         let moves_all = match check_status {
             CheckStatus::None => {
-                Self::gen_moves_no_check(&self, color, capture_en_passant, bit_position_status)
+                Self::gen_moves_no_check(self, color, capture_en_passant, bit_position_status)
             }
             CheckStatus::Simple {
                 attacker: _,
@@ -1295,7 +1295,7 @@ mod tests {
     impl fen::Position {
         /// check status from a position
         pub fn check_status(&self) -> CheckStatus {
-            let bit_position = bitboard::BitPosition::from(self.clone());
+            let bit_position = bitboard::BitPosition::from(*self);
             bit_position
                 .bit_boards_white_and_black()
                 .check_status(&self.status().player_turn())
@@ -2001,13 +2001,13 @@ mod tests {
         let moves = gen_moves_for_all_simple_check(
             &square::Color::White,
             attacker_index,
-            &bit_position.bit_boards_white_and_black().bit_board_white(),
+            bit_position.bit_boards_white_and_black().bit_board_white(),
             bit_position.bit_boards_white_and_black().bit_board_black(),
             None,
         );
         //let moves = moves.filter(|m| m.
         assert_eq!(moves.len(), 2);
-        let move_king = moves.get(0).unwrap().moves().0;
+        let move_king = moves.first().unwrap().moves().0;
         let move_rook = moves.get(1).unwrap().moves().0;
         let move_king_expected = 1u64 << 15;
         let move_rook_expected = 1u64 << 13;
@@ -2040,7 +2040,7 @@ mod tests {
                 .bit_position_status()
                 .can_castle_queen_side(bit_board.concat_bit_boards(), color),
         );
-        let result = moves.get(0).unwrap().moves().value();
+        let result = moves.first().unwrap().moves().value();
         let expected: u64 =
             1u64 << 3 | 1u64 << 5 | 1u64 << 11 | 1u64 << 12 | 1u64 << 13 | 1u64 << 2 | 1u64 << 6;
         assert_eq!(result, expected)
@@ -2067,7 +2067,11 @@ mod tests {
                 .bit_position_status()
                 .can_castle_queen_side(bit_board.concat_bit_boards(), color),
         );
-        let result = moves.get(0).unwrap().moves().value();
+        let result = moves
+            .first()
+            .expect("moves should not be empty")
+            .moves()
+            .value();
         // check cannot castle
         assert!(result & (1 << 62) == 0);
     }
@@ -2129,7 +2133,7 @@ mod tests {
                     && v.end().value() - v.start().value() == 2
             })
             .collect();
-        let short_castle = *short_castle_move.get(0).unwrap();
+        let short_castle = *short_castle_move.first().unwrap();
         assert_eq!(
             (short_castle.start().value(), short_castle.end().value()),
             (4u8, 6u8)
@@ -2202,11 +2206,13 @@ mod tests {
         let new_pieces: Vec<square::TypePiecePromotion> =
             promotion_moves.iter().flat_map(|p| p.promotion()).collect();
         assert_eq!(new_pieces.len(), 4);
-        let promotion_move = promotion_moves.get(0).unwrap();
+        let promotion_move = promotion_moves
+            .first()
+            .expect("expected at least one promotion move");
         let zobrist_table = zobrist::Zobrist::default();
         let mut hash = zobrist::ZobristHash::default();
         let mut bit_board_position2 = bit_board_position.clone();
-        bit_board_position2.move_piece(&promotion_move, &mut hash, &zobrist_table);
+        bit_board_position2.move_piece(promotion_move, &mut hash, &zobrist_table);
         let position = bit_board_position2.to();
         let fen = fen::Fen::encode(&position).expect("Failed to encode position");
         println!("{}", position.chessboard());

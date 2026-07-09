@@ -38,12 +38,10 @@ impl PreOrder {
         }
     }
     pub fn is_special(&self) -> bool {
-        match self {
-            PreOrder::Depth | PreOrder::CurrentDepthScore(_) | PreOrder::PreviousDepthScore(_) => {
-                false
-            }
-            _ => true,
-        }
+        !matches!(
+            self,
+            PreOrder::Depth | PreOrder::CurrentDepthScore(_) | PreOrder::PreviousDepthScore(_)
+        )
     }
 }
 
@@ -165,7 +163,7 @@ impl MoveStatus {
     pub fn get_bitboard_move_score(&self) -> Option<BitboardMoveScore> {
         self.score_opt
             .as_ref()
-            .map(|score| BitboardMoveScore::new(self.b_move, score.clone(), self.variant.clone()))
+            .map(|score| BitboardMoveScore::new(self.b_move, *score, self.variant.clone()))
     }
     pub fn set_score(&mut self, score: Score) {
         self.score_opt = Some(score)
@@ -436,47 +434,47 @@ mod tests {
         let current_depth = 0;
         let max_depth = 0;
         let moves_status1 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "1".to_string(),
             score_opt: Some(Score::new(0, current_depth, max_depth)),
         };
         let moves_status2 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "2".to_string(),
             score_opt: Some(Score::new(-5, current_depth, max_depth)),
         };
         let moves_status3 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "3".to_string(),
             score_opt: Some(Score::new(3, current_depth, max_depth)),
         };
         let moves_status4 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "4".to_string(),
             score_opt: None,
         };
         let moves_status5 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "5".to_string(),
             score_opt: Some(Score::new(-6, current_depth, max_depth)),
         };
         let moves_status6 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "6".to_string(),
             score_opt: Some(Score::new(-7, current_depth, max_depth)),
         };
         let moves_status7 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "7".to_string(),
             score_opt: Some(Score::new(-8, current_depth, max_depth)),
         };
         let moves_status8 = MoveStatus {
-            b_move: m.clone(),
+            b_move: m,
             variant: "8".to_string(),
             score_opt: Some(Score::new(-9, current_depth, max_depth)),
         };
 
-        let mut v = vec![
+        let mut v = [
             moves_status8.clone(),
             moves_status7.clone(),
             moves_status6.clone(),
@@ -486,7 +484,7 @@ mod tests {
             moves_status2.clone(),
             moves_status1.clone(),
         ];
-        let expected = vec![
+        let expected = [
             moves_status3.clone(),
             moves_status1.clone(),
             moves_status2.clone(),
@@ -524,7 +522,7 @@ mod tests {
             PreOrder::KillerMove,
         ];
 
-        list.sort_by(|a, b| preorder_compare(&a, &b, false));
+        list.sort_by(|a, b| preorder_compare(a, b, false));
 
         let expected = vec![
             PreOrder::CurrentDepthScore(Score::new(10, current_depth, max_depth)),
@@ -606,7 +604,7 @@ mod tests {
         ];
 
         // Sort the moves using compare_preorder_mat.
-        moves.sort_by(|a, b| compare_preorder_mat(a, b));
+        moves.sort_by(compare_preorder_mat);
 
         // Assert the expected ordering:
         // - Promotion moves come first

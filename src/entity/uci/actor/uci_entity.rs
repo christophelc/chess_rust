@@ -52,7 +52,7 @@ impl UciEntity {
     }
     fn parse_input(&self, input: &str, self_uci_actor: Addr<UciEntity>) -> Vec<String> {
         let mut errors: Vec<String> = vec![];
-        let parser = parser::InputParser::new(&input, self.game_manager_actor.clone());
+        let parser = parser::InputParser::new(input, self.game_manager_actor.clone());
         let command_or_error = parser.parse_input();
         match command_or_error {
             Ok(command) => {
@@ -173,7 +173,7 @@ mod tests {
         let game_manager_actor = game_manager::GameManager::start(game_manager::GameManager::new(
             debug_actor_opt.clone(),
         ));
-        let parser = parser::InputParser::new(&input, game_manager_actor.clone());
+        let parser = parser::InputParser::new(input, game_manager_actor.clone());
         let command = parser.parse_input().expect("Invalid command");
         (game_manager_actor, command)
     }
@@ -326,7 +326,7 @@ mod tests {
         let debug_actor_opt: Option<debug::DebugActor> = None;
         let input = "position startpos";
         let inputs = vec![input];
-        let (game_manager_actor, _command) = init(&input).await;
+        let (game_manager_actor, _command) = init(input).await;
         let uci_reader = Box::new(UciReadVecStringWrapper::new(&inputs));
         let uci_entity = UciEntity::new(
             uci_reader,

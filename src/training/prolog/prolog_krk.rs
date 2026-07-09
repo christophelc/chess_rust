@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::{anyhow, Result};
 use scryer_prolog::{LeafAnswer, Machine, QueryState, Term};
 //use scryer_prolog::MachineBuilder;

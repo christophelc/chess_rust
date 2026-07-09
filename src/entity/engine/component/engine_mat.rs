@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use actix::Addr;
 
-use super::config::config;
+use super::config::config_params;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{score, stat_eval};
 use crate::entity::engine::actor::engine_dispatcher as dispatcher;
@@ -25,13 +25,13 @@ pub struct EngineMat {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    conf: config::MatConfig,
+    conf: config_params::MatConfig,
 }
 impl EngineMat {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        conf: &config::MatConfig,
+        conf: &config_params::MatConfig,
     ) -> Self {
         assert!(conf.max_depth >= 1);
         Self {
@@ -50,7 +50,7 @@ impl EngineMat {
         game: &game_state::GameState,
         self_actor: Addr<dispatcher::EngineDispatcher>,
         stat_actor_opt: Option<stat_entity::StatActor>,
-        conf: &config::MatConfig,
+        conf: &config_params::MatConfig,
         stat_eval: &mut stat_eval::StatEval,
         is_stop: &Arc<AtomicBool>,
     ) -> Option<score::BitboardMoveScoreMat> {
@@ -74,7 +74,7 @@ impl EngineMat {
         //     println!("{}", mat_move.variant());
         //     println!("============");
         // }
-        if let Some(mat_move) = &shortest_mat_opt {
+        if let Some(_mat_move) = &shortest_mat_opt {
             //println!("MAT in {}: {}", mat_move.mat_in(), mat_move.variant());
         }
         shortest_mat_opt
@@ -144,11 +144,9 @@ impl EngineMat {
                         let m_mat = score::BitboardMoveScoreMat::new(m, move_mat.mat_in(), &move_mat.variant(), false);
                         shortest_mat_opt = Some(m_mat);
                     }
-                    (None, _) => {
-                        if !is_attacker {
-                            shortest_mat_opt = None;
-                            break;
-                        }
+                    (None, _) if !is_attacker => {
+                        shortest_mat_opt = None;
+                        break;
                     }
                     _ => {}
                 }
@@ -184,8 +182,9 @@ impl EngineMat {
         stat_eval: &mut stat_eval::StatEval,
         stat_actor_opt: Option<&stat_entity::StatActor>,
     ) {
-        if stat_eval.inc_n_positions_evaluated() % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED
-            == 0
+        if stat_eval
+            .inc_n_positions_evaluated()
+            .is_multiple_of(stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED)
         {
             if let Some(stat_actor) = stat_actor_opt {
                 let msg = stat_entity::handler_stat::StatUpdate::new(
@@ -234,24 +233,17 @@ impl EngineMat {
                     false,
                 ))
             }
-            game_state::EndGame::None => {
-                if current_depth < self.conf.max_depth {
-                    self.mat_solver(
-                        &updated_variant,
-                        game,
-                        current_depth + 1,
-                        !is_attacker,
-                        self_actor.clone(),
-                        stat_actor_opt.clone(),
-                        stat_eval,
-                        max_depth,
-                        is_stop,
-                    )
-                } else {
-                    self.update_stat(stat_eval, stat_actor_opt.as_ref());
-                    None
-                }
-            }
+            game_state::EndGame::None if current_depth < self.conf.max_depth => self.mat_solver(
+                &updated_variant,
+                game,
+                current_depth + 1,
+                !is_attacker,
+                self_actor.clone(),
+                stat_actor_opt.clone(),
+                stat_eval,
+                max_depth,
+                is_stop,
+            ),
             _ => {
                 self.update_stat(stat_eval, stat_actor_opt.as_ref());
                 None
@@ -332,9 +324,9 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-    use crate::entity::engine::component::config::config;
+    use crate::entity::engine::component::config::config_params;
     use crate::entity::engine::component::evaluation::stat_eval;
-    use crate::entity::game::component::bitboard::{self, zobrist};
+    use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
     use crate::{
         entity::{engine::component::engine_mat, game::actor::game_manager},
@@ -356,7 +348,7 @@ mod tests {
         let engine_player1 = engine_mat::EngineMat::new(
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
-            &config::MatConfig::new(MAT_DEPTH),
+            &config_params::MatConfig::new(MAT_DEPTH),
         );
         let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
             Arc::new(engine_player1.clone()),
@@ -374,7 +366,7 @@ mod tests {
             &game,
             self_actor,
             None,
-            &config::MatConfig::new(6),
+            &config_params::MatConfig::new(6),
             &mut stat_eval,
             &flag_stop,
         );
@@ -390,7 +382,7 @@ mod tests {
         let engine_player1 = engine_mat::EngineMat::new(
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
-            &config::MatConfig::new(MAT_DEPTH),
+            &config_params::MatConfig::new(MAT_DEPTH),
         );
         let engine_player1_dispatcher = dispatcher::EngineDispatcher::new(
             Arc::new(engine_player1.clone()),
@@ -401,16 +393,16 @@ mod tests {
         let start_fen = "7k/1R6/6K1/8/8/8/8/8 w - - 0 0";
         let start_position = fen::Fen::decode(start_fen).expect("Failed to decode FEN");
         let end_fen = "6k1/R7/6K1/8/8/8/8/8 w - - 0 0";
-        let end_position = fen::Fen::decode(end_fen).expect("Failed to decode FEN");
+        let _end_position = fen::Fen::decode(end_fen).expect("Failed to decode FEN");
         let zobrist_table = &zobrist::Zobrist::new();
-        let mut game = game_state::GameState::new(start_position, zobrist_table);
+        let game = game_state::GameState::new(start_position, zobrist_table);
         let mut stat_eval = stat_eval::StatEval::default();
         let flag_stop = Arc::new(AtomicBool::new(false));
         let mat_move_opt = engine_player1.mat_solver_init(
             &game,
             self_actor,
             None,
-            &config::MatConfig::new(6),
+            &config_params::MatConfig::new(6),
             &mut stat_eval,
             &flag_stop,
         );

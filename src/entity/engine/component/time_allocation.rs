@@ -25,7 +25,6 @@ pub fn estimate_time_allocation(
     game: &game_state::GameState,
 ) -> Option<time::Duration> {
     let n_half_moves = game.bit_position().bit_position_status().n_half_moves() as u64;
-    let max_time_opt = remaining_time_ms_opt
-        .map(|clock| time::Duration::from_secs(compute_allocate_time_in_sec(clock, n_half_moves)));
-    max_time_opt
+    remaining_time_ms_opt
+        .map(|clock| time::Duration::from_secs(compute_allocate_time_in_sec(clock, n_half_moves)))
 }

@@ -1,5 +1,5 @@
 use chess_actix::benchmark;
-use chess_actix::entity::engine::component::config::config;
+use chess_actix::entity::engine::component::config::config_params;
 #[allow(unused_imports)]
 use chess_actix::entity::engine::component::engine_alphabeta;
 use chess_actix::entity::engine::component::engine_iddfs;
@@ -177,10 +177,10 @@ struct BuildParams {
     stdin: Arc<Mutex<io::Stdin>>,
 }
 fn init_game_params() -> BuildParams {
-    let conf = config::IDDFSConfig::new(
+    let conf = config_params::IDDFSConfig::new(
         2 * DEPTH - 1,
-        config::IddfsFeatureConf::default(),
-        config::AlphabetaFeatureConf::default(),
+        config_params::IddfsFeatureConf::default(),
+        config_params::AlphabetaFeatureConf::default(),
     );
     let debug_actor_opt: Option<debug::DebugActor> = None;
     let stat_actor_opt = Some(stat_entity::StatEntity::new(None).start());
@@ -272,7 +272,7 @@ async fn uci_mode(
             }
             // Handle timeout
             _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
-                println!("");
+                println!();
             }
         }
     }

@@ -12,7 +12,7 @@ fn main() {
 
     // Get the last Git commit hash
     let git_commit_hash = Command::new("git")
-        .args(&["rev-parse", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .output()
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
         .unwrap_or_else(|_| "unknown".to_string());

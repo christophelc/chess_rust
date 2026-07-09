@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use actix::Addr;
 
-use super::config::config;
+use super::config::config_params;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{self, score, stat_eval};
 use super::search_state;
@@ -21,7 +21,7 @@ pub struct EngineAlphaBeta {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
     zobrist_table: zobrist::Zobrist,
-    conf: config::AlphabetaConf,
+    conf: config_params::AlphabetaConf,
     engine_mat_solver: engine_mat::EngineMat,
     is_send_best_move: bool,
 }
@@ -30,7 +30,7 @@ impl EngineAlphaBeta {
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
         max_depth: u8,
-        features: config::AlphabetaFeatureConf,
+        features: config_params::AlphabetaFeatureConf,
         is_send_best_move: bool,
     ) -> Self {
         assert!(max_depth >= 1 && max_depth <= search_state::MAX_DEPTH as u8);
@@ -38,12 +38,12 @@ impl EngineAlphaBeta {
             id_number: "".to_string(),
             debug_actor_opt,
             zobrist_table: zobrist_table.clone(),
-            conf: config::AlphabetaConf::new(max_depth * 2 - 1, features),
+            conf: config_params::AlphabetaConf::new(max_depth * 2 - 1, features),
             engine_mat_solver: engine_mat::EngineMat::new(
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                &config::MatConfig::new(2 * max_depth - 1),
+                &config_params::MatConfig::new(2 * max_depth - 1),
             ),
             is_send_best_move,
         }
@@ -61,7 +61,7 @@ impl EngineAlphaBeta {
         if let Some(promotion) = m.promotion() {
             return score::PreOrder::Promotion(promotion);
         }
-        let preorder = match (is_killer_move, is_check, m.capture().is_some()) {
+        match (is_killer_move, is_check, m.capture().is_some()) {
             (true, _, _) => score::PreOrder::KillerMove,
             (_, true, _) => score::PreOrder::new_mat(m.color().switch()),
             (_, _, true) => {
@@ -75,8 +75,7 @@ impl EngineAlphaBeta {
                 score::PreOrder::Capture { delta }
             }
             _ => score::PreOrder::Depth,
-        };
-        preorder
+        }
     }
 
     // is_asc true => score 3, score 4
@@ -93,7 +92,7 @@ impl EngineAlphaBeta {
     ) -> Vec<(score::MoveStatus, score::PreOrder)> {
         if !self.conf.alpha_beta_features.f_preorder {
             return moves
-                .into_iter()
+                .iter()
                 .map(|m| (score::MoveStatus::from_move(*m), score::PreOrder::Depth))
                 .collect();
         }
@@ -107,7 +106,7 @@ impl EngineAlphaBeta {
             let move_info_opt = transposition_table.get_move_info(&game.last_hash(), 0);
             let preorder = match move_info_opt.map(|move_info| move_info.move_score().clone()) {
                 Some(b_move_score) if b_move_score.score().current_depth() == current_depth => {
-                    score::PreOrder::CurrentDepthScore(b_move_score.score().clone())
+                    score::PreOrder::CurrentDepthScore(*b_move_score.score())
                 }
                 None => Self::set_preorder(
                     m,
@@ -115,9 +114,7 @@ impl EngineAlphaBeta {
                     game.check_status().is_check(),
                     state.is_killer_move(current_depth as usize, *m),
                 ),
-                Some(b_move_score) => {
-                    score::PreOrder::PreviousDepthScore(b_move_score.score().clone())
-                }
+                Some(b_move_score) => score::PreOrder::PreviousDepthScore(*b_move_score.score()),
             };
             let move_status = score::MoveStatus::from_move(*m);
             moves_status_with_preorder.push((move_status, preorder));
@@ -136,7 +133,7 @@ impl EngineAlphaBeta {
     ) -> bitboard::BitBoardMove {
         //let num_cpus = num_cpus::get();
         let mut transposition_table = score::TranspositionScore::default();
-        let mut state = search_state::SearchState::new();
+        let mut state = search_state::SearchState::default();
 
         let current_depth = 0;
         let mut stat_eval = stat_eval::StatEval::default();
@@ -147,7 +144,7 @@ impl EngineAlphaBeta {
             game,
             self_actor.clone(),
             stat_actor_opt.clone(),
-            &config::MatConfig::new(self.conf.max_depth),
+            &config_params::MatConfig::new(self.conf.max_depth),
             &mut stat_eval,
             is_stop,
         );
@@ -189,15 +186,12 @@ impl EngineAlphaBeta {
     ) -> bool {
         self.conf.alpha_beta_features.f_null_move_pruning
             && m.capture().is_none()
-            && is_max
-            && beta_opt.is_some()
-            && !is_max
-            && alpha_opt.is_some()
+            && (is_max && beta_opt.is_some() || !is_max && alpha_opt.is_some())
             && Self::diff_opt(beta_opt, alpha_opt).unwrap_or(0) >= evaluation::HALF_PAWN
             && current_depth >= 2
             && max_depth - current_depth > 3
             && !game.check_status().is_check()
-            && !evaluation::is_final(&game)
+            && !evaluation::is_final(game)
     }
 
     pub fn alphabeta_inc_rec(
@@ -293,7 +287,7 @@ impl EngineAlphaBeta {
                 score::Score::new(score.value(), score.current_depth(), score.max_depth()),
                 m_status.get_variant(),
             );
-            move_score.set_variant(&updated_variant);
+            move_score.set_variant(updated_variant);
             //println!("{} : {}", updated_variant, move_score.score());
             if is_max {
                 // best_score = max(best_score, score)
@@ -326,11 +320,7 @@ impl EngineAlphaBeta {
                     if self.conf.alpha_beta_features.f_killer_move {
                         state.add_killer_move(
                             current_depth as usize,
-                            best_move_score_opt
-                                .as_ref()
-                                .unwrap()
-                                .bitboard_move()
-                                .clone(),
+                            *best_move_score_opt.as_ref().unwrap().bitboard_move(),
                         );
                     }
                     // do not update transpositon table
@@ -366,11 +356,7 @@ impl EngineAlphaBeta {
                 {
                     state.add_killer_move(
                         current_depth as usize,
-                        best_move_score_opt
-                            .as_ref()
-                            .unwrap()
-                            .bitboard_move()
-                            .clone(),
+                        *best_move_score_opt.as_ref().unwrap().bitboard_move(),
                     );
                     // do not update transpositon table
                     return best_move_score_opt.unwrap();
@@ -438,7 +424,10 @@ impl EngineAlphaBeta {
         if let Some(move_info) = transposition_table.get_move_info(&hash, max_depth - current_depth)
         {
             //println!("hit {:?}", move_score);
-            if stat_eval.inc_n_transposition_hit() % 1_000_000 == 0 {
+            if stat_eval
+                .inc_n_transposition_hit()
+                .is_multiple_of(1_000_000)
+            {
                 tracing::debug!("hits: {}", stat_eval.n_transposition_hit());
             }
             game.play_back();

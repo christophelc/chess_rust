@@ -19,8 +19,7 @@ impl fmt::Display for EpdError {
         match self {
             EpdError::InvalidFormat(ref str) => write!(f, "Invalid Epd format: {}", str),
             EpdError::ParseError(op_errors) => {
-                let op_errors_str: Vec<_> =
-                    op_errors.into_iter().map(|err| err.to_string()).collect();
+                let op_errors_str: Vec<_> = op_errors.iter().map(|err| err.to_string()).collect();
                 write!(f, "Epd parse error: {}", op_errors_str.join(", "))
             }
             EpdError::FenPartError(fen_error) => write!(f, "Fen error: {}", fen_error),
@@ -260,11 +259,7 @@ impl Epd {
                     .take(n_parts)
                     .collect::<Vec<&str>>()
                     .join(" ");
-                let operations: Vec<_> = epd
-                    .operations()
-                    .into_iter()
-                    .map(|op| op.to_string())
-                    .collect();
+                let operations: Vec<_> = epd.operations().iter().map(|op| op.to_string()).collect();
                 Ok(format!("{} {};", truncated_fen, operations.join(";")))
             }
             Err(fen_error) => Err(EpdError::FenPartError(fen_error)),

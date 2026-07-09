@@ -6,7 +6,7 @@ use crate::{
         epd_reader::{self, EpdRead},
         scoring,
     },
-    entity::engine::component::config::config,
+    entity::engine::component::config::config_params,
     ui::notation::{epd, san},
 };
 
@@ -104,10 +104,10 @@ pub fn benchmark(epd_folder: &str) -> Result<Vec<EpdData>, EpdFileReaderError> {
     let data_all_files_or_error = read_epds_from_folder(epd_folder);
     let conf_depth = 3;
     let max_time_sec = 3;
-    let engine_conf = config::IDDFSConfig::new(
+    let engine_conf = config_params::IDDFSConfig::new(
         conf_depth,
-        config::IddfsFeatureConf::default(),
-        config::AlphabetaFeatureConf::default(),
+        config_params::IddfsFeatureConf::default(),
+        config_params::AlphabetaFeatureConf::default(),
     );
     let constraint = scoring::Constraint::new(max_time_sec);
     let mut results: Vec<EpdResult> = vec![];

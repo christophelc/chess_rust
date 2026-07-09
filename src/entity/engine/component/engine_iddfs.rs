@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use actix::Addr;
 
-use super::config::config;
+use super::config::config_params;
 use super::engine_logic::{self as logic, Engine};
 use super::evaluation::{score, stat_eval};
 use super::{engine_alphabeta, engine_mat, search_state};
@@ -23,7 +23,7 @@ fn span_debug() -> tracing::Span {
 pub struct EngineIddfs {
     id_number: String,
     debug_actor_opt: Option<debug::DebugActor>,
-    conf: config::IDDFSConfig,
+    conf: config_params::IDDFSConfig,
     engine_alphabeta: engine_alphabeta::EngineAlphaBeta,
     engine_mat_solver: engine_mat::EngineMat,
 }
@@ -31,7 +31,7 @@ impl EngineIddfs {
     pub fn new(
         debug_actor_opt: Option<debug::DebugActor>,
         zobrist_table: zobrist::Zobrist,
-        conf: &config::IDDFSConfig,
+        conf: &config_params::IDDFSConfig,
     ) -> Self {
         assert!(conf.max_depth >= 1);
         Self {
@@ -50,7 +50,7 @@ impl EngineIddfs {
                 // fIXME: max_depth here should be dynamic
                 None,
                 zobrist_table,
-                &config::MatConfig::new(8),
+                &config_params::MatConfig::new(8),
             ),
         }
     }
@@ -115,7 +115,7 @@ impl EngineIddfs {
 
         let mut transposition_table = score::TranspositionScore::default();
         let mut stat_eval = stat_eval::StatEval::default();
-        let mut state = search_state::SearchState::new();
+        let mut state = search_state::SearchState::default();
 
         let mut game_clone = game.clone();
 
@@ -126,7 +126,7 @@ impl EngineIddfs {
                 game,
                 self_actor.clone(),
                 stat_actor_opt.clone(),
-                &config::MatConfig::new(self.conf.max_depth),
+                &config_params::MatConfig::new(self.conf.max_depth),
                 &mut stat_eval,
                 is_stop,
             )

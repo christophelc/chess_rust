@@ -356,7 +356,7 @@ fn check_move_level2(
         capture_en_passant.as_ref(),
         bit_position_status,
     );
-    if moves.iter().any(|m| *m == b_move) {
+    if moves.contains(&b_move) {
         Ok(b_move)
     } else {
         let possible_moves_for_piece: Vec<String> = moves
@@ -499,7 +499,7 @@ mod tests {
         // play the move Bb2
         let valid_moves = long_notation::LongAlgebricNotationMove::build_from_str(mv).unwrap();
         let _ = game.play_moves(
-            &vec![valid_moves],
+            &[valid_moves],
             &zobrist_table,
             debug_actor_opt.clone(),
             true,

@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::{anyhow, Result};
 use scryer_prolog::{MachineBuilder, Term /* Machine, QueryState, etc. */};
 use std::{collections::BTreeMap, fs};

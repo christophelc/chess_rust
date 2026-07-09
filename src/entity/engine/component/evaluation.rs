@@ -52,7 +52,9 @@ pub fn evaluate_position(
     stat_actor_opt: &Option<stat_entity::StatActor>,
     engine_id: logic::EngineId,
 ) -> i32 {
-    if stat_eval.inc_n_positions_evaluated() % stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED == 0
+    if stat_eval
+        .inc_n_positions_evaluated()
+        .is_multiple_of(stat_data::SEND_STAT_EVERY_N_POSITION_EVALUATED)
     {
         if let Some(stat_actor) = stat_actor_opt {
             let msg = stat_entity::handler_stat::StatUpdate::new(
@@ -182,7 +184,7 @@ mod tests {
     use actix::Actor;
 
     use crate::entity::engine::actor::engine_dispatcher as dispatcher;
-    use crate::entity::engine::component::config::config;
+    use crate::entity::engine::component::config::config_params;
     use crate::entity::engine::component::evaluation::{self, FACTOR_CONTROL_SQUARES};
     use crate::entity::game::component::bitboard::zobrist;
     use crate::ui::notation::fen::{self, EncodeUserInput};
@@ -237,7 +239,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
-            config::AlphabetaFeatureConf::default(),
+            config_params::AlphabetaFeatureConf::default(),
             false,
         );
         engine_player1.set_id_number("white");
@@ -251,7 +253,7 @@ mod tests {
             debug_actor_opt.clone(),
             game_manager.zobrist_table(),
             ALPHABETA_DEPTH,
-            config::AlphabetaFeatureConf::default(),
+            config_params::AlphabetaFeatureConf::default(),
             false,
         );
         engine_player2.set_id_number("black");

@@ -28,8 +28,7 @@ pub fn generate_krk() -> impl Iterator<Item = BitPosition> {
         pieces: vec![white_king, white_rook, black_king],
     };
 
-    let positions = generate_positions_from(set);
-    positions
+    generate_positions_from(set)
 }
 
 pub fn prepare_krk_as_fen_white_turn_to_csv(file_name: &str) -> std::io::Result<()> {
@@ -81,17 +80,17 @@ impl SetPieces {
 
     pub fn from(l_pieces: &[Pieces]) -> Self {
         let is_king_white_valid = l_pieces
-            .into_iter()
-            .find(|iter| Self::check_king(*iter, square::Color::White))
+            .iter()
+            .find(|iter| Self::check_king(iter, square::Color::White))
             .is_some();
         let is_king_black_valid = l_pieces
-            .into_iter()
-            .find(|iter| Self::check_king(*iter, square::Color::Black))
+            .iter()
+            .find(|iter| Self::check_king(iter, square::Color::Black))
             .is_some();
         assert!(is_king_white_valid, "Missing white king");
         assert!(is_king_black_valid, "Missing black king");
         let distinct_pieces = l_pieces
-            .into_iter()
+            .iter()
             .map(|pieces| pieces.piece)
             .collect::<HashSet<Piece>>();
         assert!(
@@ -100,8 +99,8 @@ impl SetPieces {
         );
 
         let mut set_of_pieces = Vec::<Piece>::new();
-        l_pieces.into_iter().for_each(|iter| {
-            set_of_pieces.extend(std::iter::repeat(iter.piece().clone()).take(iter.n() as usize))
+        l_pieces.iter().for_each(|iter| {
+            set_of_pieces.extend(std::iter::repeat_n(iter.piece(), iter.n() as usize))
         });
         Self {
             pieces: set_of_pieces,
@@ -138,14 +137,14 @@ impl Iterator for BitPositionIterator {
     type Item = BitPosition;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(squares) = self.permutations.next() {
+        for squares in self.permutations.by_ref() {
             // we assume it is player turn white.
             let mut bit_position = BitPosition::empty();
             let mut zobrist_hash = ZobristHash::default();
 
             for (piece, &square) in self.set.pieces.iter().zip(squares.iter()) {
                 bit_position.add_piece_without_control(
-                    piece.clone(),
+                    *piece,
                     square,
                     &mut zobrist_hash,
                     &self.zobrist_table,
@@ -216,7 +215,7 @@ mod tests {
         let black_king = Pieces::new(Piece::new(TypePiece::King, Color::Black), 1);
         let white_pawn = Pieces::new(Piece::new(TypePiece::Pawn, Color::White), 8);
         let pieces = vec![white_king, black_king, white_pawn.clone(), white_pawn];
-        let set_pieces = SetPieces::from(&pieces);
+        let _set_pieces = SetPieces::from(&pieces);
     }
 
     #[test]
