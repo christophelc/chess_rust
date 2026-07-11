@@ -1,1 +1,1 @@
-fn read_krk_positions() {}
+mod krk_skill;

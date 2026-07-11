@@ -24,26 +24,7 @@ use chess_actix::ui::notation::fen::{self, EncodeUserInput, Position, PositionSt
 use chess_actix::ui::notation::long_notation::LongAlgebricNotationMove;
 use entity::engine::actor::engine_dispatcher as dispatcher;
 
-type FenLineMap = HashMap<zobrist::ZobristHash, FenLineEnriched>;
-
-#[derive(Debug, Clone)]
-struct FenLine {
-    fen: String,
-    mat_in: String,
-    move_str: String,
-}
-
-#[derive(Debug, Clone)]
-struct FenLineEnriched {
-    fen_line: FenLine,
-    hash: zobrist::ZobristHash,
-}
-
-impl std::fmt::Display for FenLine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{};{};{}", self.fen, self.mat_in, self.move_str)
-    }
-}
+use chess_actix::training::data_loader::fen_loader;
 
 fn find_white_move(start_position: &Position, end_position: &Position) -> bitboard::BitBoardMove {
     let binding = bitboard::BitPosition::from(*start_position);
@@ -101,7 +82,7 @@ fn check_black_moves_lead_to_mat(
     game: &mut game_state::GameState,
     b_moves: &[bitboard::BitBoardMove],
     zobrist_table: &zobrist::Zobrist,
-    known_positions: &FenLineMap,
+    known_positions: &fen_loader::FenLineMap,
 ) -> bool {
     if b_moves.len() == 1 {
         return true;
@@ -115,7 +96,7 @@ fn check_black_move_lead_to_mat(
     game: &mut game_state::GameState,
     b_move: &bitboard::BitBoardMove,
     zobrist_table: &zobrist::Zobrist,
-    known_positions: &FenLineMap,
+    known_positions: &fen_loader::FenLineMap,
 ) -> bool {
     play_move(game, b_move, zobrist_table);
     let hash = game.last_hash();
@@ -129,7 +110,7 @@ async fn try_reach_position(
     start_position: &Position,
     maybe_end_position: Option<&Position>,
     engine_player1: &EngineMat,
-    known_positions: &FenLineMap,
+    known_positions: &fen_loader::FenLineMap,
     self_actor: actix::Addr<dispatcher::EngineDispatcher>,
     zobrist_table: &zobrist::Zobrist,
 ) -> Option<(u8, bitboard::BitBoardMove)> {
@@ -173,18 +154,6 @@ async fn try_reach_position(
         .next()
 }
 
-fn extract_fields(line: &str) -> FenLine {
-    let mut parts = line.split(';');
-    let fen = parts.next().unwrap_or("").to_string();
-    let mat_in = parts.next().unwrap_or("").to_string();
-    let move_str = parts.next().unwrap_or("").to_string();
-    FenLine {
-        fen,
-        mat_in,
-        move_str,
-    }
-}
-
 async fn update_line_mat_in_one(
     line: &str,
     engine_player1: &EngineMat,
@@ -192,31 +161,29 @@ async fn update_line_mat_in_one(
     max_depth: u8,
     zobrist_table: &zobrist::Zobrist,
 ) -> String {
-    let FenLine {
-        fen,
-        mat_in,
-        move_str: _,
-    } = extract_fields(line);
-    if mat_in.is_empty() {
-        let position = fen::Fen::decode(&fen).expect("Failed to decode FEN");
+    let fen_line = fen_loader::extract_fields(line);
+    let fen = fen_line.fen();
+    let mat_in = fen_line.mat_in();
+    if mat_in.is_none() {
+        let position = fen::Fen::decode(fen).expect("Failed to decode FEN");
         if let Some((mat_in, bitboard_move)) = try_reach_position(
             max_depth,
             1,
             &position,
             None,
             engine_player1,
-            &HashMap::<zobrist::ZobristHash, FenLineEnriched>::new(),
+            &HashMap::<zobrist::ZobristHash, fen_loader::FenLineEnriched>::new(),
             self_actor,
             zobrist_table,
         )
         .await
         {
             let move_str = LongAlgebricNotationMove::build_from_b_move(bitboard_move).cast();
-            let fen_line = FenLine {
-                fen: fen.to_string(),
-                mat_in: mat_in.to_string(),
-                move_str,
-            };
+            let fen_line = fen_loader::FenLine::new(
+                fen,
+                mat_in,
+                &move_str,
+            );
             fen_line.to_string()
         } else {
             line.to_string()
@@ -268,91 +235,41 @@ fn backup_filename(filename: &str) -> String {
     format!("{}.bkp", filename)
 }
 
-fn to_fen_lines_enriched(
-    lines: &[String],
-    zobrist_table: &zobrist::Zobrist,
-) -> Vec<FenLineEnriched> {
-    let mut v: Vec<FenLineEnriched> = vec![];
-    for (i, line) in lines.iter().enumerate() {
-        if i == 0 {
-            continue;
-        }
-        let fen_line = extract_fields(line);
-        let hash = fen_hash(&fen_line.fen, zobrist_table);
-        v.push(FenLineEnriched { fen_line, hash });
-    }
-    v
-}
-
-fn fen_hash(fen: &str, zobrist_table: &zobrist::Zobrist) -> zobrist::ZobristHash {
-    let position = fen::Fen::decode(fen).unwrap();
-    let bit_position = bitboard::BitPosition::from(position);
-    zobrist::ZobristHash::zobrist_partial_hash_from_position(&bit_position, zobrist_table)
-}
-
-fn known_mat_to_map(fen_lines_enriched: &[FenLineEnriched]) -> FenLineMap {
-    let zobrist_table = zobrist::Zobrist::new();
-    let mut m: FenLineMap = HashMap::new();
-    for fen_line_enriched in fen_lines_enriched
-        .iter()
-        .filter(|line| !line.fen_line.mat_in.is_empty())
-    {
-        let hash = fen_hash(&fen_line_enriched.fen_line.fen, &zobrist_table);
-        m.insert(hash, fen_line_enriched.clone());
-    }
-    m
-}
-
-fn fens_to_map(
-    fens: &[String],
-    zobrist_table: &zobrist::Zobrist,
-) -> HashMap<zobrist::ZobristHash, String> {
-    let mut m: HashMap<zobrist::ZobristHash, String> = HashMap::new();
-    for fen in fens {
-        let hash = fen_hash(fen, zobrist_table);
-        m.insert(hash, fen.to_string());
-    }
-    m
-}
-
 fn build_possible_and_valid_positions(
     fen: &str,
-    fen_lines_enriched: &FenLineMap,
+    fen_lines_enriched: &fen_loader::FenLineMap,
     mat_in_target: u8,
     zobrist_table: &zobrist::Zobrist,
 ) -> Vec<String> {
     let fen_possible_positions = build_fen_possible_positions(fen);
     let m_fen_possible_positions: HashMap<zobrist::ZobristHash, String> =
-        fens_to_map(&fen_possible_positions, zobrist_table);
+        fen_loader::fens_to_map(&fen_possible_positions, zobrist_table);
     intersect_with_reader(fen_lines_enriched, &m_fen_possible_positions, mat_in_target)
 }
 
 async fn get_lines_to_update_mat_in_n(
-    fen_lines_enriched: &FenLineMap,
-    known_positions: &FenLineMap,
+    fen_lines_enriched: &fen_loader::FenLineMap,
+    known_positions: &fen_loader::FenLineMap,
     engine_player1: &EngineMat,
     self_actor: actix::Addr<dispatcher::EngineDispatcher>,
     mat_in_target: u8,
     zobrist_table: &zobrist::Zobrist,
-) -> FenLineMap {
-    let mut modified_lines: FenLineMap = HashMap::new();
+) -> fen_loader::FenLineMap {
+    let mut modified_lines: fen_loader::FenLineMap = HashMap::new();
     // loop over each line
     for (i, fen_line_enriched) in fen_lines_enriched.values().enumerate() {
         // extract fields
-        let FenLine {
-            fen,
-            mat_in,
-            move_str: _,
-        } = fen_line_enriched.fen_line.clone();
-        if let Ok(mat_in_value) = mat_in.parse::<u8>() {
+        let fen = fen_line_enriched.fen_line().fen();
+        let mat_in = fen_line_enriched.fen_line().mat_in();
+        if let Some(mat_in_value) = mat_in {
             if mat_in_target - 1 == mat_in_value {
                 let fen_possible_positions = build_possible_and_valid_positions(
-                    &fen,
+                    fen,
                     fen_lines_enriched,
                     mat_in_target,
                     zobrist_table,
                 );
-                let end_position = fen::Fen::decode(&fen).expect("Failed to decode FEN");
+                let end_position = fen::Fen::decode(fen).expect("Failed to decode FEN");
                 for start_fen in fen_possible_positions {
                     let start_position =
                         fen::Fen::decode(&start_fen).expect("Failed to decode FEN");
@@ -368,36 +285,30 @@ async fn get_lines_to_update_mat_in_n(
                     )
                     .await
                     {
-                        let hash = fen_hash(&start_fen, zobrist_table);
+                        let hash = fen_loader::fen_hash(&start_fen, zobrist_table);
                         let move_str =
                             LongAlgebricNotationMove::build_from_b_move(bitboard_move).cast();
-                        let new_fen_line_enriched = FenLineEnriched {
-                            fen_line: FenLine {
-                                fen: start_fen.to_string(),
-                                mat_in: mat_in_target.to_string(),
-                                move_str,
-                            },
-                            hash,
-                        };
+                        let new_fen_line_enriched = fen_loader::FenLineEnriched::new(
+                            fen_loader::FenLine::new(&start_fen, mat_in_target, &move_str),
+                            &hash,
+                        );
                         if let Some(fen_line_enriched) =
-                            modified_lines.get_mut(&new_fen_line_enriched.hash)
+                            modified_lines.get_mut(&new_fen_line_enriched.hash())
                         {
-                            if fen_line_enriched.fen_line.mat_in
-                                == new_fen_line_enriched.fen_line.mat_in
+                            if fen_line_enriched.fen_line().mat_in()
+                                == new_fen_line_enriched.fen_line().mat_in()
                                 && !fen_line_enriched
-                                    .fen_line
-                                    .move_str
-                                    .contains(&new_fen_line_enriched.fen_line.move_str)
+                                    .fen_line()
+                                    .move_str()
+                                    .contains(new_fen_line_enriched.fen_line().move_str())
                             {
-                                fen_line_enriched.fen_line.move_str = format!(
-                                    "{},{}",
-                                    fen_line_enriched.fen_line.move_str,
-                                    new_fen_line_enriched.fen_line.move_str
-                                );
+                                fen_line_enriched.append_move_str(new_fen_line_enriched.fen_line().move_str());
                             }
                         } else {
-                            modified_lines
-                                .insert(new_fen_line_enriched.hash.clone(), new_fen_line_enriched);
+                            modified_lines.insert(
+                                new_fen_line_enriched.hash().clone(),
+                                new_fen_line_enriched,
+                            );
                         }
                     }
                 }
@@ -417,31 +328,16 @@ async fn get_lines_to_update_mat_in_n(
     modified_lines
 }
 
-fn read_lines<R>(reader: R) -> std::io::Result<Vec<FenLineEnriched>>
-where
-    R: BufRead,
-{
-    let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<_>>>()?;
-
-    let zobrist_table = zobrist::Zobrist::new();
-    let fen_lines = to_fen_lines_enriched(&lines, &zobrist_table);
-
-    Ok(fen_lines)
-}
-
 fn intersect_filter(
     key: &zobrist::ZobristHash,
-    m_fen_lines_enriched: &FenLineMap,
+    m_fen_lines_enriched: &fen_loader::FenLineMap,
     mat_in_target: u8,
 ) -> Option<String> {
     let mut maybe_fen: Option<String> = None;
     if let Some(fen_lines_enriched) = m_fen_lines_enriched.get(key) {
-        let FenLine {
-            fen,
-            mat_in,
-            move_str: _,
-        } = fen_lines_enriched.fen_line.clone();
-        if mat_in.is_empty() || mat_in.parse::<u8>().unwrap() == mat_in_target {
+        let fen = fen_lines_enriched.fen_line().fen().clone();
+        let mat_in = fen_lines_enriched.fen_line().mat_in();
+        if mat_in.is_none() || mat_in.unwrap() == mat_in_target {
             maybe_fen = Some(fen);
         }
     }
@@ -449,7 +345,7 @@ fn intersect_filter(
 }
 
 fn intersect_with_reader(
-    fen_lines_enriched: &FenLineMap,
+    fen_lines_enriched: &fen_loader::FenLineMap,
     m_fen_possible_positions: &HashMap<zobrist::ZobristHash, String>,
     mat_in_target: u8,
 ) -> Vec<String> {
@@ -463,7 +359,7 @@ fn intersect_with_reader(
 fn write_modified_lines_mat_in_n<W: Write>(
     reader: impl BufRead,
     writer: &mut W,
-    modified_lines: &FenLineMap,
+    modified_lines: &fen_loader::FenLineMap,
 ) -> std::io::Result<()> {
     let zobrist_table = zobrist::Zobrist::new();
     let mut lines_updated = 0;
@@ -474,12 +370,12 @@ fn write_modified_lines_mat_in_n<W: Write>(
         }
 
         let line = line?;
-        let extracted_line = extract_fields(&line);
-        let hash = fen_hash(&extracted_line.fen, &zobrist_table);
+        let extracted_line = fen_loader::extract_fields(&line);
+        let hash = fen_loader::fen_hash(&extracted_line.fen(), &zobrist_table);
 
         if let Some(fen_line_enriched) = modified_lines.get(&hash) {
             lines_updated += 1;
-            writeln!(writer, "{}", fen_line_enriched.fen_line)?;
+            writeln!(writer, "{}", fen_line_enriched.fen_line())?;
         } else {
             writeln!(writer, "{line}")?;
         }
@@ -575,32 +471,24 @@ async fn mat_in_one(
     .await
 }
 
-fn to_fen_lines_map(fen_lines_enriched: &[FenLineEnriched]) -> FenLineMap {
-    let mut fen_lines_map: FenLineMap = HashMap::new();
-    for fen_line_enriched in fen_lines_enriched {
-        fen_lines_map.insert(fen_line_enriched.hash.clone(), fen_line_enriched.clone());
-    }
-    fen_lines_map
-}
-
 async fn mat_in_n<R>(
     reader: R,
     mat_in: u8,
     engine_player1: &EngineMat,
     self_actor: actix::Addr<dispatcher::EngineDispatcher>,
     zobrist_table: &zobrist::Zobrist,
-) -> std::io::Result<FenLineMap>
+) -> std::io::Result<fen_loader::FenLineMap>
 where
     R: BufRead,
 {
-    let fen_lines_enriched = read_lines(reader)?;
-    let m_fen_lines_enriched = to_fen_lines_map(&fen_lines_enriched);
+    let fen_lines_enriched = fen_loader::read_lines(reader)?;
+    let m_fen_lines_enriched = fen_loader::to_fen_lines_map(&fen_lines_enriched);
 
     // put apart known mat
-    let known_mat_m: FenLineMap = known_mat_to_map(&fen_lines_enriched);
+    let known_mat_m: fen_loader::FenLineMap = fen_loader::known_mat_to_map(&fen_lines_enriched);
 
     tracing::info!("Updating file with mat in {} positions...", mat_in);
-    let modified_lines: FenLineMap = get_lines_to_update_mat_in_n(
+    let modified_lines: fen_loader::FenLineMap = get_lines_to_update_mat_in_n(
         &m_fen_lines_enriched,
         &known_mat_m,
         engine_player1,
@@ -735,9 +623,9 @@ async fn test_position_reached() {
     .into_iter()
     .map(|line| line.to_string())
     .collect();
-    let fen_lines_to_update = to_fen_lines_enriched(&content, &zobrist_table);
-    let m_fen_lines_to_update = to_fen_lines_map(&fen_lines_to_update);
-    let known_mat_m: FenLineMap = known_mat_to_map(&fen_lines_to_update);
+    let fen_lines_to_update = fen_loader::to_fen_lines_enriched(&content, &zobrist_table);
+    let m_fen_lines_to_update = fen_loader::to_fen_lines_map(&fen_lines_to_update);
+    let known_mat_m: fen_loader::FenLineMap = fen_loader::known_mat_to_map(&fen_lines_to_update);
     let lines_to_update = get_lines_to_update_mat_in_n(
         &m_fen_lines_to_update,
         &known_mat_m,
@@ -797,22 +685,22 @@ async fn test_update_mat_in_n() {
     );
     let self_actor = engine_player1_dispatcher.start();
 
-    let fen_lines_enriched: Vec<FenLineEnriched> = to_fen_lines_enriched(&lines, &zobrist_table);
-    let m_fen_lines_enriched = to_fen_lines_map(&fen_lines_enriched);
+    let fen_lines_enriched: Vec<fen_loader::FenLineEnriched> = fen_loader::to_fen_lines_enriched(&lines, &zobrist_table);
+    let m_fen_lines_enriched = fen_loader::to_fen_lines_map(&fen_lines_enriched);
     let fen_mat_in_1 = "6k1/R7/6K1/8/8/8/8/8 w - - 0 0";
-    let hash_mat_in_one = fen_hash(fen_mat_in_1, &zobrist::Zobrist::new());
-    let mut known_mat_m: FenLineMap = HashMap::new();
+    let hash_mat_in_one = fen_loader::fen_hash(fen_mat_in_1, &zobrist::Zobrist::new());
+    let mut known_mat_m: fen_loader::FenLineMap = HashMap::new();
     println!("hash fen mat in one: {:?}", hash_mat_in_one.clone());
     known_mat_m.insert(
         hash_mat_in_one.clone(),
-        FenLineEnriched {
-            fen_line: FenLine {
-                fen: fen_mat_in_1.to_string(),
-                mat_in: "1".to_string(),
-                move_str: "a7a8".to_string(),
-            },
-            hash: hash_mat_in_one,
-        },
+        fen_loader::FenLineEnriched::new(
+            fen_loader::FenLine::new(
+                fen_mat_in_1,
+                1,
+                "a7a8",
+            ),
+            &hash_mat_in_one,
+        ),
     );
 
     let modified_lines = get_lines_to_update_mat_in_n(
@@ -858,8 +746,8 @@ async fn test_multiple_equivalent_move_mat_in_n() {
     .collect();
 
     let fen = "8/8/8/8/8/8/5KR1/7k w - - 0 0";
-    let fen_lines_enriched: Vec<FenLineEnriched> = to_fen_lines_enriched(&lines, &zobrist_table);
-    let m_fen_lines_enriched = to_fen_lines_map(&fen_lines_enriched);
+    let fen_lines_enriched: Vec<fen_loader::FenLineEnriched> = fen_loader::to_fen_lines_enriched(&lines, &zobrist_table);
+    let m_fen_lines_enriched = fen_loader::to_fen_lines_map(&fen_lines_enriched);
 
     let fen_possible_positions =
         build_possible_and_valid_positions(fen, &m_fen_lines_enriched, 1, &zobrist_table);
@@ -901,7 +789,7 @@ async fn test_update_multiple_equivalent_move_mat_in_n() {
         .await
         .unwrap();
     assert!(modified_lines.len() == 1);
-    let moves = &modified_lines.values().next().unwrap().fen_line.move_str;
+    let moves = &modified_lines.values().next().unwrap().fen_line().move_str();
     let mut moves = moves.split(",").collect::<Vec<&str>>();
     moves.sort();
     let expected_moves: Vec<&str> = vec!["g2g4", "g2g5", "g2g6", "g2g7", "g2g8"];

@@ -24,6 +24,7 @@ anyhow = "1.0.102"
 scryer-prolog = "0.10"
 crepe = "0.2.0"
 ascent = "0.8.0"
+burn = { version = "0.21.0", features = ["wgpu"] }
 
 [lib]
 name="chess_actix"
