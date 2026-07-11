@@ -9,15 +9,15 @@ pub type FenLineMap = HashMap<zobrist::ZobristHash, FenLineEnriched>;
 #[derive(Debug, Clone)]
 pub struct FenLine {
     fen: String,
-    mat_in: String,
+    mat_in: Option<u8>,
     move_str: String,
 }
 
 impl FenLine {
-    pub fn new(fen: &str, mat_in: u8, move_str: &str) -> FenLine {
+    pub fn new(fen: &str, mat_in: Option<u8>, move_str: &str) -> FenLine {
         FenLine {
             fen: fen.to_string(),
-            mat_in: mat_in.to_string(),
+            mat_in,
             move_str: move_str.to_string(),
         }
     }
@@ -27,11 +27,7 @@ impl FenLine {
     }
 
     pub fn mat_in(&self) -> Option<u8> {
-        if let Ok(mat_in) = &self.mat_in.parse::<u8>() {
-            Some(*mat_in)
-        } else {
-            None
-        }
+        self.mat_in
     }
 
     pub fn move_str(&self) -> &String {
@@ -72,8 +68,12 @@ impl FenLineEnriched {
 
 impl std::fmt::Display for FenLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{};{};{}", self.fen, self.mat_in, self.move_str)
+        write!(f, "{};{};{}", self.fen, self.mat_in.map(|v| v.to_string()).unwrap_or_default(), self.move_str)
     }
+}
+
+fn parse_mat_in(mat_in_str: &str) -> Option<u8> {
+    mat_in_str.parse::<u8>().ok()
 }
 
 pub fn extract_fields(line: &str) -> FenLine {
@@ -83,7 +83,7 @@ pub fn extract_fields(line: &str) -> FenLine {
     let move_str = parts.next().unwrap_or("").to_string();
     FenLine {
         fen,
-        mat_in,
+        mat_in: parse_mat_in(&mat_in),
         move_str,
     }
 }
@@ -115,7 +115,7 @@ pub fn known_mat_to_map(fen_lines_enriched: &[FenLineEnriched]) -> FenLineMap {
     let mut m: FenLineMap = HashMap::new();
     for fen_line_enriched in fen_lines_enriched
         .iter()
-        .filter(|line| !line.fen_line.mat_in.is_empty())
+        .filter(|line| line.fen_line.mat_in.is_some())
     {
         let hash = fen_hash(&fen_line_enriched.fen_line.fen, &zobrist_table);
         m.insert(hash, fen_line_enriched.clone());

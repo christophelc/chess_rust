@@ -181,7 +181,7 @@ async fn update_line_mat_in_one(
             let move_str = LongAlgebricNotationMove::build_from_b_move(bitboard_move).cast();
             let fen_line = fen_loader::FenLine::new(
                 fen,
-                mat_in,
+                Some(mat_in),
                 &move_str,
             );
             fen_line.to_string()
@@ -289,7 +289,7 @@ async fn get_lines_to_update_mat_in_n(
                         let move_str =
                             LongAlgebricNotationMove::build_from_b_move(bitboard_move).cast();
                         let new_fen_line_enriched = fen_loader::FenLineEnriched::new(
-                            fen_loader::FenLine::new(&start_fen, mat_in_target, &move_str),
+                            fen_loader::FenLine::new(&start_fen, Some(mat_in_target), &move_str),
                             &hash,
                         );
                         if let Some(fen_line_enriched) =
@@ -696,7 +696,7 @@ async fn test_update_mat_in_n() {
         fen_loader::FenLineEnriched::new(
             fen_loader::FenLine::new(
                 fen_mat_in_1,
-                1,
+                Some(1),
                 "a7a8",
             ),
             &hash_mat_in_one,
