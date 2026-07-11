@@ -395,10 +395,8 @@ fn write_modified_lines_mat_in_n<W: Write>(
 
 // build all possible position having a distance of 1 for white and black bitboard
 fn build_fen_possible_positions(fen: &str) -> Vec<String> {
-    let position: fen::Position = fen::Fen::decode(fen).unwrap();
-    let chessboard = position.chessboard();
-    let bitboards = &BitBoardsWhiteAndBlack::from(*chessboard);
-    build_bitboards_distance1(bitboards)
+    let bitboards = fen_loader::fen_to_bitboards(fen);
+    build_bitboards_distance1(&bitboards)
 }
 
 fn moves2bitboard_moves(

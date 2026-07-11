@@ -2,6 +2,8 @@ use std::error::Error;
 /// This module implements a TUI for a chessboard
 use std::fmt;
 
+use crate::entity::game::component::bitboard;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
     pub col: char,
@@ -15,18 +17,32 @@ impl fmt::Display for Coord {
 }
 
 impl Coord {
+    pub fn new(col: char, row: u8) -> Coord {
+        Coord {
+            col: col.to_ascii_uppercase(),
+            row,
+        }
+    }
+
     pub fn get_x(&self) -> usize {
         (self.col as u8 - b'A') as usize
     }
     pub fn get_y(&self) -> usize {
         (self.row - 1) as usize
     }
+
+    pub fn from_bytes(m: &str) -> Coord {
+        let bytes = m.as_bytes();
+        Coord::new(bytes[0] as char, bytes[1] - b'0')
+    }
+
+    pub fn from_index(index: bitboard::BitIndex) -> Coord {
+        Coord::new((index.col() + 65) as char, index.row() + 1)
+    }
+
     pub fn from(col: char, row: u8) -> Result<Self, Box<dyn Error>> {
         if Self::is_valid_chess_square(col, row) {
-            Ok(Coord {
-                col: col.to_uppercase().next().unwrap(),
-                row,
-            })
+            Ok(Coord::new(col, row))
         } else {
             Err(Box::new(InvalidCoordError { col, row }))
         }
@@ -76,6 +92,12 @@ mod tests {
             panic!("Error is not of type InvalidCoordError");
         }
         assert!(Coord::from('A', 9).is_err());
+    }
+
+    #[test]
+    fn test_from_bytes() {
+        let coord = Coord::from_bytes("a1");
+        assert_eq!(coord, Coord::new('A', 1));
     }
 
     #[test]

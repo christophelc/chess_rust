@@ -47,8 +47,7 @@ impl Default for ChessBoard {
 }
 
 impl ChessBoard {
-    #[cfg(test)]
-    fn at(&self, coord: coord::Coord) -> square::Square {
+    pub fn at(&self, coord: coord::Coord) -> square::Square {
         self.squares[coord.get_y()][coord.get_x()]
     }
 

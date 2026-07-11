@@ -11,7 +11,7 @@ chrono = "0.4.45"
 clap = { version = "4.6", features = ["derive"] }
 num_cpus = "1.17.0"
 petgraph = "0.8.3"
-rand = "0.10.1"
+rand = "0.10.2"
 rand_chacha = "0.10.0"
 rayon = "1.12.0"
 thiserror = "2.0.18"
@@ -20,11 +20,11 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
 itertools = "0.15.0"
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 scryer-prolog = "0.10"
 crepe = "0.2.0"
 ascent = "0.8.0"
-burn = { version = "0.21.0", features = ["wgpu"] }
+burn = { version = "0.21.0", features = ["wgpu", "dataset", "autodiff"] }
 
 [lib]
 name="chess_actix"
