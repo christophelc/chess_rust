@@ -4,3 +4,4 @@ pub mod batch;
 pub mod loss;
 pub mod dataset;
 pub mod data_split;
+pub mod plot;

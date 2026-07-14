@@ -1252,7 +1252,7 @@ fn encode_pawn_en_passant(maybe_coord: Option<coord::Coord>) -> Option<i8> {
 
 fn decode_pawn_en_passant(maybe_index: Option<BitIndex>) -> Option<coord::Coord> {
     maybe_index
-        .map(|index| coord::Coord::from_index(index))
+        .map(coord::Coord::from_index)
 }
 
 use square::Color;

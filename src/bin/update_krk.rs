@@ -293,7 +293,7 @@ async fn get_lines_to_update_mat_in_n(
                             &hash,
                         );
                         if let Some(fen_line_enriched) =
-                            modified_lines.get_mut(&new_fen_line_enriched.hash())
+                            modified_lines.get_mut(new_fen_line_enriched.hash())
                         {
                             if fen_line_enriched.fen_line().mat_in()
                                 == new_fen_line_enriched.fen_line().mat_in()
@@ -371,7 +371,7 @@ fn write_modified_lines_mat_in_n<W: Write>(
 
         let line = line?;
         let extracted_line = fen_loader::extract_fields(&line);
-        let hash = fen_loader::fen_hash(&extracted_line.fen(), &zobrist_table);
+        let hash = fen_loader::fen_hash(extracted_line.fen(), &zobrist_table);
 
         if let Some(fen_line_enriched) = modified_lines.get(&hash) {
             lines_updated += 1;

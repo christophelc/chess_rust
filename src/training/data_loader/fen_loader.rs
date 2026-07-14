@@ -198,7 +198,7 @@ pub fn fen_line_to_krk_item(fen_line: &FenLine) -> KrkItem {
     let bitboards: [u64; 3] = fen_krk_to_bitboards(&fen_line.fen);
     let features: [f32; 192] = bitboards_to_features(bitboards);
 
-    let probs: HashMap<square::TypePiece, f32> = krk_fen_to_prob_moves(&fen_line).unwrap();
+    let probs: HashMap<square::TypePiece, f32> = krk_fen_to_prob_moves(fen_line).unwrap();
     topology::create_item(features, probs, fen_line.mat_in.unwrap())
 }
 

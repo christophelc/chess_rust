@@ -25,6 +25,9 @@ scryer-prolog = "0.10"
 crepe = "0.2.0"
 ascent = "0.8.0"
 burn = { version = "0.21.0", features = ["wgpu", "dataset", "autodiff"] }
+plotters = "0.3.7"
+csv = "1.4.0"
+serde = { version = "1.0.228", features = ["derive"] }
 
 [lib]
 name="chess_actix"
