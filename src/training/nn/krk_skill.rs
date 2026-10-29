@@ -404,13 +404,33 @@ fn test_infer() {
     let line = "8/8/3k4/8/8/8/8/KR6 w - - 0 0;13;a1a2,b1b4,b1b5,b1h1,b1d1,a1b2";
     let fen_line = fen_loader::extract_fields(line);    
     let result = infer_krk(&loaded.model, fen_line.fen(), &loaded.device);
-    let d = (result[0] - 1.0/3.0).abs() + (result[1] - 2.0/3.0).abs();
-    assert!(d < 0.1);
+    assert!(
+        result[1] - result[0] > 0.20,
+        "Moving rook is far better than moving king: {result:?}"
+    );    
 
     let line = "8/8/8/1k6/8/8/8/K4R2 w - - 0 0;10;f1c1";
     let fen_line = fen_loader::extract_fields(line);        
     let result = infer_krk(&loaded.model, fen_line.fen(), &loaded.device);
-    let d = result[0].abs() + (result[1] - 1.0).abs();    
-    // fail: d ~ 0.8
-    assert!(d < 0.1);    
+    assert!(
+        result[1] - result[0] > 0.20,
+        "Moving rook is far better than moving king: {result:?}"
+    );    
+
+    let line: &str = "8/8/8/2R5/8/2K5/8/k7 w - - 0 1";
+    let fen_line = fen_loader::extract_fields(line);        
+    let result = infer_krk(&loaded.model, fen_line.fen(), &loaded.device);
+    assert!(
+        result[0] - result[1] > 0.20,
+        "Moving king is far better than moving rook: {result:?}"
+    );    
+
+    let line: &str = "8/8/8/8/7R/2K5/8/k7 w - - 0 0;2;c3b3,c3c2";
+    let fen_line = fen_loader::extract_fields(line);        
+    let result = infer_krk(&loaded.model, fen_line.fen(), &loaded.device);
+    assert!(
+        result[0] - result[1] > 0.20,
+        "Moving king is far better than moving rook: {result:?}"
+    );        
+
 }

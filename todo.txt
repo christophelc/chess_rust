@@ -1,0 +1,5 @@
+Reminder:
+
+in database/krk.csv:
+8/8/8/2R5/8/2K5/8/1k6 w - - 0 0;2;c3c2,c3b3,c5a5 => c3c2 should not be there
+

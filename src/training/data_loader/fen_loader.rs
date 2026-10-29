@@ -237,7 +237,7 @@ pub fn fen_krk_to_bitboards(fen: &str) -> [u64; 3] {
     [
         bitboards.bit_board_white().king().bitboard().value(),        
         bitboards.bit_board_white().rooks().bitboard().value(),
-        bitboards.bit_board_black().rooks().bitboard().value(),
+        bitboards.bit_board_black().king().bitboard().value(),
     ]
 }
 
